@@ -2,41 +2,54 @@
 
 > **Mundo libre. Tú decides quién eres.**
 
-MMORPG de navegador ambientado en las grandes ciudades de España.
+MMORPG de navegador en las ciudades de España. Economía dual, clanes, territorios, misiones, multijugador en vivo.
 
-## Stack
-NestJS 11 · Prisma · PostgreSQL · Socket.IO · Next.js 15 · Tailwind
+**Repo limpio (fuente de verdad):** este.
 
-## Arranque
+## Arranque en un comando
 
 ```bash
 git clone https://github.com/elkalivpn/VidaLoca-MMORPG-clean.git
 cd VidaLoca-MMORPG-clean
-npm install && cd client && npm install && cd ..
 cp .env.example .env
-# Rellena SOLO en local: DATABASE_URL (Neon pooled) y JWT_SECRET
-# Nunca subas el archivo .env
-
-docker compose up -d   # opcional si usas Postgres/Redis local
-npx prisma generate
-npx prisma migrate dev
-npx tsx prisma/seed.ts
-npm run start:dev
-cd client && npm run dev
+# Edita .env → DATABASE_URL (Neon pooled) + JWT_SECRET
+./scripts/setup.sh
 ```
+
+Luego:
+
+```bash
+npm run start:dev          # API :3000
+cd client && npm run dev   # UI  :3001
+```
+
+### Solo instalar dependencias
+
+```bash
+npm run setup
+```
+
+Si `.env` aún tiene placeholders, el script para y te indica el siguiente paso.
+
+## Stack
+
+NestJS 11 · Prisma 7 · PostgreSQL (Neon) · Socket.IO · Next.js 15 · Tailwind
+
+## Enlaces
 
 | Recurso | URL |
 |---------|-----|
 | API / Swagger | http://localhost:3000/api/docs |
 | Cliente | http://localhost:3001 |
-| WebSocket | ws://localhost:3000/game |
+| WebSocket | `ws://localhost:3000/game` |
+| Código | https://github.com/elkalivpn/VidaLoca-MMORPG-clean |
 
 ## Seguridad
 
-- Solo existe `.env.example` en el repo (placeholders).
-- `.env` real queda en tu máquina y está en `.gitignore`.
-- Si alguna vez se filtró un `.env`: rota password de Neon y `JWT_SECRET`.
+- Nunca subas `.env`
+- Rota `JWT_SECRET` y password de Neon si hubo filtración
+- Variables en hosting (Vercel/Railway), no en el repo
 
-## Filosofía
+## Fases
 
-Mundo libre, ciudades de España, economía dual Euros + VidaCoins, clanes, vehículos, propiedades, misiones y Battle Pass.
+Ver [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md)
