@@ -33,7 +33,8 @@ export class AchievementsService {
     });
     const unlockedIds = new Set(unlocked.map((u) => u.achievementId));
 
-    const newlyUnlocked = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const newlyUnlocked: any[] = [];
 
     for (const ach of allAchievements) {
       if (unlockedIds.has(ach.id)) continue;
@@ -65,7 +66,6 @@ export class AchievementsService {
             include: { achievement: true },
           });
 
-          // Grant rewards
           await tx.player.update({
             where: { id: player.id },
             data: {
