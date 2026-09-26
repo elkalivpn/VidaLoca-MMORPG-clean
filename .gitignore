@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+client/node_modules/
+**/node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+coverage/
+.next/
+out/
+*.tsbuildinfo
+
+# Environment – NEVER commit secrets
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+!.env.example
+!client/.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / agents (not part of the game)
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.agents/
+.claude/
+.windsurf/
+.cursor/
+skills-lock.json
+
+# Prisma generated (keep schema + migrations)
+# prisma/migrations are kept
+
+# Temporary
+tmp/
+temp/
+.cache/
+.turbo/
+
+# Test
+/coverage
+
+# Misc
+*.pem
+.vercel

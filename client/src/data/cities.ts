@@ -1,0 +1,111 @@
+import type { CityLocation } from '@/types/game';
+
+/** Interactive map locations – Spanish cities, free-world feel */
+export const CITIES: CityLocation[] = [
+  {
+    id: 'madrid_centro',
+    name: 'Centro Madrid',
+    city: 'Madrid',
+    x: 48,
+    y: 42,
+    description: 'El corazón de la capital. Negocios, turistas y oportunidades.',
+    vibe: 'business',
+  },
+  {
+    id: 'malasana',
+    name: 'Malasaña',
+    city: 'Madrid',
+    x: 46,
+    y: 40,
+    description: 'Barrio alternativo. Vida nocturna, arte y negocios grises.',
+    vibe: 'nightlife',
+  },
+  {
+    id: 'salamanca',
+    name: 'Salamanca',
+    city: 'Madrid',
+    x: 50,
+    y: 38,
+    description: 'Lujo puro. Boutiques, áticos y gente con dinero.',
+    vibe: 'luxury',
+  },
+  {
+    id: 'barcelona_ramblas',
+    name: 'Las Ramblas',
+    city: 'Barcelona',
+    x: 72,
+    y: 28,
+    description: 'El paseo más famoso. Turistas, carteristas y contactos.',
+    vibe: 'street',
+  },
+  {
+    id: 'barcelona_gotico',
+    name: 'Barrio Gótico',
+    city: 'Barcelona',
+    x: 74,
+    y: 30,
+    description: 'Callejones históricos. Secretos antiguos y nuevos tratos.',
+    vibe: 'street',
+  },
+  {
+    id: 'marbella_centro',
+    name: 'Marbella Centro',
+    city: 'Marbella',
+    x: 38,
+    y: 78,
+    description: 'Sol, playa y ostentación. El lugar donde se hacen los grandes tratos.',
+    vibe: 'luxury',
+  },
+  {
+    id: 'puerto_banus',
+    name: 'Puerto Banús',
+    city: 'Marbella',
+    x: 36,
+    y: 80,
+    description: 'Yates, supercoches y VIP. El sueño de muchos, la realidad de pocos.',
+    vibe: 'luxury',
+  },
+  {
+    id: 'sevilla_casco',
+    name: 'Casco Antiguo',
+    city: 'Sevilla',
+    x: 32,
+    y: 68,
+    description: 'Historia, tapas y negocios familiares con peso.',
+    vibe: 'street',
+  },
+  {
+    id: 'valencia_artes',
+    name: 'Ciudad de las Artes',
+    city: 'Valencia',
+    x: 62,
+    y: 52,
+    description: 'Arquitectura futurista y oportunidades modernas.',
+    vibe: 'business',
+  },
+  {
+    id: 'bilbao_casco',
+    name: 'Casco Viejo',
+    city: 'Bilbao',
+    x: 42,
+    y: 18,
+    description: 'Norte industrial reconvertido. Duro, leal y con carácter.',
+    vibe: 'industrial',
+  },
+];
+
+export const VIBE_COLORS: Record<CityLocation['vibe'], string> = {
+  luxury: 'bg-amber-500 shadow-amber-500/50',
+  street: 'bg-red-500 shadow-red-500/40',
+  business: 'bg-sky-500 shadow-sky-500/40',
+  nightlife: 'bg-purple-500 shadow-purple-500/40',
+  industrial: 'bg-zinc-400 shadow-zinc-400/30',
+};
+
+export const VIBE_LABELS: Record<CityLocation['vibe'], string> = {
+  luxury: 'Lujo',
+  street: 'Calle',
+  business: 'Negocios',
+  nightlife: 'Noche',
+  industrial: 'Industrial',
+};

@@ -1,0 +1,461 @@
+
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// VIDA LOCA MMORPG - DATABASE SCHEMA
+// ============================================
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  username      String    @unique
+  password      String
+  role          UserRole  @default(PLAYER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  player        Player?
+  refreshTokens RefreshToken[]
+  
+  @@map("users")
+}
+
+enum UserRole {
+  PLAYER
+  ADMIN
+  MODERATOR
+}
+
+model Player {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  displayName     String
+  level           Int      @default(1)
+  xp              Int      @default(0)
+  reputation      Int      @default(0)
+  
+  euros           Float    @default(100.0)
+  vidaCoins       Int      @default(0)
+  
+  locationId      String?  @default("madrid_centro")
+  isOnline        Boolean  @default(false)
+  lastLogin       DateTime @default(now())
+  
+  inventory       InventoryItem[]
+  vehicles        PlayerVehicle[]
+  properties      PlayerProperty[]
+  weapons         PlayerWeapon[]
+  clanMember      ClanMember?
+  missions        PlayerMission[]
+  battlePass      BattlePassProgress?
+  achievements    PlayerAchievement[]
+  transactions    TransactionLog[]
+  skills          PlayerSkill[]
+  completedMissions CompletedMission[]
+  gameSessions    GameSession[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("players")
+}
+
+model ItemTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  type        ItemType
+  rarity      Rarity   @default(COMMON)
+  stats       Json?
+  priceEuros  Float?
+  priceVida   Int?
+  
+  items       InventoryItem[]
+  
+  @@map("item_templates")
+}
+
+enum ItemType {
+  WEAPON
+  VEHICLE
+  HOUSE
+  CONSUMABLE
+  SKILL_CARD
+  COSMETIC
+}
+
+enum Rarity {
+  COMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+model InventoryItem {
+  id        String   @id @default(uuid())
+  playerId  String
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  templateId String
+  template  ItemTemplate @relation(fields: [templateId], references: [id])
+  
+  quantity  Int      @default(1)
+  equipped  Boolean  @default(false)
+  acquiredAt DateTime @default(now())
+  
+  @@map("inventory")
+}
+
+model VehicleTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  brand       String
+  speed       Int
+  handling    Int
+  durability  Int
+  capacity    Int
+  priceEuros  Float?
+  priceVida   Int?
+  
+  vehicles    PlayerVehicle[]
+  
+  @@map("vehicle_templates")
+}
+
+model PlayerVehicle {
+  id           String   @id @default(uuid())
+  playerId     String
+  player       Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  templateId   String
+  template     VehicleTemplate @relation(fields: [templateId], references: [id])
+  
+  licensePlate String   @unique
+  color        String   @default("white")
+  condition    Float    @default(100.0)
+  isPrimary    Boolean  @default(false)
+  
+  @@map("player_vehicles")
+}
+
+model PropertyTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  location    String
+  type        PropertyType
+  capacity    Int
+  security    Int
+  priceEuros  Float
+  priceVida   Int?
+  rentYield   Float?
+  
+  properties  PlayerProperty[]
+  
+  @@map("property_templates")
+}
+
+enum PropertyType {
+  APARTMENT
+  MANSION
+  WAREHOUSE
+  CLUB
+  GARAGE
+}
+
+model PlayerProperty {
+  id          String   @id @default(uuid())
+  playerId    String
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  templateId  String
+  template    PropertyTemplate @relation(fields: [templateId], references: [id])
+  
+  purchasedAt DateTime @default(now())
+  customized  Json?
+  
+  @@map("player_properties")
+}
+
+model Clan {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  tag         String   @unique
+  leaderId    String   @unique
+  funds       Float    @default(0.0)
+  level       Int      @default(1)
+  xp          Int      @default(0)
+  
+  members     ClanMember[]
+  territories ClanTerritory[]
+  controlledTerritories Territory[]
+  
+  createdAt   DateTime @default(now())
+  
+  @@map("clans")
+}
+
+model ClanMember {
+  id        String   @id @default(uuid())
+  playerId  String   @unique
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  clanId    String
+  clan      Clan     @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  
+  role      ClanRole @default(MEMBER)
+  joinedAt  DateTime @default(now())
+  
+  @@map("clan_members")
+}
+
+enum ClanRole {
+  LEADER
+  OFFICER
+  MEMBER
+  RECRUIT
+}
+
+model Territory {
+  id          String   @id @default(uuid())
+  name        String
+  city        String
+  incomeRate  Float
+  bonusType   String?
+  
+  controllerId String?
+  controller   Clan?     @relation(fields: [controllerId], references: [id], onDelete: SetNull)
+  controls     ClanTerritory[]
+  
+  @@map("territories")
+}
+
+model ClanTerritory {
+  id          String   @id @default(uuid())
+  clanId      String
+  clan        Clan     @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  territoryId String   @unique
+  territory   Territory @relation(fields: [territoryId], references: [id], onDelete: Cascade)
+  
+  capturedAt  DateTime @default(now())
+  
+  @@map("clan_territories")
+}
+
+model MissionTemplate {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  difficulty  Difficulty
+  rewardEuros Float
+  rewardXp    Int
+  requirement Json?
+  
+  instances   PlayerMission[]
+  completions CompletedMission[]
+  
+  @@map("mission_templates")
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+  SUICIDE
+}
+
+model PlayerMission {
+  id          String   @id @default(uuid())
+  playerId    String
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  templateId  String
+  template    MissionTemplate @relation(fields: [templateId], references: [id])
+  
+  status      MissionStatus @default(PENDING)
+  progress    Int      @default(0)
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  
+  @@map("player_missions")
+}
+
+enum MissionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CLAIMED
+}
+
+model CompletedMission {
+  id          String   @id @default(uuid())
+  playerId    String
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  missionId   String
+  mission     MissionTemplate @relation(fields: [missionId], references: [id])
+  
+  completedAt DateTime @default(now())
+  rewardClaimed Boolean @default(false)
+  
+  @@map("completed_missions")
+}
+
+model BattlePassSeason {
+  id           String   @id @default(uuid())
+  seasonNumber Int
+  name         String
+  startDate    DateTime
+  endDate      DateTime
+  isActive     Boolean  @default(false)
+  
+  progresses   BattlePassProgress[]
+  
+  @@map("battle_pass_seasons")
+}
+
+model BattlePassProgress {
+  id             String   @id @default(uuid())
+  playerId       String   @unique
+  player         Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  seasonId       String
+  season         BattlePassSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  
+  level          Int      @default(1)
+  xp             Int      @default(0)
+  isPremium      Boolean  @default(false)
+  rewardsClaimed Int[]
+  
+  @@map("battle_pass_progress")
+}
+
+model TransactionLog {
+  id        String   @id @default(uuid())
+  playerId  String
+  player    Player   @relation(fields: [playerId], references: [id])
+  
+  type      TransactionType
+  amount    Float
+  currency  Currency
+  
+  reason    String
+  reference String?
+  
+  createdAt DateTime @default(now())
+  
+  @@map("transaction_logs")
+}
+
+enum TransactionType {
+  EARN
+  SPEND
+  PURCHASE
+  GIFT
+  PENALTY
+}
+
+enum Currency {
+  EUR
+  VIDACOIN
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  @@map("refresh_tokens")
+}
+
+model Skill {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  maxLevel    Int      @default(10)
+  category    SkillCategory
+  
+  players     PlayerSkill[]
+  
+  @@map("skills")
+}
+
+enum SkillCategory {
+  COMBAT
+  DRIVING
+  STEALTH
+  BUSINESS
+  SOCIAL
+}
+
+model PlayerSkill {
+  id        String   @id @default(uuid())
+  playerId  String
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  skillId   String
+  skill     Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  
+  level     Int      @default(1)
+  xp        Int      @default(0)
+  
+  @@unique([playerId, skillId])
+  @@map("player_skills")
+}
+
+model Achievement {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  condition   Json     // { "type": "reach_level", "value": 50 }
+  rewardVida  Int      @default(0)
+  rewardEuros Float    @default(0.0)
+  
+  players     PlayerAchievement[]
+  
+  @@map("achievements")
+}
+
+model PlayerAchievement {
+  id            String   @id @default(uuid())
+  playerId      String
+  player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  
+  unlockedAt    DateTime @default(now())
+  
+  @@unique([playerId, achievementId])
+  @@map("player_achievements")
+}
+
+model PlayerWeapon {
+  id        String   @id @default(uuid())
+  playerId  String
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  name      String
+  damage    Int
+  range     Int
+  accuracy  Int
+  equipped  Boolean  @default(false)
+  
+  @@map("player_weapons")
+}
+
+model GameSession {
+  id          String   @id @default(uuid())
+  playerId    String
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  
+  startTime   DateTime @default(now())
+  endTime     DateTime?
+  sessionData Json?    // Actividad durante la sesión
+  
+  @@map("game_sessions")
+}
