@@ -1,30 +1,33 @@
 # Plan de desarrollo – VidaLoca MMORPG
 
-Filosofía: mundo libre, ciudades de España, Euros + VidaCoins, clanes, vehículos, propiedades, misiones, Battle Pass.
+## Filosofía (innegociable)
+
+**Mundo libre estilo calle española.** No es un menú de grindeo: estás en un barrio, eliges movidas (legal / gris / calle), asumes calor policial, reputación y dinero. Las misiones son encargos que avanzan al actuar en la calle.
+
+## Fases
 
 | Fase | Estado | Contenido |
 |------|--------|-----------|
-| **0** Fundación | ✅ | Seguridad, Docker, filters, throttling, health, Swagger |
-| **1** Backend gameplay | ✅ | Missions, Vehicles, Properties, Skills, Achievements, BattlePass, RolesGuard |
-| **2** Cliente jugable | ✅ | Next.js: mapa, misiones, vehículos, propiedades, skills/BP |
-| **3** Realtime | ✅ | Socket.IO `/game`, JWT, presencia, chat zona/global, world events |
-| **4** Contenido & poder | ✅ | UI clanes + territorios reclamables, inventario, misiones narrativas, scheduler de eventos de mundo |
-| **5** Producción | 🔜 | CI/CD, monitoring, anti-cheat, Redis adapter WS, E2E, deploy |
+| 0–3 | ✅ | Auth, módulos, cliente, realtime |
+| **4b Calle viva** | ✅ | `WorldModule`: acciones por barrio, calor, camino, StreetPlay UI |
+| 5 | 🔜 | Personajes/avatar, persecuciones, inventario usable en acciones, deploy |
 
-### Fase 4 – detalle
+## Loop de juego
 
-- Clanes: crear / unirse / abandonar / ranking
-- Territorios: listado + claim (líder/oficial, coste 2.500 € fondos)
-- Inventario visual + equipar
-- Misiones narrativas ampliadas en seed
-- Eventos de mundo periódicos vía WebSocket (`world:event`) + banner en dashboard
+1. Entras → pestaña **Calle** (no el mapa)
+2. Eliges camino Legal / Gris / Calle
+3. Haces movidas en el barrio (riesgo, €, XP, calor)
+4. Las misiones activas avanzan al actuar
+5. Cobras misiones completadas en Misiones
+6. Viajas de barrio en **Mapa** cuando quieras cambiar de zona
 
-### Arranque
+## Tras pull
 
 ```bash
-npm install && cd client && npm install && cd ..
-cp .env.example .env   # DATABASE_URL + JWT_SECRET
-npx prisma generate && npx prisma db push && npx tsx prisma/seed.ts
+export DATABASE_URL=...
+npx prisma db push
+# reinicia API
 npm run start:dev
-cd client && npm run dev
 ```
+
+Campos nuevos en Player: `heat`, `lifestyle`.

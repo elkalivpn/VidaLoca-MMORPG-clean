@@ -1,0 +1,20 @@
+name: Create Branch Database
+on:
+  workflow_dispatch:
+
+env:
+  NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+  NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+
+jobs:
+  create-branch-db:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create Neon branch DB
+        uses: neondatabase/create-branch-action@v5
+        id: create-branch
+        with:
+          project_id: ${{ env.NEON_PROJECT_ID }}
+          branch_name: preview/pr-${{ github.event.number || 'manual' }}
+          api_key: ${{ env.NEON_API_KEY }}
