@@ -150,5 +150,16 @@ export const api = {
   equipWeapon: (weaponId: string) =>
     request(`/inventory/weapons/equip/${weaponId}`, { method: 'POST' }),
 
-  health: () => request('/health'),
+  worldStreet: () => request('/world/street'),
+  worldAction: (actionId: string) =>
+    request('/world/action', {
+      method: 'POST',
+      body: JSON.stringify({ actionId }),
+    }),
+  setLifestyle: (lifestyle: string) =>
+    request('/world/lifestyle', {
+      method: 'POST',
+      body: JSON.stringify({ lifestyle }),
+    }),
 };
+

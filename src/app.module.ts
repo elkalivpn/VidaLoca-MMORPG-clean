@@ -17,6 +17,7 @@ import { SkillsModule } from './skills/skills.module';
 import { AchievementsModule } from './achievements/achievements.module';
 import { BattlePassModule } from './battle-pass/battle-pass.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { WorldModule } from './world/world.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     AchievementsModule,
     BattlePassModule,
     RealtimeModule,
+    WorldModule,
   ],
   providers: [
     {

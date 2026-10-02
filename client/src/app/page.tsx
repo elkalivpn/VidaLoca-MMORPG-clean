@@ -6,10 +6,16 @@ import { useAuth } from '@/store/auth';
 import { api } from '@/lib/api';
 import CinematicBackdrop from '@/components/CinematicBackdrop';
 
+type AuthResult = {
+  accessToken: string;
+  user?: { player?: any; username?: string };
+};
+
 export default function HomePage() {
   const router = useRouter();
   const { setAuth } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,9 +26,16 @@ export default function HomePage() {
     setError('');
     setLoading(true);
     try {
-      const path = mode === 'login' ? '/auth/login' : '/auth/register';
-      const data = await api.post(path, { username, password });
-      setAuth(data.accessToken, data.player);
+      const data = (mode === 'login'
+        ? await api.login({ email, password })
+        : await api.register({
+            email,
+            username,
+            password,
+            displayName: username,
+          })) as AuthResult;
+      const player = data.user?.player ?? null;
+      setAuth(data.accessToken, player);
       router.push('/play');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error');
@@ -61,13 +74,24 @@ export default function HomePage() {
 
         <form onSubmit={submit} className="mt-4 space-y-3">
           <input
+            type="email"
             className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500"
-            placeholder="Usuario"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoComplete="username"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
             required
           />
+          {mode === 'register' && (
+            <input
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500"
+              placeholder="Usuario"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              required
+            />
+          )}
           <input
             type="password"
             className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500"

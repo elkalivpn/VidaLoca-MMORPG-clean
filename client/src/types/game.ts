@@ -15,6 +15,8 @@ export interface Player {
   euros: number;
   vidaCoins: number;
   locationId: string | null;
+  heat?: number;
+  lifestyle?: string;
   isOnline: boolean;
   lastLogin: string;
   inventory?: InventoryItem[];

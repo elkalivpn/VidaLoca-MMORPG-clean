@@ -49,6 +49,8 @@ model Player {
   vidaCoins       Int      @default(0)
   
   locationId      String?  @default("madrid_centro")
+  heat            Int      @default(0)
+  lifestyle       String   @default("GREY")
   isOnline        Boolean  @default(false)
   lastLogin       DateTime @default(now())
   
