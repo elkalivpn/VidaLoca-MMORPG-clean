@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { WorldService } from './world.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ZONES, HIGHWAY_ROUTES } from '../common/constants/zones';
@@ -245,6 +249,39 @@ describe('WorldService', () => {
       expect(result.narrative).toContain('Guardia Civil');
       expect(result.narrative).toContain('multa');
       expect(result.costEuros).toBeGreaterThan(50);
+    });
+
+    it('throws ForbiddenException when player is jailed during travel', async () => {
+      prisma.player.findUnique.mockResolvedValue({
+        ...basePlayer,
+        jailUntil: new Date(Date.now() + 60_000),
+      });
+
+      await expect(
+        service.travel('user-1', 'barcelona_ramblas'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.player.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('performAction', () => {
+    it('throws ForbiddenException when player is jailed', async () => {
+      prisma.player.findUnique.mockResolvedValue({
+        id: 'player-1',
+        userId: 'user-1',
+        level: 5,
+        xp: 450,
+        euros: 500,
+        reputation: 20,
+        heat: 0,
+        locationId: 'madrid_centro',
+        jailUntil: new Date(Date.now() + 60_000),
+      });
+
+      await expect(
+        service.performAction('user-1', 'trabajo_legal'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.player.update).not.toHaveBeenCalled();
     });
   });
 });

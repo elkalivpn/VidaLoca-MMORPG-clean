@@ -1,4 +1,13 @@
-import type { WorldMapResponse, WorldTravelResponse } from '@/types/game';
+import type {
+  BailResponse,
+  FactionInfo,
+  FactionType,
+  InterceptResponse,
+  Player,
+  WantedSuspect,
+  WorldMapResponse,
+  WorldTravelResponse,
+} from '@/types/game';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -171,4 +180,36 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ lifestyle }),
     }),
+
+  // Factions & Pursuit
+  factions: () =>
+    request<
+      | FactionInfo[]
+      | {
+          factions: FactionInfo[];
+          currentFaction?: FactionType;
+          factionRank?: number;
+          jailUntil?: string | null;
+        }
+    >('/factions'),
+  joinFaction: (faction: FactionType) =>
+    request<{
+      faction: FactionType;
+      factionRank?: number;
+      message?: string;
+      player?: Partial<Player>;
+    }>('/factions/join', {
+      method: 'POST',
+      body: JSON.stringify({ faction }),
+    }),
+  wantedList: () =>
+    request<
+      WantedSuspect[] | { suspects?: WantedSuspect[]; wanted?: WantedSuspect[] }
+    >('/factions/wanted'),
+  interceptWanted: (targetPlayerId: string) =>
+    request<InterceptResponse>('/factions/intercept', {
+      method: 'POST',
+      body: JSON.stringify({ targetPlayerId }),
+    }),
+  payBail: () => request<BailResponse>('/factions/bail', { method: 'POST' }),
 };

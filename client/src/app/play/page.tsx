@@ -11,6 +11,7 @@ import { VehiclesPanel } from '@/components/VehiclesPanel';
 import PropertiesPanel from '@/components/PropertiesPanel';
 import SkillsBattlePass from '@/components/SkillsBattlePass';
 import ClansPanel from '@/components/ClansPanel';
+import FactionsPanel from '@/components/FactionsPanel';
 import ChatPanel from '@/components/ChatPanel';
 import StatsBar from '@/components/StatsBar';
 import { useRealtime } from '@/hooks/useRealtime';
@@ -23,7 +24,8 @@ type Tab =
   | 'vehiculos'
   | 'propiedades'
   | 'skills'
-  | 'clanes';
+  | 'clanes'
+  | 'facciones';
 
 export default function PlayPage() {
   const router = useRouter();
@@ -33,6 +35,7 @@ export default function PlayPage() {
     connected,
     playerId,
     messages,
+    pursuitAlerts,
     remotePlayersRef,
     sendZoneChat,
     sendGlobalChat,
@@ -67,6 +70,7 @@ export default function PlayPage() {
     { id: 'propiedades', label: 'Propiedades' },
     { id: 'skills', label: 'Skills / BP' },
     { id: 'clanes', label: 'Clanes' },
+    { id: 'facciones', label: 'Facciones' },
   ];
 
   return (
@@ -112,6 +116,9 @@ export default function PlayPage() {
           {tab === 'propiedades' && <PropertiesPanel />}
           {tab === 'skills' && <SkillsBattlePass />}
           {tab === 'clanes' && <ClansPanel />}
+          {tab === 'facciones' && (
+            <FactionsPanel pursuitAlerts={pursuitAlerts} />
+          )}
         </div>
         <aside className="border-t lg:border-t-0 lg:border-l border-zinc-800 p-2">
           <ChatPanel

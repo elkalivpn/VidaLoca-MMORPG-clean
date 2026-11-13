@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -115,6 +116,17 @@ export class WorldService {
     return p;
   }
 
+  private assertNotJailed(jailUntil?: Date | null) {
+    if (jailUntil && new Date(jailUntil).getTime() > Date.now()) {
+      const remainingSec = Math.ceil(
+        (new Date(jailUntil).getTime() - Date.now()) / 1000,
+      );
+      throw new ForbiddenException(
+        `Estás en el calabozo (${remainingSec}s restantes). Espera a cumplir tu condena o paga la fianza.`,
+      );
+    }
+  }
+
   getZoneInfo(locationId: string) {
     const vibe = ZONE_VIBES[locationId] || 'street';
     const actions = ACTIONS.filter(
@@ -145,6 +157,10 @@ export class WorldService {
         vidaCoins: p.vidaCoins,
         reputation: p.reputation,
         heat: p.heat ?? 0,
+        wantedLevel: p.wantedLevel ?? 0,
+        faction: p.faction ?? 'CIVILIAN',
+        factionRank: p.factionRank ?? 1,
+        jailUntil: p.jailUntil ?? null,
         lifestyle: p.lifestyle ?? 'GREY',
         locationId: loc,
       },
@@ -181,6 +197,7 @@ export class WorldService {
       if (!player) {
         throw new NotFoundException('Player not found');
       }
+      this.assertNotJailed(player.jailUntil);
 
       const fromId = player.locationId || 'madrid_centro';
       if (fromId === destinationId) {
@@ -303,12 +320,15 @@ export class WorldService {
         }
       }
 
+      const newWantedLevel = Math.min(5, Math.floor(newHeat / 20));
+
       const updatedPlayer = await tx.player.update({
         where: { userId },
         data: {
           locationId: destinationId,
           euros: Math.max(0, Math.round((player.euros - totalCost) * 100) / 100),
           heat: newHeat,
+          wantedLevel: newWantedLevel,
         },
       });
 
@@ -328,6 +348,7 @@ export class WorldService {
           xp: updatedPlayer.xp,
           euros: updatedPlayer.euros,
           heat: updatedPlayer.heat,
+          wantedLevel: updatedPlayer.wantedLevel,
           reputation: updatedPlayer.reputation,
           locationId: updatedPlayer.locationId,
         },
@@ -349,6 +370,7 @@ export class WorldService {
     return this.prisma.$transaction(async (tx) => {
       const p = await tx.player.findUnique({ where: { userId } });
       if (!p) throw new NotFoundException('Player not found');
+      this.assertNotJailed(p.jailUntil);
 
       if (p.level < action.minLevel) {
         throw new BadRequestException(`Necesitas nivel ${action.minLevel}`);
@@ -388,6 +410,7 @@ export class WorldService {
         narrative = `"${action.label}" sale bien. +${eurosDelta}€`;
       }
       const newHeat = Math.max(0, Math.min(100, heat + heatDelta));
+      const newWantedLevel = Math.min(5, Math.floor(newHeat / 20));
       const newXp = p.xp + xpDelta;
       const calculatedLevel = calculateLevelFromXp(newXp);
       const newLevel = calculatedLevel > p.level ? calculatedLevel : p.level;
@@ -400,6 +423,7 @@ export class WorldService {
           level: newLevel,
           reputation: p.reputation + repDelta,
           heat: newHeat,
+          wantedLevel: newWantedLevel,
         },
       });
       const missions = await tx.playerMission.findMany({
@@ -428,6 +452,7 @@ export class WorldService {
           xp: updated.xp,
           euros: updated.euros,
           heat: updated.heat,
+          wantedLevel: updated.wantedLevel,
           reputation: updated.reputation,
         },
       };

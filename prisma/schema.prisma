@@ -35,6 +35,14 @@ enum UserRole {
   MODERATOR
 }
 
+enum FactionType {
+  CIVILIAN
+  POLICE
+  GUARDIA_CIVIL
+  SYNDICATE
+  ENTREPRENEUR
+}
+
 model Player {
   id              String   @id @default(uuid())
   userId          String   @unique
@@ -50,6 +58,10 @@ model Player {
   
   locationId      String?  @default("madrid_centro")
   heat            Int      @default(0)
+  wantedLevel     Int      @default(0)
+  faction         FactionType @default(CIVILIAN)
+  factionRank     Int      @default(1)
+  jailUntil       DateTime?
   lifestyle       String   @default("GREY")
   isOnline        Boolean  @default(false)
   lastLogin       DateTime @default(now())

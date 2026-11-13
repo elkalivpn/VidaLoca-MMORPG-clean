@@ -545,6 +545,20 @@ export class RealtimeGateway
     this.server.to(`zone:${locationId}`).emit(event, data);
   }
 
+  /** Notify everyone in a zone about pursuit resolution or alerts */
+  emitPursuitEvent(
+    locationId: string,
+    payload: Record<string, unknown>,
+    event: 'pursuit:resolved' | 'pursuit:alert' = 'pursuit:resolved',
+  ) {
+    if (!this.server) return;
+    this.server.to(`zone:${locationId}`).emit(event, {
+      ...payload,
+      locationId,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   private getZonePresence(locationId: string) {
     return [...this.presence.values()]
       .filter((p) => p.locationId === locationId)

@@ -18,6 +18,7 @@ import { AchievementsModule } from './achievements/achievements.module';
 import { BattlePassModule } from './battle-pass/battle-pass.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { WorldModule } from './world/world.module';
+import { FactionsModule } from './factions/factions.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { WorldModule } from './world/world.module';
     BattlePassModule,
     RealtimeModule,
     WorldModule,
+    FactionsModule,
   ],
   providers: [
     {
