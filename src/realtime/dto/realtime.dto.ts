@@ -1,4 +1,13 @@
-import { IsString, IsNotEmpty, IsOptional, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  MaxLength,
+  IsNumber,
+  IsIn,
+} from 'class-validator';
+
+export type PlayerAnim = 'idle' | 'walk' | 'run' | 'drive';
 
 export class ChatMessageDto {
   @IsString()
@@ -16,3 +25,26 @@ export class JoinZoneDto {
   @IsNotEmpty()
   locationId: string;
 }
+
+export class PlayerMoveDto {
+  @IsNumber()
+  x: number;
+
+  @IsNumber()
+  y: number;
+
+  @IsNumber()
+  z: number;
+
+  @IsNumber()
+  rotY: number;
+
+  @IsOptional()
+  @IsIn(['idle', 'walk', 'run', 'drive'])
+  anim?: PlayerAnim;
+
+  @IsOptional()
+  @IsString()
+  vehicleId?: string;
+}
+
