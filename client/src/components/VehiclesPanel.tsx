@@ -21,15 +21,15 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
       ]);
       setCatalog(c || []);
       setMine(m || []);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
   const buy = async (id: string) => {
@@ -40,8 +40,8 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
       await load();
       onChange?.();
       setTab('garage');
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error');
     } finally {
       setBusy(null);
     }
@@ -52,8 +52,8 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
     try {
       await api.setPrimaryVehicle(id);
       await load();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error');
     } finally {
       setBusy(null);
     }
@@ -65,15 +65,17 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
       await api.repairVehicle(id);
       await load();
       onChange?.();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error');
     } finally {
       setBusy(null);
     }
   };
 
   if (loading) {
-    return <div className="card text-zinc-500 animate-pulse">Cargando garaje...</div>;
+    return (
+      <div className="card text-zinc-500 animate-pulse">Cargando garaje...</div>
+    );
   }
 
   return (
@@ -111,7 +113,9 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
       {tab === 'garage' && (
         <div className="space-y-3 max-h-[420px] overflow-y-auto">
           {mine.length === 0 && (
-            <p className="text-zinc-500 text-sm">Tu garaje está vacío. Compra algo con estilo.</p>
+            <p className="text-zinc-500 text-sm">
+              Tu garaje está vacío. Compra algo con estilo.
+            </p>
           )}
           {mine.map((v) => (
             <div
@@ -130,7 +134,8 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
                   )}
                 </div>
                 <p className="text-xs text-zinc-500 mt-0.5">
-                  {v.licensePlate} · {v.color} · Estado {Math.round(v.condition)}%
+                  {v.licensePlate} · {v.color} · Estado{' '}
+                  {Math.round(v.condition)}%
                 </p>
                 <p className="text-xs text-zinc-600 mt-0.5">
                   Vel {v.template.speed} · Manejo {v.template.handling}
@@ -140,7 +145,9 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
                 {!v.isPrimary && (
                   <button
                     type="button"
-                    onClick={() => setPrimary(v.id)}
+                    onClick={() => {
+                      void setPrimary(v.id);
+                    }}
                     disabled={!!busy}
                     className="btn-secondary text-sm"
                   >
@@ -150,7 +157,9 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
                 {v.condition < 100 && (
                   <button
                     type="button"
-                    onClick={() => repair(v.id)}
+                    onClick={() => {
+                      void repair(v.id);
+                    }}
                     disabled={!!busy}
                     className="btn-secondary text-sm"
                   >
@@ -184,13 +193,17 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
                     </span>
                   )}
                   {v.priceVida != null && (
-                    <span className="text-amber-400 ml-2">{v.priceVida} VC</span>
+                    <span className="text-amber-400 ml-2">
+                      {v.priceVida} VC
+                    </span>
                   )}
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => buy(v.id)}
+                onClick={() => {
+                  void buy(v.id);
+                }}
                 disabled={busy === v.id}
                 className="btn-primary text-sm shrink-0"
               >

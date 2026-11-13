@@ -24,7 +24,7 @@ if [ ! -f .env ]; then
   if [ -f .env.example ]; then
     cp .env.example .env
     echo "→ Creado .env desde .env.example"
-    echo "  EDITA .env y pon DATABASE_URL (Neon) + JWT_SECRET antes de migrar."
+    echo "  EDITA .env y pon DATABASE_URL (PostgreSQL/Supabase) + JWT_SECRET antes de migrar."
   else
     echo "No hay .env ni .env.example"
     exit 1
@@ -39,23 +39,22 @@ if [ -d client ]; then
   (cd client && npm install --no-fund --no-audit)
 fi
 
-if grep -q 'USER:PASSWORD\|cambia-este-secreto\|HOST:5432' .env 2>/dev/null; then
+if grep -q 'USER:PASSWORD\|change-me-to-a-long-random-string\|TU-PASSWORD-SUPABASE' .env 2>/dev/null; then
   echo ""
   echo "⚠  .env todavía tiene placeholders."
   echo "   Configura DATABASE_URL y JWT_SECRET, luego:"
-  echo "   npx prisma generate && npx prisma db push && npx tsx prisma/seed.ts"
-  echo "   npm run start:dev"
-  echo "   (otro terminal) cd client && npm run dev"
+  echo "   npx prisma generate && npx prisma db push && npm run db:seed"
+  echo "   npm run dev:api"
+  echo "   (otro terminal) npm run dev:client"
   exit 0
 fi
 
 echo "→ Prisma generate + db push + seed…"
 npx prisma generate
-npx prisma db push --accept-data-loss
-npx tsx prisma/seed.ts
+npx prisma db push
+npm run db:seed
 
 echo ""
 echo "✓ Listo."
-echo "  API:     npm run start:dev     → http://localhost:3000/api/docs"
-echo "  Cliente: cd client && npm run dev → http://localhost:3001"
-echo "  O todo:  npm run dev:all"
+echo "  API:     npm run dev:api     → http://localhost:3000/api/docs"
+echo "  Cliente: npm run dev:client  → http://localhost:3001"

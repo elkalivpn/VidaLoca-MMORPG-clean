@@ -7,8 +7,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { UserRole } from '@prisma/client';
 import { PlayersService } from './players.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { IsString, IsNotEmpty, IsNumber, Min } from 'class-validator';
 
 class UpdateLocationDto {
@@ -58,6 +61,8 @@ export class PlayersController {
   }
 
   @Post('xp')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   async addXp(
     @CurrentUser('id') userId: string,
     @Body() dto: AddXpDto,
@@ -66,6 +71,8 @@ export class PlayersController {
   }
 
   @Post('reputation')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   async addReputation(
     @CurrentUser('id') userId: string,
     @Body() dto: AddReputationDto,

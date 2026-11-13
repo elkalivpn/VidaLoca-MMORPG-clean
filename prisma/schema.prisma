@@ -174,14 +174,15 @@ enum PropertyType {
 }
 
 model PlayerProperty {
-  id          String   @id @default(uuid())
-  playerId    String
-  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  templateId  String
-  template    PropertyTemplate @relation(fields: [templateId], references: [id])
+  id                  String    @id @default(uuid())
+  playerId            String
+  player              Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  templateId          String
+  template            PropertyTemplate @relation(fields: [templateId], references: [id])
   
-  purchasedAt DateTime @default(now())
-  customized  Json?
+  purchasedAt         DateTime  @default(now())
+  lastRentCollectedAt DateTime?
+  customized          Json?
   
   @@map("player_properties")
 }

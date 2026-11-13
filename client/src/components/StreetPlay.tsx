@@ -39,6 +39,7 @@ const VIBE_LABEL: Record<string, string> = {
   nightlife: 'Noche',
   luxury: 'Lujo',
   street: 'Calle',
+  industrial: 'Industrial',
 };
 
 const LIFE_LABEL: Record<string, string> = {
@@ -47,11 +48,7 @@ const LIFE_LABEL: Record<string, string> = {
   STREET: 'Calle',
 };
 
-export default function StreetPlay({
-  onChanged,
-}: {
-  onChanged?: () => void;
-}) {
+export default function StreetPlay({ onChanged }: { onChanged?: () => void }) {
   const refreshPlayer = useAuthStore((s) => s.refreshPlayer);
   const [state, setState] = useState<StreetState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,7 +70,7 @@ export default function StreetPlay({
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   const act = async (actionId: string) => {
@@ -81,7 +78,9 @@ export default function StreetPlay({
     setError('');
     try {
       const res = (await api.worldAction(actionId)) as { narrative?: string };
-      setLog((prev) => [res.narrative || 'Movida hecha.', ...prev].slice(0, 12));
+      setLog((prev) =>
+        [res.narrative || 'Movida hecha.', ...prev].slice(0, 12),
+      );
       await load();
       await refreshPlayer();
       onChanged?.();
@@ -173,7 +172,9 @@ export default function StreetPlay({
                 key={l}
                 type="button"
                 disabled={busy || player.lifestyle === l}
-                onClick={() => setLife(l)}
+                onClick={() => {
+                  void setLife(l);
+                }}
                 className={`text-xs px-3 py-1.5 rounded-lg border transition ${
                   player.lifestyle === l
                     ? 'border-amber-500/60 bg-amber-500/15 text-amber-300'
@@ -190,14 +191,18 @@ export default function StreetPlay({
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       <div>
-        <h3 className="text-sm font-semibold text-zinc-300 mb-2">Movidas del barrio</h3>
+        <h3 className="text-sm font-semibold text-zinc-300 mb-2">
+          Movidas del barrio
+        </h3>
         <div className="grid gap-2 sm:grid-cols-2">
           {(zone.actions || []).map((a) => (
             <button
               key={a.id}
               type="button"
               disabled={busy || player.level < a.minLevel}
-              onClick={() => act(a.id)}
+              onClick={() => {
+                void act(a.id);
+              }}
               className="text-left rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 hover:border-amber-500/40 disabled:opacity-40"
             >
               <div className="flex items-center justify-between gap-2">
@@ -218,7 +223,9 @@ export default function StreetPlay({
 
       {activeMissions?.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-zinc-300 mb-2">Encargos activos</h3>
+          <h3 className="text-sm font-semibold text-zinc-300 mb-2">
+            Encargos activos
+          </h3>
           <ul className="space-y-1 text-sm">
             {activeMissions.map((m) => (
               <li key={m.id} className="text-zinc-400">

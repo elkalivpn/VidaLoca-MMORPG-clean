@@ -46,17 +46,26 @@ export class PropertiesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const whereClause: any = {
+        id: player.id,
+        euros: { gte: template.priceEuros },
+      };
       const updateData: any = {
         euros: { decrement: template.priceEuros },
       };
       if (template.priceVida) {
+        whereClause.vidaCoins = { gte: template.priceVida };
         updateData.vidaCoins = { decrement: template.priceVida };
       }
 
-      await tx.player.update({
-        where: { id: player.id },
+      const debit = await tx.player.updateMany({
+        where: whereClause,
         data: updateData,
       });
+
+      if (debit.count === 0) {
+        throw new BadRequestException('Insufficient funds to buy this property');
+      }
 
       const property = await tx.playerProperty.create({
         data: {
@@ -97,7 +106,29 @@ export class PropertiesService {
       throw new BadRequestException('This property generates no rent');
     }
 
+    const RENT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+    const now = new Date();
+    const cooldownCutoff = new Date(now.getTime() - RENT_COOLDOWN_MS);
+
     return this.prisma.$transaction(async (tx) => {
+      const claimResult = await tx.playerProperty.updateMany({
+        where: {
+          id: propertyId,
+          playerId: player.id,
+          OR: [
+            { lastRentCollectedAt: null },
+            { lastRentCollectedAt: { lte: cooldownCutoff } },
+          ],
+        },
+        data: { lastRentCollectedAt: now },
+      });
+
+      if (claimResult.count === 0) {
+        throw new BadRequestException(
+          'Rent already collected recently. Please wait 1 hour between collections.',
+        );
+      }
+
       const updated = await tx.player.update({
         where: { id: player.id },
         data: { euros: { increment: rent } },

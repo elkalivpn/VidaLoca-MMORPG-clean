@@ -28,7 +28,7 @@ export class ClansService {
 
     return this.prisma.$transaction(async (tx) => {
       const clan = await tx.clan.create({
-        data: { name, tag, leaderId: player.id, funds: 5000 },
+        data: { name, tag, leaderId: player.id, funds: 0 },
       });
 
       await tx.clanMember.create({
@@ -154,12 +154,28 @@ export class ClansService {
     const clan = await this.prisma.clan.findUnique({ where: { id: member.clanId } });
     if (!clan) throw new NotFoundException('Clan no encontrado');
 
+    if (territory.controllerId === clan.id) {
+      throw new BadRequestException('Tu clan ya controla este territorio');
+    }
+
     const cost = 2500;
     if (clan.funds < cost) {
       throw new BadRequestException(`El clan necesita al menos ${cost} € en fondos`);
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const debit = await tx.clan.updateMany({
+        where: { id: clan.id, funds: { gte: cost } },
+        data: {
+          funds: { decrement: cost },
+          level: { increment: territory.controllerId ? 0 : 1 },
+        },
+      });
+
+      if (debit.count === 0) {
+        throw new BadRequestException(`El clan necesita al menos ${cost} € en fondos`);
+      }
+
       // Release previous control record if any
       await tx.clanTerritory.deleteMany({ where: { territoryId } });
 
@@ -170,14 +186,6 @@ export class ClansService {
 
       await tx.clanTerritory.create({
         data: { clanId: clan.id, territoryId },
-      });
-
-      await tx.clan.update({
-        where: { id: clan.id },
-        data: {
-          funds: { decrement: cost },
-          level: { increment: territory.controllerId ? 0 : 1 },
-        },
       });
 
       return tx.territory.findUnique({
