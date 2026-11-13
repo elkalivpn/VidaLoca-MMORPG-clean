@@ -1,0 +1,449 @@
+[gd_scene load_steps=30 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/MadridCentro.gd" id="1_world"]
+[ext_resource type="Script" path="res://scripts/player/PlayerController.gd" id="2_player"]
+[ext_resource type="Script" path="res://scripts/vehicles/VehicleController.gd" id="3_vehicle"]
+[ext_resource type="Script" path="res://scripts/ui/HUD.gd" id="4_hud"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_night"]
+sky_top_color = Color(0.02, 0.03, 0.08, 1)
+sky_horizon_color = Color(0.08, 0.11, 0.2, 1)
+ground_bottom_color = Color(0.02, 0.02, 0.04, 1)
+ground_horizon_color = Color(0.05, 0.07, 0.12, 1)
+
+[sub_resource type="Sky" id="Sky_night"]
+sky_material = SubResource("ProceduralSkyMaterial_night")
+
+[sub_resource type="Environment" id="Environment_night"]
+background_mode = 2
+sky = SubResource("Sky_night")
+ambient_light_source = 3
+ambient_light_color = Color(0.22, 0.27, 0.42, 1)
+ambient_light_energy = 0.55
+tonemap_mode = 2
+glow_enabled = true
+glow_intensity = 0.7
+fog_enabled = true
+fog_light_color = Color(0.06, 0.08, 0.15, 1)
+fog_density = 0.008
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
+size = Vector3(140, 1, 140)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_asphalt"]
+albedo_color = Color(0.11, 0.12, 0.14, 1)
+roughness = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_ground"]
+material = SubResource("StandardMaterial3D_asphalt")
+size = Vector3(140, 1, 140)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_stripe"]
+albedo_color = Color(0.95, 0.75, 0.15, 1)
+emission_enabled = true
+emission = Color(0.35, 0.25, 0.02, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_stripe"]
+material = SubResource("StandardMaterial3D_stripe")
+size = Vector3(0.35, 0.02, 120)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_building_tall"]
+size = Vector3(16, 22, 16)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_building_dark"]
+albedo_color = Color(0.16, 0.18, 0.24, 1)
+roughness = 0.7
+
+[sub_resource type="BoxMesh" id="BoxMesh_building_tall"]
+material = SubResource("StandardMaterial3D_building_dark")
+size = Vector3(16, 22, 16)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_neon_cyan"]
+albedo_color = Color(0.1, 0.85, 0.95, 1)
+emission_enabled = true
+emission = Color(0.1, 0.85, 0.95, 1)
+emission_energy_multiplier = 2.5
+
+[sub_resource type="BoxMesh" id="BoxMesh_neon_sign"]
+material = SubResource("StandardMaterial3D_neon_cyan")
+size = Vector3(6, 1.2, 0.3)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_neon_amber"]
+albedo_color = Color(0.98, 0.55, 0.1, 1)
+emission_enabled = true
+emission = Color(0.98, 0.55, 0.1, 1)
+emission_energy_multiplier = 2.4
+
+[sub_resource type="BoxMesh" id="BoxMesh_neon_sign_amber"]
+material = SubResource("StandardMaterial3D_neon_amber")
+size = Vector3(5, 1.0, 0.3)
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
+radius = 0.38
+height = 1.75
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_player"]
+albedo_color = Color(0.92, 0.35, 0.18, 1)
+roughness = 0.45
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_player"]
+material = SubResource("StandardMaterial3D_player")
+radius = 0.36
+height = 1.7
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_car"]
+size = Vector3(2.1, 0.8, 4.4)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_car_body"]
+albedo_color = Color(0.85, 0.12, 0.16, 1)
+metallic = 0.75
+roughness = 0.2
+
+[sub_resource type="BoxMesh" id="BoxMesh_car_body"]
+material = SubResource("StandardMaterial3D_car_body")
+size = Vector3(2.05, 0.65, 4.35)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_car_cabin"]
+albedo_color = Color(0.08, 0.1, 0.14, 1)
+metallic = 0.9
+roughness = 0.1
+
+[sub_resource type="BoxMesh" id="BoxMesh_car_cabin"]
+material = SubResource("StandardMaterial3D_car_cabin")
+size = Vector3(1.7, 0.5, 2.1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wheel"]
+albedo_color = Color(0.07, 0.07, 0.08, 1)
+roughness = 0.85
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_wheel"]
+material = SubResource("StandardMaterial3D_wheel")
+top_radius = 0.36
+bottom_radius = 0.36
+height = 0.26
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hud_top"]
+bg_color = Color(0.04, 0.06, 0.1, 0.82)
+border_width_bottom = 2
+border_color = Color(0.96, 0.62, 0.04, 0.7)
+content_margin_left = 18.0
+content_margin_top = 10.0
+content_margin_right = 18.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_drift"]
+bg_color = Color(0.96, 0.45, 0.05, 0.95)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+content_margin_left = 12.0
+content_margin_top = 4.0
+content_margin_right = 12.0
+content_margin_bottom = 4.0
+
+[node name="MadridCentro" type="Node3D"]
+script = ExtResource("1_world")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_night")
+
+[node name="MoonLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 28, 0)
+light_color = Color(0.55, 0.68, 0.95, 1)
+light_energy = 0.65
+shadow_enabled = true
+
+[node name="StreetLights" type="Node3D" parent="."]
+
+[node name="Lamp1" type="OmniLight3D" parent="StreetLights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 6.5, -18)
+light_color = Color(1, 0.78, 0.45, 1)
+light_energy = 4.5
+omni_range = 24.0
+
+[node name="Lamp2" type="OmniLight3D" parent="StreetLights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6.5, 0)
+light_color = Color(1, 0.78, 0.45, 1)
+light_energy = 4.5
+omni_range = 24.0
+
+[node name="Lamp3" type="OmniLight3D" parent="StreetLights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 6.5, 20)
+light_color = Color(0.25, 0.85, 1, 1)
+light_energy = 4.0
+omni_range = 24.0
+
+[node name="StreetGround" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StreetGround"]
+shape = SubResource("BoxShape3D_ground")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="StreetGround"]
+mesh = SubResource("BoxMesh_ground")
+
+[node name="RoadStripe" type="MeshInstance3D" parent="StreetGround"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.51, 0)
+mesh = SubResource("BoxMesh_stripe")
+
+[node name="Buildings" type="Node3D" parent="."]
+
+[node name="EdificioGranVia1" type="StaticBody3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 11, -18)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Buildings/EdificioGranVia1"]
+shape = SubResource("BoxShape3D_building_tall")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Buildings/EdificioGranVia1"]
+mesh = SubResource("BoxMesh_building_tall")
+
+[node name="NeonSign" type="MeshInstance3D" parent="Buildings/EdificioGranVia1"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 8.2, -4, 0)
+mesh = SubResource("BoxMesh_neon_sign")
+
+[node name="EdificioGranVia2" type="StaticBody3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 11, -10)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Buildings/EdificioGranVia2"]
+shape = SubResource("BoxShape3D_building_tall")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Buildings/EdificioGranVia2"]
+mesh = SubResource("BoxMesh_building_tall")
+
+[node name="NeonSignAmber" type="MeshInstance3D" parent="Buildings/EdificioGranVia2"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -8.2, -4, 0)
+mesh = SubResource("BoxMesh_neon_sign_amber")
+
+[node name="EdificioCallao" type="StaticBody3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 11, 18)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Buildings/EdificioCallao"]
+shape = SubResource("BoxShape3D_building_tall")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Buildings/EdificioCallao"]
+mesh = SubResource("BoxMesh_building_tall")
+
+[node name="EdificioSol" type="StaticBody3D" parent="Buildings"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 11, 20)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Buildings/EdificioSol"]
+shape = SubResource("BoxShape3D_building_tall")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Buildings/EdificioSol"]
+mesh = SubResource("BoxMesh_building_tall")
+
+[node name="Player" type="CharacterBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 0.2, 6)
+script = ExtResource("2_player")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_player")
+
+[node name="VisualMesh" type="Node3D" parent="Player"]
+
+[node name="Body" type="MeshInstance3D" parent="Player/VisualMesh"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+mesh = SubResource("CapsuleMesh_player")
+
+[node name="CameraPivot" type="Node3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 0.939693, 0.34202, 0, -0.34202, 0.939693, 0, 1.55, 0)
+
+[node name="SpringArm3D" type="SpringArm3D" parent="Player/CameraPivot"]
+spring_length = 4.2
+
+[node name="Camera3D" type="Camera3D" parent="Player/CameraPivot/SpringArm3D"]
+current = true
+
+[node name="Supercar" type="VehicleBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.2, 0.7, 2)
+mass = 1350.0
+center_of_mass_mode = 1
+center_of_mass = Vector3(0, -0.25, 0)
+script = ExtResource("3_vehicle")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Supercar"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.45, 0)
+shape = SubResource("BoxShape3D_car")
+
+[node name="BodyMesh" type="MeshInstance3D" parent="Supercar"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.42, 0)
+mesh = SubResource("BoxMesh_car_body")
+
+[node name="CabinMesh" type="MeshInstance3D" parent="Supercar"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.92, -0.15)
+mesh = SubResource("BoxMesh_car_cabin")
+
+[node name="WheelFL" type="VehicleWheel3D" parent="Supercar"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.95, 0.22, 1.38)
+use_as_steering = true
+wheel_radius = 0.36
+wheel_rest_length = 0.14
+wheel_friction_slip = 3.4
+suspension_stiffness = 48.0
+suspension_max_force = 6500.0
+damping_compression = 0.85
+damping_relaxation = 0.9
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Supercar/WheelFL"]
+transform = Transform3D(0, 1, 0, -1, 0, 0, 0, 0, 1, 0, 0, 0)
+mesh = SubResource("CylinderMesh_wheel")
+
+[node name="WheelFR" type="VehicleWheel3D" parent="Supercar"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.95, 0.22, 1.38)
+use_as_steering = true
+wheel_radius = 0.36
+wheel_rest_length = 0.14
+wheel_friction_slip = 3.4
+suspension_stiffness = 48.0
+suspension_max_force = 6500.0
+damping_compression = 0.85
+damping_relaxation = 0.9
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Supercar/WheelFR"]
+transform = Transform3D(0, 1, 0, -1, 0, 0, 0, 0, 1, 0, 0, 0)
+mesh = SubResource("CylinderMesh_wheel")
+
+[node name="WheelRL" type="VehicleWheel3D" parent="Supercar"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.95, 0.22, -1.38)
+use_as_traction = true
+wheel_radius = 0.36
+wheel_rest_length = 0.14
+wheel_friction_slip = 3.2
+suspension_stiffness = 50.0
+suspension_max_force = 7000.0
+damping_compression = 0.85
+damping_relaxation = 0.9
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Supercar/WheelRL"]
+transform = Transform3D(0, 1, 0, -1, 0, 0, 0, 0, 1, 0, 0, 0)
+mesh = SubResource("CylinderMesh_wheel")
+
+[node name="WheelRR" type="VehicleWheel3D" parent="Supercar"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.95, 0.22, -1.38)
+use_as_traction = true
+wheel_radius = 0.36
+wheel_rest_length = 0.14
+wheel_friction_slip = 3.2
+suspension_stiffness = 50.0
+suspension_max_force = 7000.0
+damping_compression = 0.85
+damping_relaxation = 0.9
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Supercar/WheelRR"]
+transform = Transform3D(0, 1, 0, -1, 0, 0, 0, 0, 1, 0, 0, 0)
+mesh = SubResource("CylinderMesh_wheel")
+
+[node name="CameraPivot" type="Node3D" parent="Supercar"]
+transform = Transform3D(-1, 0, -8.74228e-08, -2.98023e-08, 0.939693, 0.34202, 8.21505e-08, 0.34202, -0.939693, 0, 1.4, 0)
+
+[node name="SpringArm3D" type="SpringArm3D" parent="Supercar/CameraPivot"]
+spring_length = 6.2
+
+[node name="Camera3D" type="Camera3D" parent="Supercar/CameraPivot/SpringArm3D"]
+fov = 72.0
+
+[node name="RemotePlayers" type="Node3D" parent="."]
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("4_hud")
+
+[node name="TopBar" type="PanelContainer" parent="HUD"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 66.0
+grow_horizontal = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_hud_top")
+
+[node name="HBox" type="HBoxContainer" parent="HUD/TopBar"]
+layout_mode = 2
+
+[node name="LeftBox" type="VBoxContainer" parent="HUD/TopBar/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ModeLabel" type="Label" parent="HUD/TopBar/HBox/LeftBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.22, 0.74, 0.97, 1)
+theme_override_font_sizes/font_size = 15
+text = "MODO: OFFLINE (HISTORIA) | Madrid Centro"
+
+[node name="ChapterLabel" type="Label" parent="HUD/TopBar/HBox/LeftBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.89, 0.95, 1)
+theme_override_font_sizes/font_size = 13
+text = "Capítulo 1: Luces de Gran Vía"
+
+[node name="RightBox" type="HBoxContainer" parent="HUD/TopBar/HBox"]
+layout_mode = 2
+theme_override_constants/separation = 22
+
+[node name="EurosLabel" type="Label" parent="HUD/TopBar/HBox/RightBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.2, 0.86, 0.45, 1)
+theme_override_font_sizes/font_size = 20
+text = "€ 2500"
+
+[node name="HeatLabel" type="Label" parent="HUD/TopBar/HBox/RightBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.45, 0.2, 1)
+theme_override_font_sizes/font_size = 18
+text = "CALOR: ☆☆☆☆☆"
+
+[node name="BottomCenter" type="CenterContainer" parent="HUD"]
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -54.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="PromptLabel" type="Label" parent="HUD/BottomCenter"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.92, 0.7, 1)
+theme_override_font_sizes/font_size = 16
+text = "[Q] Acción táctica | [ESC] Menú"
+
+[node name="BottomRight" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -230.0
+offset_top = -120.0
+offset_right = -24.0
+offset_bottom = -24.0
+grow_horizontal = 0
+grow_vertical = 0
+
+[node name="VBox" type="VBoxContainer" parent="HUD/BottomRight"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+alignment = 2
+
+[node name="DriftBadge" type="PanelContainer" parent="HUD/BottomRight/VBox"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 8
+theme_override_styles/panel = SubResource("StyleBoxFlat_drift")
+
+[node name="Label" type="Label" parent="HUD/BottomRight/VBox/DriftBadge"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "DRIFT"
+
+[node name="SpeedLabel" type="Label" parent="HUD/BottomRight/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.98, 1, 1)
+theme_override_font_sizes/font_size = 34
+text = "0 km/h"
+horizontal_alignment = 2
