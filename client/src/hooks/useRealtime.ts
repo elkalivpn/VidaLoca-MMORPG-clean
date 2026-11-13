@@ -9,6 +9,7 @@ import {
   type ChatMessage,
   type PlayerMovePayload,
   type PresencePlayer,
+  type PursuitAlert,
   type SpatialPlayer,
   type WorldEvent,
   type WorldSnapshotPayload,
@@ -21,6 +22,7 @@ export function useRealtime(enabled: boolean) {
   const [onlineTotal, setOnlineTotal] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [worldEvents, setWorldEvents] = useState<WorldEvent[]>([]);
+  const [pursuitAlerts, setPursuitAlerts] = useState<PursuitAlert[]>([]);
   const [locationId, setLocationId] = useState<string | null>(null);
   const remotePlayersRef = useRef<Map<string, SpatialPlayer>>(new Map());
 
@@ -103,6 +105,30 @@ export function useRealtime(enabled: boolean) {
       setWorldEvents((prev) => [...prev.slice(-29), ev]);
     };
 
+    const onPursuitAlert = (payload: Partial<PursuitAlert>) => {
+      const alert: PursuitAlert = {
+        ...payload,
+        id:
+          payload.id ||
+          `alert-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        type: 'alert',
+        timestamp: payload.timestamp || new Date().toISOString(),
+      };
+      setPursuitAlerts((prev) => [...prev.slice(-19), alert]);
+    };
+
+    const onPursuitResolved = (payload: Partial<PursuitAlert>) => {
+      const alert: PursuitAlert = {
+        ...payload,
+        id:
+          payload.id ||
+          `resolved-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        type: 'resolved',
+        timestamp: payload.timestamp || new Date().toISOString(),
+      };
+      setPursuitAlerts((prev) => [...prev.slice(-19), alert]);
+    };
+
     const onError = (err: { message?: string }) => {
       console.warn('[WS]', err?.message);
     };
@@ -116,6 +142,8 @@ export function useRealtime(enabled: boolean) {
     socket.on('world:snapshot', onWorldSnapshot);
     socket.on('chat:message', onChat);
     socket.on('world:event', onWorldEvent);
+    socket.on('pursuit:alert', onPursuitAlert);
+    socket.on('pursuit:resolved', onPursuitResolved);
     socket.on('error', onError);
 
     if (socket.connected) setConnected(true);
@@ -130,6 +158,8 @@ export function useRealtime(enabled: boolean) {
       socket.off('world:snapshot', onWorldSnapshot);
       socket.off('chat:message', onChat);
       socket.off('world:event', onWorldEvent);
+      socket.off('pursuit:alert', onPursuitAlert);
+      socket.off('pursuit:resolved', onPursuitResolved);
       socket.off('error', onError);
       // Don't fully disconnect on unmount of one component — logout handles it
     };
@@ -191,6 +221,7 @@ export function useRealtime(enabled: boolean) {
     onlineTotal,
     messages,
     worldEvents,
+    pursuitAlerts,
     locationId,
     remotePlayersRef,
     joinZone,

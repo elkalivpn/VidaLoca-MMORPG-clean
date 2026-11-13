@@ -5,6 +5,9 @@ export interface User {
   role: 'PLAYER' | 'ADMIN' | 'MODERATOR';
 }
 
+export type FactionType =
+  'CIVILIAN' | 'POLICE' | 'GUARDIA_CIVIL' | 'SYNDICATE' | 'ENTREPRENEUR';
+
 export interface Player {
   id: string;
   userId: string;
@@ -17,6 +20,10 @@ export interface Player {
   locationId: string | null;
   heat?: number;
   lifestyle?: string;
+  faction?: FactionType;
+  factionRank?: number;
+  wantedLevel?: number;
+  jailUntil?: string | null;
   isOnline: boolean;
   lastLogin: string;
   inventory?: InventoryItem[];
@@ -234,5 +241,50 @@ export interface WorldTravelResponse {
     fineEuros?: number;
     message?: string;
   } | null;
+  player?: Partial<Player>;
+}
+
+export interface FactionInfo {
+  id: FactionType;
+  name: string;
+  shortName?: string;
+  description: string;
+  perks: string[];
+  badge?: string;
+  memberCount?: number;
+}
+
+export interface WantedSuspect {
+  playerId: string;
+  id?: string;
+  displayName: string;
+  heat: number;
+  wantedLevel: number;
+  locationId: string | null;
+  faction?: FactionType;
+  bountyEuros: number;
+  bounty?: number;
+  level?: number;
+}
+
+export interface InterceptResponse {
+  ok?: boolean;
+  success?: boolean;
+  intercepted?: boolean;
+  message?: string;
+  rewardEuros?: number;
+  bountyEuros?: number;
+  xpGained?: number;
+  jailUntil?: string | null;
+  targetPlayerId?: string;
+  targetDisplayName?: string;
+  player?: Partial<Player>;
+}
+
+export interface BailResponse {
+  ok?: boolean;
+  paidEuros?: number;
+  message?: string;
+  jailUntil?: string | null;
   player?: Partial<Player>;
 }

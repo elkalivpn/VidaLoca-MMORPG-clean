@@ -1,6 +1,37 @@
 'use client';
 
-import type { Player } from '@/types/game';
+import type { FactionType, Player } from '@/types/game';
+
+const FACTION_BADGES: Record<
+  FactionType,
+  { label: string; icon: string; className: string }
+> = {
+  POLICE: {
+    label: 'CNP',
+    icon: '🛡️',
+    className: 'border-sky-500/40 bg-sky-500/15 text-sky-300',
+  },
+  GUARDIA_CIVIL: {
+    label: 'Guardia Civil',
+    icon: '⚔️',
+    className: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300',
+  },
+  SYNDICATE: {
+    label: 'Sindicato',
+    icon: '🕶️',
+    className: 'border-red-500/40 bg-red-500/15 text-red-300',
+  },
+  ENTREPRENEUR: {
+    label: 'Gremio',
+    icon: '💼',
+    className: 'border-amber-500/40 bg-amber-500/15 text-amber-300',
+  },
+  CIVILIAN: {
+    label: 'Civil',
+    icon: '🏙️',
+    className: 'border-zinc-700 bg-zinc-800/70 text-zinc-300',
+  },
+};
 
 export default function StatsBar({
   player,
@@ -11,11 +42,39 @@ export default function StatsBar({
   connected: boolean;
   onLogout: () => void;
 }) {
+  const factionKey: FactionType = player?.faction ?? 'CIVILIAN';
+  const factionBadge = FACTION_BADGES[factionKey] ?? FACTION_BADGES.CIVILIAN;
+  const wantedLevel = Math.min(5, Math.max(0, player?.wantedLevel ?? 0));
+  const inJail = Boolean(
+    player?.jailUntil && new Date(player.jailUntil).getTime() > Date.now(),
+  );
+
   return (
     <header className="flex flex-wrap items-center gap-3 border-b border-zinc-800 bg-zinc-900/90 px-3 py-2 text-sm">
       <span className="font-semibold text-amber-400">
         {player?.displayName}
       </span>
+      <span
+        className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium ${factionBadge.className}`}
+        title={`Facción: ${factionBadge.label}${player?.factionRank ? ` (Rango ${player.factionRank})` : ''}`}
+      >
+        <span>{factionBadge.icon}</span>
+        <span>{factionBadge.label}</span>
+      </span>
+      {wantedLevel > 0 && (
+        <span
+          className="inline-flex items-center gap-1 rounded border border-red-500/40 bg-red-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300"
+          title={`Nivel de búsqueda: ${wantedLevel}/5`}
+        >
+          {'★'.repeat(wantedLevel)}
+          {'☆'.repeat(5 - wantedLevel)}
+        </span>
+      )}
+      {inJail && (
+        <span className="inline-flex items-center gap-1 rounded border border-red-500/50 bg-red-950/60 px-1.5 py-0.5 text-[11px] font-semibold text-red-300">
+          ⛓️ Calabozo
+        </span>
+      )}
       <span className="text-zinc-500">|</span>
       <span className="text-zinc-300">€ {player?.euros ?? 0}</span>
       <span className="text-zinc-300">VC {player?.vidaCoins ?? 0}</span>

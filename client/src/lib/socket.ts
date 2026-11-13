@@ -96,3 +96,20 @@ export function emitPlayerMove(payload: PlayerMovePayload) {
   if (!socket?.connected) return;
   socket.emit('player:move', payload);
 }
+
+export interface PursuitAlert {
+  id: string;
+  type: 'alert' | 'resolved';
+  suspectId?: string;
+  suspectName?: string;
+  targetPlayerId?: string;
+  officerId?: string;
+  officerName?: string;
+  locationId?: string;
+  wantedLevel?: number;
+  heat?: number;
+  bountyEuros?: number;
+  outcome?: string;
+  message?: string;
+  timestamp: string;
+}
