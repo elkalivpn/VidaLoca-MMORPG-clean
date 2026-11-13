@@ -210,6 +210,88 @@ const FACTIONS = [
   },
 ];
 
+const RELEASES_URL =
+  'https://github.com/elkalivpn/VidaLoca-MMORPG-clean/releases/latest';
+
+const GAME_MODES = [
+  {
+    title: 'Modo Historia Offline',
+    badge: 'Un Jugador',
+    accent: 'border-amber-500/35 bg-amber-500/10 text-amber-300',
+    desc: 'Recorre las ciudades de España en solitario con misiones, tráfico y progresión local sin conexión.',
+  },
+  {
+    title: 'Red Local LAN',
+    badge: 'Cooperativo / PvP',
+    accent: 'border-sky-500/35 bg-sky-500/10 text-sky-300',
+    desc: 'Crea o únete a salas en tu misma red Wi‑Fi o Ethernet con latencia mínima junto a tus amigos.',
+  },
+  {
+    title: 'Online MMO',
+    badge: 'Servidor Persistente',
+    accent: 'border-emerald-500/35 bg-emerald-500/10 text-emerald-300',
+    desc: 'Mundo abierto compartido 24/7 con facciones, economía real, flotas y persecuciones en vivo.',
+  },
+];
+
+const DOWNLOAD_PLATFORMS = [
+  {
+    id: 'windows',
+    name: 'Windows',
+    format: '.exe',
+    category: 'PC · Escritorio',
+    requirement: 'Windows 10 / 11 (64-bit)',
+    detail: 'Instalador nativo Godot 4 con soporte Vulkan y DirectX.',
+    cta: 'Descargar .exe',
+    accent: 'hover:border-sky-400/60',
+    badgeClass: 'border-sky-500/30 bg-sky-500/15 text-sky-300',
+  },
+  {
+    id: 'macos',
+    name: 'macOS',
+    format: '.dmg',
+    category: 'PC · Mac',
+    requirement: 'macOS 12+ (Apple Silicon & Intel)',
+    detail: 'Imagen universal optimizada con motor gráfico Metal.',
+    cta: 'Descargar .dmg',
+    accent: 'hover:border-zinc-400/60',
+    badgeClass: 'border-zinc-500/30 bg-zinc-500/15 text-zinc-200',
+  },
+  {
+    id: 'linux',
+    name: 'Linux',
+    format: '.AppImage',
+    category: 'PC · Portable',
+    requirement: 'Distros x86_64 con Vulkan / OpenGL',
+    detail: 'Ejecutable portable sin instalación para escritorios Linux.',
+    cta: 'Descargar .AppImage',
+    accent: 'hover:border-amber-400/60',
+    badgeClass: 'border-amber-500/30 bg-amber-500/15 text-amber-300',
+  },
+  {
+    id: 'android',
+    name: 'Android',
+    format: '.apk',
+    category: 'Móvil · Tablet',
+    requirement: 'Android 9.0+ (ARM64)',
+    detail: 'Controles táctiles adaptativos y compatibilidad con mando.',
+    cta: 'Descargar .apk',
+    accent: 'hover:border-emerald-400/60',
+    badgeClass: 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300',
+  },
+  {
+    id: 'ios',
+    name: 'iOS',
+    format: 'iPhone & iPad',
+    category: 'Móvil · Apple',
+    requirement: 'iOS / iPadOS 15+',
+    detail: 'Paquete oficial para dispositivos Apple desde Releases.',
+    cta: 'Ver en Releases',
+    accent: 'hover:border-rose-400/60',
+    badgeClass: 'border-rose-500/30 bg-rose-500/15 text-rose-300',
+  },
+];
+
 export default function HomePage() {
   const router = useRouter();
   const { setAuth } = useAuth();
@@ -283,6 +365,12 @@ export default function HomePage() {
           </div>
 
           <nav className="hidden items-center gap-6 text-xs font-semibold uppercase tracking-wider text-zinc-300 md:flex">
+            <a
+              href="#descargas"
+              className="text-amber-300 transition hover:text-amber-200"
+            >
+              Descargas
+            </a>
             <a href="#ciudades" className="transition hover:text-amber-400">
               Ciudades
             </a>
@@ -336,6 +424,18 @@ export default function HomePage() {
                 quema rueda con físicas de derrape y construye tu imperio en un
                 mundo abierto persistente.
               </p>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <a
+                  href="#descargas"
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-5 py-3 text-xs font-black uppercase tracking-wider text-zinc-950 shadow-lg shadow-amber-500/25 transition hover:from-amber-300 hover:to-amber-400"
+                >
+                  <span>Descargar Cliente Nativo</span>
+                  <span aria-hidden="true">↓</span>
+                </a>
+                <span className="rounded-xl border border-zinc-800 bg-zinc-950/75 px-3.5 py-2.5 text-xs font-semibold text-zinc-300 backdrop-blur-sm">
+                  Godot 4 · Offline · LAN · Online MMO
+                </span>
+              </div>
             </div>
 
             {/* Scene Selector */}
@@ -524,6 +624,108 @@ export default function HomePage() {
                 <span className="text-sky-300">[Espacio]</span> drift ·{' '}
                 <span className="text-rose-300">[Q]</span> pulso
               </p>
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION 0: PORTAL OFICIAL DE DESCARGAS (GODOT 4) */}
+        <section
+          id="descargas"
+          className="border-t border-amber-500/20 bg-zinc-950/95 py-16 backdrop-blur-md"
+        >
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-300">
+                    Motor Godot 4 · Multiplataforma
+                  </span>
+                  <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-[10px] font-semibold text-zinc-300">
+                    Modo Historia Offline · Red Local LAN · Online MMO
+                  </span>
+                </div>
+                <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
+                  Descarga el Cliente Nativo (PC y Móvil)
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm text-zinc-400">
+                  Juega sin límites desde tu ordenador o dispositivo móvil con
+                  el cliente nativo de VidaLoca MMORPG. Elige tu sistema
+                  operativo y descarga la última versión oficial directamente
+                  desde GitHub Releases.
+                </p>
+              </div>
+
+              <a
+                href={RELEASES_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-amber-300 transition hover:bg-amber-500 hover:text-zinc-950"
+              >
+                <span>Ver todas las versiones</span>
+                <span aria-hidden="true">↗</span>
+              </a>
+            </div>
+
+            {/* 3 Modos de Juego del Cliente Godot 4 */}
+            <div className="mt-8 grid gap-4 md:grid-cols-3">
+              {GAME_MODES.map((gm) => (
+                <div
+                  key={gm.title}
+                  className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5"
+                >
+                  <span
+                    className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${gm.accent}`}
+                  >
+                    {gm.badge}
+                  </span>
+                  <h3 className="mt-3 text-base font-black text-white">
+                    {gm.title}
+                  </h3>
+                  <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">
+                    {gm.desc}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Tarjetas de Plataformas */}
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              {DOWNLOAD_PLATFORMS.map((plat) => (
+                <a
+                  key={plat.id}
+                  href={RELEASES_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`group flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 transition ${plat.accent}`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                        {plat.category}
+                      </span>
+                      <span
+                        className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${plat.badgeClass}`}
+                      >
+                        {plat.format}
+                      </span>
+                    </div>
+                    <h3 className="mt-3 text-xl font-black text-white">
+                      {plat.name}
+                    </h3>
+                    <p className="mt-1 text-[11px] font-semibold text-amber-400">
+                      {plat.requirement}
+                    </p>
+                    <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+                      {plat.detail}
+                    </p>
+                  </div>
+
+                  <div className="mt-5 flex items-center justify-between rounded-xl border border-zinc-700/80 bg-zinc-950/80 px-3.5 py-2.5 text-xs font-bold text-zinc-100 transition group-hover:border-amber-400/60 group-hover:bg-amber-500 group-hover:text-zinc-950">
+                    <span>{plat.cta}</span>
+                    <span aria-hidden="true">↗</span>
+                  </div>
+                </a>
+              ))}
             </div>
           </div>
         </section>

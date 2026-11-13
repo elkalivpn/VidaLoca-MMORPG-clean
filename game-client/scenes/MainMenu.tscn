@@ -1,0 +1,241 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/MainMenu.gd" id="1_menu"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bg"]
+bg_color = Color(0.055, 0.075, 0.125, 0.96)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.96, 0.62, 0.04, 0.85)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card_offline"]
+bg_color = Color(0.09, 0.13, 0.21, 0.95)
+border_width_left = 1
+border_width_top = 3
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.96, 0.62, 0.04, 0.8)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 16.0
+content_margin_top = 16.0
+content_margin_right = 16.0
+content_margin_bottom = 16.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card_lan"]
+bg_color = Color(0.09, 0.13, 0.21, 0.95)
+border_width_left = 1
+border_width_top = 3
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.22, 0.74, 0.97, 0.8)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 16.0
+content_margin_top = 16.0
+content_margin_right = 16.0
+content_margin_bottom = 16.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card_online"]
+bg_color = Color(0.09, 0.13, 0.21, 0.95)
+border_width_left = 1
+border_width_top = 3
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.94, 0.27, 0.27, 0.8)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 16.0
+content_margin_top = 16.0
+content_margin_right = 16.0
+content_margin_bottom = 16.0
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_menu")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.031, 0.043, 0.078, 1)
+
+[node name="CenterContainer" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MainPanel" type="PanelContainer" parent="CenterContainer"]
+custom_minimum_size = Vector2(960, 520)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_bg")
+
+[node name="MarginContainer" type="MarginContainer" parent="CenterContainer/MainPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 24
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/MainPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="TitleLabel" type="Label" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.75, 0.14, 1)
+theme_override_font_sizes/font_size = 42
+text = "VIDALOCA"
+horizontal_alignment = 1
+
+[node name="SubtitleLabel" type="Label" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.68, 0.74, 0.85, 1)
+theme_override_font_sizes/font_size = 15
+text = "MMORPG Urbano en España — Cliente Nativo Godot 4.3"
+horizontal_alignment = 1
+
+[node name="ModesGrid" type="HBoxContainer" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 18
+
+[node name="OfflinePanel" type="PanelContainer" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_card_offline")
+
+[node name="VBox" type="VBoxContainer" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/OfflinePanel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/OfflinePanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.75, 0.14, 1)
+theme_override_font_sizes/font_size = 20
+text = "Modo Historia (Offline)"
+
+[node name="Desc" type="Label" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/OfflinePanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.76, 0.81, 0.9, 1)
+theme_override_font_sizes/font_size = 13
+text = "5 capítulos por España sin conexión. Progreso, dinero y calor guardados localmente en disco."
+autowrap_mode = 3
+
+[node name="BtnContinueStory" type="Button" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/OfflinePanel/VBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Continuar Historia"
+
+[node name="BtnNewStory" type="Button" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/OfflinePanel/VBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Nueva Partida"
+
+[node name="LanPanel" type="PanelContainer" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_card_lan")
+
+[node name="VBox" type="VBoxContainer" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/LanPanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/LanPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.22, 0.74, 0.97, 1)
+theme_override_font_sizes/font_size = 20
+text = "Red Local (LAN)"
+
+[node name="Desc" type="Label" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/LanPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.76, 0.81, 0.9, 1)
+theme_override_font_sizes/font_size = 13
+text = "Multijugador directo ENet en la misma red Wi-Fi / Ethernet."
+autowrap_mode = 3
+
+[node name="LanIpInput" type="LineEdit" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/LanPanel/VBox"]
+layout_mode = 2
+text = "127.0.0.1"
+placeholder_text = "IP del Host (ej. 192.168.1.25)"
+
+[node name="LanPortInput" type="LineEdit" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/LanPanel/VBox"]
+layout_mode = 2
+text = "7777"
+placeholder_text = "Puerto (7777)"
+
+[node name="BtnHostLan" type="Button" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/LanPanel/VBox"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+text = "Crear Partida (Host)"
+
+[node name="BtnJoinLan" type="Button" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/LanPanel/VBox"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+text = "Unirse a Partida"
+
+[node name="OnlinePanel" type="PanelContainer" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_card_online")
+
+[node name="VBox" type="VBoxContainer" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/OnlinePanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/OnlinePanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.97, 0.44, 0.44, 1)
+theme_override_font_sizes/font_size = 20
+text = "Servidor Online (MMO)"
+
+[node name="ApiUrlInput" type="LineEdit" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/OnlinePanel/VBox"]
+layout_mode = 2
+text = "http://localhost:3000/api"
+placeholder_text = "URL API NestJS"
+
+[node name="UserInput" type="LineEdit" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/OnlinePanel/VBox"]
+layout_mode = 2
+placeholder_text = "Usuario"
+
+[node name="PassInput" type="LineEdit" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/OnlinePanel/VBox"]
+layout_mode = 2
+placeholder_text = "Contraseña"
+secret = true
+
+[node name="BtnConnectOnline" type="Button" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer/ModesGrid/OnlinePanel/VBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_vertical = 10
+text = "Conectar al Servidor"
+
+[node name="StatusLabel" type="Label" parent="CenterContainer/MainPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.58, 0.64, 0.72, 1)
+theme_override_font_sizes/font_size = 13
+text = "Listo. Selecciona un modo para entrar a Madrid Centro."
+horizontal_alignment = 1
