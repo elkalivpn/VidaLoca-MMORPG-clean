@@ -306,4 +306,72 @@ describe('RealtimeGateway', () => {
       expect((gateway as any).worldEventTimer).toBeUndefined();
     });
   });
+
+  describe('chat rate limiting', () => {
+    it('rate-limits chat:zone messages faster than 500ms per socket', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+      const client = await connectPlayer();
+      roomEmitMock.mockClear();
+
+      const first = await gateway.handleZoneChat(client, { message: 'Hola!' });
+      expect(first).toEqual(expect.objectContaining({ ok: true, message: 'Hola!' }));
+      expect(roomEmitMock).toHaveBeenCalledTimes(1);
+
+      jest.advanceTimersByTime(250);
+      const second = await gateway.handleZoneChat(client, { message: 'Spam!' });
+      expect(second).toEqual({
+        ok: false,
+        error: 'Rate limit exceeded',
+        reason: 'rate_limited',
+      });
+      expect(roomEmitMock).toHaveBeenCalledTimes(1);
+
+      jest.advanceTimersByTime(300);
+      const third = await gateway.handleZoneChat(client, {
+        message: 'Ya puedo!',
+      });
+      expect(third).toEqual(
+        expect.objectContaining({ ok: true, message: 'Ya puedo!' }),
+      );
+      expect(roomEmitMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('rate-limits chat:global messages faster than 500ms per socket', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+      const client = await connectPlayer();
+      serverEmitMock.mockClear();
+
+      const first = await gateway.handleGlobalChat(client, {
+        message: 'Global 1',
+      });
+      expect(first).toEqual(
+        expect.objectContaining({ ok: true, message: 'Global 1' }),
+      );
+      expect(serverEmitMock).toHaveBeenCalledTimes(1);
+
+      jest.advanceTimersByTime(499);
+      const second = await gateway.handleGlobalChat(client, {
+        message: 'Global spam',
+      });
+      expect(second).toEqual({
+        ok: false,
+        error: 'Rate limit exceeded',
+        reason: 'rate_limited',
+      });
+      expect(serverEmitMock).toHaveBeenCalledTimes(1);
+
+      jest.advanceTimersByTime(1);
+      const third = await gateway.handleGlobalChat(client, {
+        message: 'Global 2',
+      });
+      expect(third).toEqual(
+        expect.objectContaining({ ok: true, message: 'Global 2' }),
+      );
+      expect(serverEmitMock).toHaveBeenCalledTimes(2);
+    });
+  });
 });

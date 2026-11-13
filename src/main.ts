@@ -2,18 +2,18 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { IoAdapter } from '@nestjs/platform-socket.io';
+import { RedisIoAdapter } from './realtime/redis-io.adapter';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 async function bootstrap() {
+  const isProductionEnv = process.env.NODE_ENV === 'production';
   const app = await NestFactory.create(AppModule, {
-    logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+    logger: isProductionEnv
+      ? ['error', 'warn', 'log']
+      : ['error', 'warn', 'log', 'debug', 'verbose'],
   });
-
-  // WebSocket (Socket.IO) adapter
-  app.useWebSocketAdapter(new IoAdapter(app));
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 3000);
@@ -22,6 +22,11 @@ async function bootstrap() {
     'http://localhost:3001',
   );
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
+
+  // WebSocket (Socket.IO) adapter (Redis when REDIS_URL is configured, fallback in-memory)
+  const redisIoAdapter = new RedisIoAdapter(app, configService);
+  await redisIoAdapter.connectToRedis();
+  app.useWebSocketAdapter(redisIoAdapter);
 
   app.enableCors({
     origin: isProduction
@@ -46,33 +51,42 @@ async function bootstrap() {
   app.useGlobalInterceptors(new TransformInterceptor());
   app.setGlobalPrefix('api');
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('VidaLoca MMORPG API')
-    .setDescription(
-      'API del MMORPG de mundo libre ambientado en España. Tú decides quién eres. Incluye WebSocket en /game.',
-    )
-    .setVersion('0.3.0')
-    .addBearerAuth()
-    .addTag('auth')
-    .addTag('players')
-    .addTag('missions')
-    .addTag('vehicles')
-    .addTag('properties')
-    .addTag('skills')
-    .addTag('achievements')
-    .addTag('battle-pass')
-    .addTag('clans')
-    .addTag('realtime')
-    .build();
+  const enableSwagger =
+    !isProduction || configService.get<string>('ENABLE_SWAGGER') === 'true';
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document);
+  if (enableSwagger) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('VidaLoca MMORPG API')
+      .setDescription(
+        'API del MMORPG de mundo libre ambientado en España. Tú decides quién eres. Incluye WebSocket en /game.',
+      )
+      .setVersion('0.3.0')
+      .addBearerAuth()
+      .addTag('auth')
+      .addTag('players')
+      .addTag('missions')
+      .addTag('vehicles')
+      .addTag('properties')
+      .addTag('skills')
+      .addTag('achievements')
+      .addTag('battle-pass')
+      .addTag('clans')
+      .addTag('realtime')
+      .build();
+
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   await app.listen(port);
 
   const logger = new Logger('Bootstrap');
   logger.log(`🚀 VidaLoca MMORPG Backend → http://localhost:${port}`);
-  logger.log(`📚 Swagger → http://localhost:${port}/api/docs`);
+  if (enableSwagger) {
+    logger.log(`📚 Swagger → http://localhost:${port}/api/docs`);
+  } else {
+    logger.log('📚 Swagger disabled in production');
+  }
   logger.log(`🔌 WebSocket → ws://localhost:${port}/game`);
   logger.log(`🌍 CORS: ${isProduction ? frontendUrl : 'development (open)'}`);
 }
