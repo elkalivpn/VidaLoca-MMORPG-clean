@@ -12,15 +12,15 @@ MMORPG de navegador en las ciudades de España. Economía dual, clanes, territor
 git clone https://github.com/elkalivpn/VidaLoca-MMORPG-clean.git
 cd VidaLoca-MMORPG-clean
 cp .env.example .env
-# Edita .env → DATABASE_URL (Neon pooled) + JWT_SECRET
+# Edita .env → DATABASE_URL (PostgreSQL / Supabase) + JWT_SECRET
 ./scripts/setup.sh
 ```
 
 Luego:
 
 ```bash
-npm run start:dev          # API :3000
-cd client && npm run dev   # UI  :3001
+npm run dev:api            # API :3000
+npm run dev:client         # UI  :3001
 ```
 
 ### Solo instalar dependencias (sin DB)
@@ -33,7 +33,7 @@ Si `.env` aún tiene placeholders, el script para y te indica el siguiente paso.
 
 ## Stack
 
-NestJS 11 · Prisma 7 · PostgreSQL (Neon) · Socket.IO · Next.js 15 · Tailwind
+NestJS 11 · Prisma 7 · PostgreSQL (Supabase / Neon) · Socket.IO · Next.js 15 · MapLibre GL · Tailwind
 
 ## Enlaces
 

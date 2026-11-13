@@ -2,32 +2,31 @@
 
 ## Filosofía (innegociable)
 
-**Mundo libre estilo calle española.** No es un menú de grindeo: estás en un barrio, eliges movidas (legal / gris / calle), asumes calor policial, reputación y dinero. Las misiones son encargos que avanzan al actuar en la calle.
+**Mundo libre estilo calle española.** No es un menú de grindeo: recorres las ciudades y barrios de España, eliges tu camino (Legal / Gris / Calle), asumes calor policial, reputación, vehículos, propiedades y control territorial con tu clan. Las misiones avanzan orgánicamente al actuar en la calle.
 
 ## Fases
 
 | Fase | Estado | Contenido |
-|------|--------|-----------|
-| 0–3 | ✅ | Auth, módulos, cliente, realtime |
-| **4b Calle viva** | ✅ | `WorldModule`: acciones por barrio, calor, camino, StreetPlay UI |
-| 5 | 🔜 | Personajes/avatar, persecuciones, inventario usable en acciones, deploy |
+| :--- | :---: | :--- |
+| **0 — Estabilización y Seguridad** | ✅ | Auditoría integral, FK `TransactionLog`, operaciones atómicas, `RolesGuard`, cooldown de rentas, unificación de zonas/XP, reparación del cliente y CI/CD en GitHub Actions. |
+| **1 — Mapa Real de España** | ✅ | Grafo de carreteras de España (`A-1`, `A-2`, `A-3`, `A-4`, `AP-7`, `A-7`, `A-92`), mapa interactivo con MapLibre GL, rutas y viajes ligados a `PlayerVehicle` con controles de Guardia Civil. |
+| **2 — Distritos 3D y Sync Espacial** | 🔜 | Escena 3D navegable por barrio (Three.js / R3F), avatares y vehículos en vivo, spatial chunks y HUD inmersivo. |
+| **3 — Facciones y Persecuciones** | 🔜 | Fuerzas del orden jugables, bandas/clanes, empresarios, persecuciones en tiempo real y combate. |
+| **4 — Economía Viva y Golpes** | 🔜 | Propiedades funcionales (piso franco, garaje, almacén, club), eventos dinámicos y golpes cooperativos. |
+| **5 — Escala MMO y Lanzamiento** | 🔜 | VoIP de proximidad, load testing WebSocket, observabilidad y despliegue en producción. |
 
 ## Loop de juego
 
-1. Entras → pestaña **Calle** (no el mapa)
-2. Eliges camino Legal / Gris / Calle
-3. Haces movidas en el barrio (riesgo, €, XP, calor)
-4. Las misiones activas avanzan al actuar
-5. Cobras misiones completadas en Misiones
-6. Viajas de barrio en **Mapa** cuando quieras cambiar de zona
+1. Entras en **Calle** y eliges tu estilo (`LEGAL`, `GREY`, `STREET`).
+2. Ejecutas movidas en tu barrio actual (riesgo, €, XP, reputación y calor policial).
+3. Las misiones activas progresan automáticamente al actuar y se cobran en **Misiones**.
+4. Abres **Mapa** para trazar rutas por las carreteras de España y conducir tu vehículo hacia otra ciudad o distrito.
 
-## Tras pull
+## Tras pull / actualización de esquema
 
 ```bash
-export DATABASE_URL=...
+npx prisma generate
 npx prisma db push
-# reinicia API
-npm run start:dev
+npm run dev:api
+npm run dev:client
 ```
-
-Campos nuevos en Player: `heat`, `lifestyle`.
