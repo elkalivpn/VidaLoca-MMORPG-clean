@@ -14,6 +14,76 @@ import {
   calculateRouteBetweenZones,
 } from '../common/constants/zones';
 import { calculateLevelFromXp } from '../common/utils/level.util';
+import { MarketGoodId, MarketTradeDto } from './dto/market-trade.dto';
+
+interface MarketGoodDef {
+  id: MarketGoodId;
+  name: string;
+  description: string;
+  basePrice: number;
+  cityBias: Record<string, number>;
+}
+
+const MARKET_GOODS: MarketGoodDef[] = [
+  {
+    id: 'relojes_lujo',
+    name: 'Relojes de Lujo',
+    description: 'Cronógrafos suizos de importación discreta.',
+    basePrice: 420,
+    cityBias: {
+      Marbella: 1.25,
+      Madrid: 1.1,
+      Barcelona: 1.05,
+      Valencia: 0.9,
+      Sevilla: 0.85,
+      Bilbao: 0.95,
+    },
+  },
+  {
+    id: 'tech_chips',
+    name: 'Microchips Industriales',
+    description: 'Componentes electrónicos de alta demanda en el mercado gris.',
+    basePrice: 280,
+    cityBias: {
+      Madrid: 1.15,
+      Barcelona: 1.2,
+      Valencia: 1.0,
+      Bilbao: 1.05,
+      Sevilla: 0.85,
+      Marbella: 0.9,
+    },
+  },
+  {
+    id: 'aceite_gourmet',
+    name: 'Aceite Gourmet D.O.',
+    description: 'Lotes premium de exportación rápida sin trazabilidad.',
+    basePrice: 95,
+    cityBias: {
+      Sevilla: 0.75,
+      Madrid: 1.15,
+      Barcelona: 1.2,
+      Bilbao: 1.25,
+      Valencia: 0.95,
+      Marbella: 1.1,
+    },
+  },
+  {
+    id: 'piezas_tuning',
+    name: 'Piezas Tuning',
+    description: 'Turbos, centralitas y kits de escape de competición.',
+    basePrice: 190,
+    cityBias: {
+      Valencia: 0.8,
+      Bilbao: 1.15,
+      Madrid: 1.1,
+      Barcelona: 1.05,
+      Sevilla: 0.95,
+      Marbella: 1.2,
+    },
+  },
+];
+
+const MARKET_CITIES = Array.from(new Set(ZONES.map((z) => z.city)));
 
 type ActionDef = {
   id: string;
@@ -108,6 +178,8 @@ const AVATARS = [
 
 @Injectable()
 export class WorldService {
+  private readonly marketCargo = new Map<string, Record<MarketGoodId, number>>();
+
   constructor(private prisma: PrismaService) {}
 
   private async player(userId: string) {
@@ -455,6 +527,170 @@ export class WorldService {
           wantedLevel: updated.wantedLevel,
           reputation: updated.reputation,
         },
+      };
+    });
+  }
+
+  private getHourWindowBucket(now = Date.now()): number {
+    return Math.floor(now / (60 * 60 * 1000));
+  }
+
+  private computeGoodPrice(
+    good: MarketGoodDef,
+    city: string,
+    hourBucket: number,
+  ): number {
+    const cityBias = good.cityBias[city] ?? 1.0;
+    const seedStr = `${city}:${good.id}:${hourBucket}`;
+    let hash = 0;
+    for (let i = 0; i < seedStr.length; i++) {
+      hash = (hash * 31 + seedStr.charCodeAt(i)) | 0;
+    }
+    const normalized = Math.sin(hash) * 0.22; // -22% to +22% hourly fluctuation
+    const price = good.basePrice * cityBias * (1 + normalized);
+    return Math.max(10, Math.round(price * 100) / 100);
+  }
+
+  private getPlayerCargo(playerId: string): Record<MarketGoodId, number> {
+    let cargo = this.marketCargo.get(playerId);
+    if (!cargo) {
+      cargo = {
+        relojes_lujo: 0,
+        tech_chips: 0,
+        aceite_gourmet: 0,
+        piezas_tuning: 0,
+      };
+      this.marketCargo.set(playerId, cargo);
+    }
+    return cargo;
+  }
+
+  async getMarket(userId: string) {
+    const p = await this.player(userId);
+    const zoneId = p.locationId || 'madrid_centro';
+    const zone = ZONES_BY_ID[zoneId] ?? ZONES_BY_ID['madrid_centro'];
+    const currentCity = zone.city;
+    const now = Date.now();
+    const hourBucket = this.getHourWindowBucket(now);
+    const windowExpiresAt = new Date((hourBucket + 1) * 60 * 60 * 1000).toISOString();
+    const cargo = this.getPlayerCargo(p.id);
+
+    const goods = MARKET_GOODS.map((good) => {
+      const cityPrices: Record<string, number> = {};
+      for (const city of MARKET_CITIES) {
+        cityPrices[city] = this.computeGoodPrice(good, city, hourBucket);
+      }
+      return {
+        id: good.id,
+        name: good.name,
+        description: good.description,
+        basePrice: good.basePrice,
+        currentPrice: cityPrices[currentCity],
+        owned: cargo[good.id] ?? 0,
+        cityPrices,
+      };
+    });
+
+    return {
+      currentZoneId: zone.id,
+      currentCity,
+      hourWindow: hourBucket,
+      windowExpiresAt,
+      euros: p.euros,
+      goods,
+    };
+  }
+
+  async tradeMarket(userId: string, dto: MarketTradeDto) {
+    const good = MARKET_GOODS.find((g) => g.id === dto.goodId);
+    if (!good) {
+      throw new BadRequestException('Bien comerciable no válido');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const p = await tx.player.findUnique({ where: { userId } });
+      if (!p) throw new NotFoundException('Player not found');
+      this.assertNotJailed(p.jailUntil);
+
+      const zoneId = p.locationId || 'madrid_centro';
+      const zone = ZONES_BY_ID[zoneId] ?? ZONES_BY_ID['madrid_centro'];
+      const city = zone.city;
+      const hourBucket = this.getHourWindowBucket();
+      const unitPrice = this.computeGoodPrice(good, city, hourBucket);
+      const totalAmount = Math.round(unitPrice * dto.quantity * 100) / 100;
+      const cargo = this.getPlayerCargo(p.id);
+
+      if (dto.action === 'BUY') {
+        const debit = await tx.player.updateMany({
+          where: { id: p.id, euros: { gte: totalAmount } },
+          data: { euros: { decrement: totalAmount } },
+        });
+        if (debit.count === 0) {
+          throw new BadRequestException(
+            `No tienes suficientes euros (necesitas ${totalAmount}€)`,
+          );
+        }
+
+        cargo[dto.goodId] = (cargo[dto.goodId] ?? 0) + dto.quantity;
+
+        await tx.transactionLog.create({
+          data: {
+            playerId: p.id,
+            type: 'SPEND',
+            amount: totalAmount,
+            currency: 'EUR',
+            reason: `Market BUY ${dto.quantity}x ${good.name} in ${city}`,
+            reference: good.id,
+          },
+        });
+
+        return {
+          action: 'BUY',
+          goodId: good.id,
+          quantity: dto.quantity,
+          unitPrice,
+          totalAmount,
+          city,
+          owned: cargo[dto.goodId],
+          euros: Math.round((p.euros - totalAmount) * 100) / 100,
+        };
+      }
+
+      // SELL
+      const currentOwned = cargo[dto.goodId] ?? 0;
+      if (currentOwned < dto.quantity) {
+        throw new BadRequestException(
+          `No tienes suficientes unidades de ${good.name} (tienes ${currentOwned})`,
+        );
+      }
+
+      cargo[dto.goodId] = currentOwned - dto.quantity;
+
+      const updated = await tx.player.update({
+        where: { id: p.id },
+        data: { euros: { increment: totalAmount } },
+      });
+
+      await tx.transactionLog.create({
+        data: {
+          playerId: p.id,
+          type: 'EARN',
+          amount: totalAmount,
+          currency: 'EUR',
+          reason: `Market SELL ${dto.quantity}x ${good.name} in ${city}`,
+          reference: good.id,
+        },
+      });
+
+      return {
+        action: 'SELL',
+        goodId: good.id,
+        quantity: dto.quantity,
+        unitPrice,
+        totalAmount,
+        city,
+        owned: cargo[dto.goodId],
+        euros: updated.euros,
       };
     });
   }

@@ -16,6 +16,7 @@ export interface Player {
   xp: number;
   reputation: number;
   euros: number;
+  dirtyEuros?: number;
   vidaCoins: number;
   locationId: string | null;
   heat?: number;
@@ -286,5 +287,106 @@ export interface BailResponse {
   paidEuros?: number;
   message?: string;
   jailUntil?: string | null;
+  player?: Partial<Player>;
+}
+
+export interface PropertyUseResponse {
+  ok?: boolean;
+  message?: string;
+  effect?: string;
+  heatReduced?: number;
+  repairedCount?: number;
+  launderedEuros?: number;
+  earnedEuros?: number;
+  player?: Partial<Player>;
+}
+
+export interface MarketItem {
+  id: string;
+  name: string;
+  category?: string;
+  description?: string;
+  basePrice?: number;
+  buyPrice: number;
+  sellPrice: number;
+  price?: number;
+  trend?: string;
+  deltaPercent?: number;
+  stock?: number;
+  owned?: number;
+  illegal?: boolean;
+  heatDelta?: number;
+}
+
+export interface WorldMarketResponse {
+  locationId?: string;
+  city?: string;
+  items: MarketItem[];
+  updatedAt?: string;
+}
+
+export interface MarketTradeResponse {
+  ok?: boolean;
+  message?: string;
+  itemId?: string;
+  action?: 'BUY' | 'SELL';
+  quantity?: number;
+  totalEuros?: number;
+  player?: Partial<Player>;
+}
+
+export type HeistRole = 'Conductor' | 'Hacker' | 'Asalto';
+
+export interface HeistTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  difficulty?: string;
+  minPlayers?: number;
+  maxPlayers?: number;
+  requiredRoles?: HeistRole[];
+  rewardEuros?: number;
+  rewardDirtyEuros?: number;
+  rewardXp?: number;
+  heatDelta?: number;
+  locationId?: string;
+}
+
+export interface HeistLobbyMember {
+  playerId: string;
+  displayName?: string;
+  role: string;
+  ready?: boolean;
+}
+
+export interface HeistLobby {
+  id: string;
+  templateId: string;
+  templateName?: string;
+  template?: HeistTemplate;
+  locationId: string;
+  city?: string;
+  leaderId: string;
+  leaderName?: string;
+  status: string;
+  members: HeistLobbyMember[];
+  maxPlayers?: number;
+  createdAt?: string;
+}
+
+export interface HeistsOverviewResponse {
+  templates?: HeistTemplate[];
+  catalog?: HeistTemplate[];
+  lobbies?: HeistLobby[];
+}
+
+export interface HeistExecuteResponse {
+  ok?: boolean;
+  success?: boolean;
+  message?: string;
+  rewardEuros?: number;
+  rewardDirtyEuros?: number;
+  rewardXp?: number;
+  heatDelta?: number;
   player?: Partial<Player>;
 }

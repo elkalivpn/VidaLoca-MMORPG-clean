@@ -54,6 +54,7 @@ model Player {
   reputation      Int      @default(0)
   
   euros           Float    @default(100.0)
+  dirtyEuros      Float    @default(0)
   vidaCoins       Int      @default(0)
   
   locationId      String?  @default("madrid_centro")

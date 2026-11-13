@@ -41,4 +41,12 @@ export class PropertiesController {
   ) {
     return this.propertiesService.collectRent(userId, propertyId);
   }
+
+  @Post(':id/use')
+  async useProperty(
+    @CurrentUser('id') userId: string,
+    @Param('id') propertyId: string,
+  ) {
+    return this.propertiesService.useProperty(userId, propertyId);
+  }
 }
