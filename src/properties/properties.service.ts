@@ -149,6 +149,180 @@ export class PropertiesService {
     });
   }
 
+  async useProperty(userId: string, propertyId: string) {
+    const player = await this.getPlayerOrThrow(userId);
+    const property = await this.prisma.playerProperty.findFirst({
+      where: { id: propertyId, playerId: player.id },
+      include: { template: true },
+    });
+
+    if (!property) throw new NotFoundException('Property not found');
+
+    const type = property.template.type;
+
+    return this.prisma.$transaction(async (tx) => {
+      const freshPlayer = await tx.player.findUnique({
+        where: { id: player.id },
+      });
+      if (!freshPlayer) throw new NotFoundException('Player not found');
+
+      if (type === 'APARTMENT' || type === 'MANSION') {
+        const newHeat = Math.max(0, (freshPlayer.heat ?? 0) - 30);
+        const newWantedLevel = Math.min(5, Math.floor(newHeat / 20));
+        const updated = await tx.player.update({
+          where: { id: freshPlayer.id },
+          data: { heat: newHeat, wantedLevel: newWantedLevel },
+        });
+        return {
+          propertyId,
+          type,
+          effect: 'COOL_HEAT',
+          heat: updated.heat,
+          wantedLevel: updated.wantedLevel,
+          message: `Te refugias en ${property.template.name}. Tu calor policial baja a ${updated.heat}.`,
+        };
+      }
+
+      if (type === 'GARAGE') {
+        const primaryVehicle = await tx.playerVehicle.findFirst({
+          where: { playerId: freshPlayer.id },
+          include: { template: true },
+          orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }],
+        });
+
+        if (!primaryVehicle) {
+          throw new BadRequestException(
+            'No tienes ningún vehículo primario para reparar',
+          );
+        }
+
+        if (primaryVehicle.condition >= 100) {
+          throw new BadRequestException(
+            'Tu vehículo primario ya está al 100% de condición',
+          );
+        }
+
+        const repairCost = 50;
+        const debit = await tx.player.updateMany({
+          where: { id: freshPlayer.id, euros: { gte: repairCost } },
+          data: { euros: { decrement: repairCost } },
+        });
+
+        if (debit.count === 0) {
+          throw new BadRequestException(
+            `No tienes suficientes euros para reparar (necesitas ${repairCost}€)`,
+          );
+        }
+
+        const updatedVehicle = await tx.playerVehicle.update({
+          where: { id: primaryVehicle.id },
+          data: { condition: 100 },
+        });
+
+        await tx.transactionLog.create({
+          data: {
+            playerId: freshPlayer.id,
+            type: 'SPEND',
+            amount: repairCost,
+            currency: 'EUR',
+            reason: `Garage repair (50% off): ${primaryVehicle.template.name}`,
+            reference: propertyId,
+          },
+        });
+
+        return {
+          propertyId,
+          type,
+          effect: 'REPAIR_VEHICLE',
+          costEuros: repairCost,
+          vehicleId: updatedVehicle.id,
+          condition: updatedVehicle.condition,
+          newEuros: Math.round((freshPlayer.euros - repairCost) * 100) / 100,
+          message: `Vehículo ${primaryVehicle.template.name} reparado al 100% por ${repairCost}€ (50% dto).`,
+        };
+      }
+
+      if (type === 'CLUB') {
+        const dirtyAmount =
+          Math.round((freshPlayer.dirtyEuros ?? 0) * 100) / 100;
+        if (dirtyAmount <= 0) {
+          throw new BadRequestException(
+            'No tienes dinero negro (dirtyEuros) para blanquear',
+          );
+        }
+
+        const cleanEuros = Math.round(dirtyAmount * 0.85 * 100) / 100;
+        const laundered = await tx.player.updateMany({
+          where: { id: freshPlayer.id, dirtyEuros: { gte: dirtyAmount } },
+          data: {
+            dirtyEuros: { decrement: dirtyAmount },
+            euros: { increment: cleanEuros },
+          },
+        });
+
+        if (laundered.count === 0) {
+          throw new BadRequestException('No se pudo blanquear el dinero negro');
+        }
+
+        await tx.transactionLog.create({
+          data: {
+            playerId: freshPlayer.id,
+            type: 'EARN',
+            amount: cleanEuros,
+            currency: 'EUR',
+            reason: `Money laundering at club: ${property.template.name}`,
+            reference: propertyId,
+          },
+        });
+
+        const updated = await tx.player.findUnique({
+          where: { id: freshPlayer.id },
+        });
+
+        return {
+          propertyId,
+          type,
+          effect: 'LAUNDER_MONEY',
+          dirtyLaundered: dirtyAmount,
+          cleanEuros,
+          newEuros: updated?.euros ?? freshPlayer.euros + cleanEuros,
+          newDirtyEuros: updated?.dirtyEuros ?? 0,
+          message: `Has blanqueado ${dirtyAmount}€ negros en ${property.template.name} y obtenido ${cleanEuros}€ limpios (85%).`,
+        };
+      }
+
+      if (type === 'WAREHOUSE') {
+        const bonusEuros = 150;
+        const updated = await tx.player.update({
+          where: { id: freshPlayer.id },
+          data: { euros: { increment: bonusEuros } },
+        });
+
+        await tx.transactionLog.create({
+          data: {
+            playerId: freshPlayer.id,
+            type: 'EARN',
+            amount: bonusEuros,
+            currency: 'EUR',
+            reason: `Warehouse logistics bonus: ${property.template.name}`,
+            reference: propertyId,
+          },
+        });
+
+        return {
+          propertyId,
+          type,
+          effect: 'LOGISTICS_BONUS',
+          bonusEuros,
+          newEuros: updated.euros,
+          message: `Operación logística en ${property.template.name} completada: +${bonusEuros}€.`,
+        };
+      }
+
+      throw new BadRequestException(`Tipo de propiedad no soportado: ${type}`);
+    });
+  }
+
   private async getPlayerOrThrow(userId: string) {
     const player = await this.prisma.player.findUnique({ where: { userId } });
     if (!player) throw new NotFoundException('Player not found');

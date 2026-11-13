@@ -2,10 +2,18 @@ import type {
   BailResponse,
   FactionInfo,
   FactionType,
+  HeistExecuteResponse,
+  HeistLobby,
+  HeistRole,
+  HeistsOverviewResponse,
   InterceptResponse,
+  MarketItem,
+  MarketTradeResponse,
   Player,
+  PropertyUseResponse,
   WantedSuspect,
   WorldMapResponse,
+  WorldMarketResponse,
   WorldTravelResponse,
 } from '@/types/game';
 
@@ -114,6 +122,10 @@ export const api = {
     }),
   collectRent: (id: string) =>
     request(`/properties/${id}/rent`, { method: 'POST' }),
+  useProperty: (propertyId: string) =>
+    request<PropertyUseResponse>(`/properties/${propertyId}/use`, {
+      method: 'POST',
+    }),
 
   skills: (category?: string) =>
     request(`/skills${category ? `?category=${category}` : ''}`),
@@ -180,6 +192,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ lifestyle }),
     }),
+  worldMarket: () =>
+    request<WorldMarketResponse | MarketItem[]>('/world/market'),
+  tradeMarket: (itemId: string, action: 'BUY' | 'SELL', quantity: number) =>
+    request<MarketTradeResponse>('/world/market/trade', {
+      method: 'POST',
+      body: JSON.stringify({ itemId, action, quantity }),
+    }),
 
   // Factions & Pursuit
   factions: () =>
@@ -212,4 +231,21 @@ export const api = {
       body: JSON.stringify({ targetPlayerId }),
     }),
   payBail: () => request<BailResponse>('/factions/bail', { method: 'POST' }),
+
+  // Heists
+  heists: () => request<HeistsOverviewResponse>('/heists'),
+  createHeist: (templateId: string) =>
+    request<HeistLobby>('/heists/create', {
+      method: 'POST',
+      body: JSON.stringify({ templateId }),
+    }),
+  joinHeist: (lobbyId: string, role: HeistRole) =>
+    request<HeistLobby>(`/heists/${lobbyId}/join`, {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    }),
+  executeHeist: (lobbyId: string) =>
+    request<HeistExecuteResponse>(`/heists/${lobbyId}/execute`, {
+      method: 'POST',
+    }),
 };

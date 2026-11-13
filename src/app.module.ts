@@ -19,6 +19,7 @@ import { BattlePassModule } from './battle-pass/battle-pass.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { WorldModule } from './world/world.module';
 import { FactionsModule } from './factions/factions.module';
+import { HeistsModule } from './heists/heists.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { FactionsModule } from './factions/factions.module';
     RealtimeModule,
     WorldModule,
     FactionsModule,
+    HeistsModule,
   ],
   providers: [
     {

@@ -12,6 +12,7 @@ import PropertiesPanel from '@/components/PropertiesPanel';
 import SkillsBattlePass from '@/components/SkillsBattlePass';
 import ClansPanel from '@/components/ClansPanel';
 import FactionsPanel from '@/components/FactionsPanel';
+import HeistsMarketPanel from '@/components/HeistsMarketPanel';
 import ChatPanel from '@/components/ChatPanel';
 import StatsBar from '@/components/StatsBar';
 import { useRealtime } from '@/hooks/useRealtime';
@@ -25,7 +26,8 @@ type Tab =
   | 'propiedades'
   | 'skills'
   | 'clanes'
-  | 'facciones';
+  | 'facciones'
+  | 'golpes';
 
 export default function PlayPage() {
   const router = useRouter();
@@ -71,6 +73,7 @@ export default function PlayPage() {
     { id: 'skills', label: 'Skills / BP' },
     { id: 'clanes', label: 'Clanes' },
     { id: 'facciones', label: 'Facciones' },
+    { id: 'golpes', label: 'Golpes / Mercado' },
   ];
 
   return (
@@ -119,6 +122,7 @@ export default function PlayPage() {
           {tab === 'facciones' && (
             <FactionsPanel pursuitAlerts={pursuitAlerts} />
           )}
+          {tab === 'golpes' && <HeistsMarketPanel />}
         </div>
         <aside className="border-t lg:border-t-0 lg:border-l border-zinc-800 p-2">
           <ChatPanel

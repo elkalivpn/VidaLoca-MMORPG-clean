@@ -3,6 +3,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { IsIn, IsNotEmpty, IsString } from 'class-validator';
 import { WorldService } from './world.service';
 import { TravelDto } from './dto/travel.dto';
+import { MarketTradeDto } from './dto/market-trade.dto';
 
 class PerformActionDto {
   @IsString()
@@ -43,5 +44,15 @@ export class WorldController {
   @Post('lifestyle')
   lifestyle(@Req() req: any, @Body() dto: SetLifestyleDto) {
     return this.world.setLifestyle(req.user.id, dto.lifestyle);
+  }
+
+  @Get('market')
+  market(@Req() req: any) {
+    return this.world.getMarket(req.user.id);
+  }
+
+  @Post('market/trade')
+  tradeMarket(@Req() req: any, @Body() dto: MarketTradeDto) {
+    return this.world.tradeMarket(req.user.id, dto);
   }
 }
