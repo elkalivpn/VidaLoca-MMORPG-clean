@@ -29,8 +29,16 @@ export default function PlayPage() {
   const router = useRouter();
   const { token, player, refreshPlayer, logout } = useAuth();
   const [tab, setTab] = useState<Tab>('calle');
-  const { connected, messages, sendZoneChat, sendGlobalChat, joinZone } =
-    useRealtime(Boolean(token));
+  const {
+    connected,
+    playerId,
+    messages,
+    remotePlayersRef,
+    sendZoneChat,
+    sendGlobalChat,
+    joinZone,
+    emitMove,
+  } = useRealtime(Boolean(token));
 
   useEffect(() => {
     if (!token) router.replace('/');
@@ -82,7 +90,15 @@ export default function PlayPage() {
       </nav>
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_320px] min-h-0">
         <div className="overflow-auto p-3">
-          {tab === 'calle' && <StreetPlay />}
+          {tab === 'calle' && (
+            <StreetPlay
+              remotePlayersRef={remotePlayersRef}
+              emitMove={emitMove}
+              connected={connected}
+              localPlayerId={playerId || player.id}
+              onNavigateTab={(t) => setTab(t)}
+            />
+          )}
           {tab === 'mapa' && (
             <CityMap
               onZoneChanged={(z) => {

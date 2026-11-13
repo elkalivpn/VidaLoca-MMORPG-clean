@@ -1,9 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from 'react';
 import { api } from '@/lib/api';
 import { CITIES } from '@/data/cities';
 import { useAuthStore } from '@/store/auth';
+import District3D from '@/components/District3D';
+import type { PlayerMovePayload, SpatialPlayer } from '@/lib/socket';
 
 type Action = {
   id: string;
@@ -48,8 +56,29 @@ const LIFE_LABEL: Record<string, string> = {
   STREET: 'Calle',
 };
 
-export default function StreetPlay({ onChanged }: { onChanged?: () => void }) {
+export interface StreetPlayProps {
+  onChanged?: () => void;
+  remotePlayersRef?: MutableRefObject<Map<string, SpatialPlayer>>;
+  emitMove?: (payload: PlayerMovePayload) => void;
+  connected?: boolean;
+  localPlayerId?: string | null;
+  onNavigateTab?: (tab: 'vehiculos' | 'propiedades' | 'misiones') => void;
+}
+
+export default function StreetPlay({
+  onChanged,
+  remotePlayersRef,
+  emitMove,
+  connected = false,
+  localPlayerId,
+  onNavigateTab,
+}: StreetPlayProps) {
   const refreshPlayer = useAuthStore((s) => s.refreshPlayer);
+  const authPlayer = useAuthStore((s) => s.player);
+  const fallbackRemoteRef = useRef<Map<string, SpatialPlayer>>(new Map());
+  const noopEmitMove = useCallback(() => {}, []);
+
+  const [viewMode, setViewMode] = useState<'3d' | 'classic'>('3d');
   const [state, setState] = useState<StreetState | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -132,118 +161,177 @@ export default function StreetPlay({ onChanged }: { onChanged?: () => void }) {
 
   return (
     <div className="space-y-4">
-      <div className="relative overflow-hidden rounded-xl border border-amber-900/30 bg-zinc-900/80 p-5">
-        <div className="absolute inset-0 bg-gradient-to-br from-amber-950/40 via-transparent to-zinc-950 pointer-events-none" />
-        <div className="relative">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-amber-600/90 mb-1">
-            Estás en la calle · {VIBE_LABEL[zone.vibe] || zone.vibe}
-          </p>
-          <h2 className="text-2xl md:text-3xl font-black tracking-tight">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-zinc-200">
             {city?.name || player.locationId}
-          </h2>
-          <p className="text-zinc-400 text-sm mt-1 max-w-xl">
-            {city?.description ||
-              'El barrio respira. Tú decides el siguiente movimiento.'}
-          </p>
-
-          <div className="flex flex-wrap gap-3 mt-4 text-xs">
-            <span className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-800">
-              Nv. {player.level}
-            </span>
-            <span className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-800">
-              {Math.floor(player.euros).toLocaleString('es-ES')} €
-            </span>
-            <span className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-800">
-              Rep {player.reputation}
-            </span>
-            <span
-              className={`px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-800 ${heatColor}`}
-            >
-              Calor {player.heat}/100
-            </span>
-            <span className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-800">
-              Camino: {LIFE_LABEL[player.lifestyle] || player.lifestyle}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap gap-2 mt-4">
-            {(['LEGAL', 'GREY', 'STREET'] as const).map((l) => (
-              <button
-                key={l}
-                type="button"
-                disabled={busy || player.lifestyle === l}
-                onClick={() => {
-                  void setLife(l);
-                }}
-                className={`text-xs px-3 py-1.5 rounded-lg border transition ${
-                  player.lifestyle === l
-                    ? 'border-amber-500/60 bg-amber-500/15 text-amber-300'
-                    : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
-                }`}
-              >
-                {LIFE_LABEL[l]}
-              </button>
-            ))}
-          </div>
+          </span>
+          <span className="text-[11px] text-zinc-500">
+            · {VIBE_LABEL[zone.vibe] || zone.vibe}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 rounded-lg bg-zinc-950 p-1 border border-zinc-800">
+          <button
+            type="button"
+            onClick={() => setViewMode('3d')}
+            className={`px-3 py-1 rounded-md text-xs font-semibold transition ${
+              viewMode === '3d'
+                ? 'bg-amber-500 text-zinc-950'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            Modo 3D en Vivo
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('classic')}
+            className={`px-3 py-1 rounded-md text-xs font-semibold transition ${
+              viewMode === 'classic'
+                ? 'bg-amber-500 text-zinc-950'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            Vista Clásica / Movidas
+          </button>
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {viewMode === '3d' ? (
+        <>
+          <District3D
+            zoneName={city?.name || player.locationId}
+            vibe={zone.vibe}
+            player={{ ...player, id: authPlayer?.id }}
+            localPlayerId={localPlayerId ?? authPlayer?.id}
+            actions={zone.actions || []}
+            remotePlayersRef={remotePlayersRef ?? fallbackRemoteRef}
+            emitMove={emitMove ?? noopEmitMove}
+            connected={connected}
+            busy={busy}
+            lastNarrative={log[0]}
+            onAction={act}
+            onSetLifestyle={setLife}
+            onSwitchClassic={() => setViewMode('classic')}
+            onNavigateTab={onNavigateTab}
+          />
+          {error && <p className="text-sm text-red-400">{error}</p>}
+        </>
+      ) : (
+        <>
+          <div className="relative overflow-hidden rounded-xl border border-amber-900/30 bg-zinc-900/80 p-5">
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-950/40 via-transparent to-zinc-950 pointer-events-none" />
+            <div className="relative">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-amber-600/90 mb-1">
+                Estás en la calle · {VIBE_LABEL[zone.vibe] || zone.vibe}
+              </p>
+              <h2 className="text-2xl md:text-3xl font-black tracking-tight">
+                {city?.name || player.locationId}
+              </h2>
+              <p className="text-zinc-400 text-sm mt-1 max-w-xl">
+                {city?.description ||
+                  'El barrio respira. Tú decides el siguiente movimiento.'}
+              </p>
 
-      <div>
-        <h3 className="text-sm font-semibold text-zinc-300 mb-2">
-          Movidas del barrio
-        </h3>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {(zone.actions || []).map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              disabled={busy || player.level < a.minLevel}
-              onClick={() => {
-                void act(a.id);
-              }}
-              className="text-left rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 hover:border-amber-500/40 disabled:opacity-40"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-zinc-100">{a.label}</span>
-                <span className="text-[10px] uppercase tracking-wide text-zinc-500">
-                  {LIFE_LABEL[a.lifestyle] || a.lifestyle}
+              <div className="flex flex-wrap gap-3 mt-4 text-xs">
+                <span className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-800">
+                  Nv. {player.level}
+                </span>
+                <span className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-800">
+                  {Math.floor(player.euros).toLocaleString('es-ES')} €
+                </span>
+                <span className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-800">
+                  Rep {player.reputation}
+                </span>
+                <span
+                  className={`px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-800 ${heatColor}`}
+                >
+                  Calor {player.heat}/100
+                </span>
+                <span className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-800">
+                  Camino: {LIFE_LABEL[player.lifestyle] || player.lifestyle}
                 </span>
               </div>
-              <p className="text-xs text-zinc-500 mt-1">{a.description}</p>
-              <p className="text-[10px] text-zinc-600 mt-2">
-                Riesgo {Math.round(a.risk * 100)}%
-                {player.level < a.minLevel ? ` · nv.${a.minLevel}` : ''}
-              </p>
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {activeMissions?.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-zinc-300 mb-2">
-            Encargos activos
-          </h3>
-          <ul className="space-y-1 text-sm">
-            {activeMissions.map((m) => (
-              <li key={m.id} className="text-zinc-400">
-                {m.template?.title || 'Encargo'} · {m.progress}%
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+              <div className="flex flex-wrap gap-2 mt-4">
+                {(['LEGAL', 'GREY', 'STREET'] as const).map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    disabled={busy || player.lifestyle === l}
+                    onClick={() => {
+                      void setLife(l);
+                    }}
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition ${
+                      player.lifestyle === l
+                        ? 'border-amber-500/60 bg-amber-500/15 text-amber-300'
+                        : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                    }`}
+                  >
+                    {LIFE_LABEL[l]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
 
-      {log.length > 0 && (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 space-y-1">
-          {log.map((line, i) => (
-            <p key={i} className="text-xs text-zinc-400">
-              {line}
-            </p>
-          ))}
-        </div>
+          {error && <p className="text-sm text-red-400">{error}</p>}
+
+          <div>
+            <h3 className="text-sm font-semibold text-zinc-300 mb-2">
+              Movidas del barrio
+            </h3>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(zone.actions || []).map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  disabled={busy || player.level < a.minLevel}
+                  onClick={() => {
+                    void act(a.id);
+                  }}
+                  className="text-left rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 hover:border-amber-500/40 disabled:opacity-40"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-zinc-100">{a.label}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+                      {LIFE_LABEL[a.lifestyle] || a.lifestyle}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-1">{a.description}</p>
+                  <p className="text-[10px] text-zinc-600 mt-2">
+                    Riesgo {Math.round(a.risk * 100)}%
+                    {player.level < a.minLevel ? ` · nv.${a.minLevel}` : ''}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {activeMissions?.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-300 mb-2">
+                Encargos activos
+              </h3>
+              <ul className="space-y-1 text-sm">
+                {activeMissions.map((m) => (
+                  <li key={m.id} className="text-zinc-400">
+                    {m.template?.title || 'Encargo'} · {m.progress}%
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {log.length > 0 && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 space-y-1">
+              {log.map((line, i) => (
+                <p key={i} className="text-xs text-zinc-400">
+                  {line}
+                </p>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

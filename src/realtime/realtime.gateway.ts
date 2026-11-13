@@ -12,7 +12,12 @@ import { Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { ChatMessageDto, JoinZoneDto } from './dto/realtime.dto';
+import {
+  ChatMessageDto,
+  JoinZoneDto,
+  PlayerAnim,
+  PlayerMoveDto,
+} from './dto/realtime.dto';
 import { isValidZoneId } from '../common/constants/zones';
 
 interface AuthenticatedSocket extends Socket {
@@ -22,12 +27,19 @@ interface AuthenticatedSocket extends Socket {
   locationId?: string;
 }
 
-interface PresenceEntry {
+export interface PresenceEntry {
   userId: string;
   playerId: string;
   displayName: string;
   locationId: string;
   socketId: string;
+  x: number;
+  y: number;
+  z: number;
+  rotY: number;
+  anim: PlayerAnim;
+  vehicleId?: string;
+  lastMoveAt: number;
 }
 
 @WebSocketGateway({
@@ -44,9 +56,17 @@ export class RealtimeGateway
   server: Server;
 
   private readonly logger = new Logger(RealtimeGateway.name);
+  private readonly MOVE_RATE_LIMIT_MS = 40;
+  private readonly MAX_SPEED_UNITS_PER_SEC = 60;
+  private readonly TICK_INTERVAL_MS = 100;
+
   /** socketId → presence */
   private presence = new Map<string, PresenceEntry>();
+  /** Zonas con movimiento pendiente de emitir en el siguiente tick */
+  private dirtyZones = new Set<string>();
   private worldEventTimer?: ReturnType<typeof setInterval>;
+  private worldEventInitialTimer?: ReturnType<typeof setTimeout>;
+  private tickTimer?: ReturnType<typeof setInterval>;
 
   private readonly WORLD_EVENTS = [
     {
@@ -150,7 +170,15 @@ export class RealtimeGateway
         displayName: user.player.displayName,
         locationId: client.locationId,
         socketId: client.id,
+        x: 0,
+        y: 0,
+        z: 0,
+        rotY: 0,
+        anim: 'idle',
+        vehicleId: undefined,
+        lastMoveAt: 0,
       });
+      this.dirtyZones.add(client.locationId);
 
       // Notify zone of arrival
       client.to(`zone:${client.locationId}`).emit('player:joined', {
@@ -164,6 +192,12 @@ export class RealtimeGateway
       client.emit('presence:zone', {
         locationId: client.locationId,
         players: zonePlayers,
+      });
+
+      client.emit('world:snapshot', {
+        locationId: client.locationId,
+        timestamp: Date.now(),
+        players: this.getZoneSnapshotPlayers(client.locationId),
       });
 
       client.emit('connected', {
@@ -248,7 +282,15 @@ export class RealtimeGateway
     const entry = this.presence.get(client.id);
     if (entry) {
       entry.locationId = nextZone;
+      entry.x = 0;
+      entry.y = 0;
+      entry.z = 0;
+      entry.rotY = 0;
+      entry.anim = 'idle';
+      entry.vehicleId = undefined;
+      entry.lastMoveAt = 0;
     }
+    this.dirtyZones.add(nextZone);
 
     // Persist location
     await this.prisma.player.update({
@@ -266,6 +308,12 @@ export class RealtimeGateway
     client.emit('presence:zone', {
       locationId: nextZone,
       players: zonePlayers,
+    });
+
+    client.emit('world:snapshot', {
+      locationId: nextZone,
+      timestamp: Date.now(),
+      players: this.getZoneSnapshotPlayers(nextZone),
     });
 
     // Broadcast world event
@@ -345,19 +393,123 @@ export class RealtimeGateway
     };
   }
 
-  // ─── Helpers (callable from other services) ──────────────────────────
+  // ─── Spatial movement (Fase 2) ────────────────────────────────────────
 
+  @SubscribeMessage('player:move')
+  handlePlayerMove(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() body: PlayerMoveDto,
+  ) {
+    if (!client.userId || !client.playerId) {
+      return { ok: false, error: 'Not authenticated' };
+    }
+
+    const entry = this.presence.get(client.id);
+    if (!entry) {
+      return { ok: false, error: 'Presence not found' };
+    }
+
+    if (
+      !body ||
+      !Number.isFinite(body.x) ||
+      !Number.isFinite(body.y) ||
+      !Number.isFinite(body.z) ||
+      !Number.isFinite(body.rotY)
+    ) {
+      return { ok: false, error: 'Invalid coordinates' };
+    }
+
+    const now = Date.now();
+
+    // Rate-limit por socket (< 40ms desde el último move)
+    if (
+      entry.lastMoveAt > 0 &&
+      now - entry.lastMoveAt < this.MOVE_RATE_LIMIT_MS
+    ) {
+      return { ok: false, reason: 'rate_limited' };
+    }
+
+    // Anti-cheat server-authoritative: velocidad máxima 60 unidades/seg
+    const dtSeconds =
+      entry.lastMoveAt > 0 ? Math.min((now - entry.lastMoveAt) / 1000, 1) : 1;
+    const distance = Math.hypot(
+      body.x - entry.x,
+      body.y - entry.y,
+      body.z - entry.z,
+    );
+    const maxAllowedDistance = this.MAX_SPEED_UNITS_PER_SEC * dtSeconds;
+
+    if (distance > maxAllowedDistance) {
+      this.logger.warn(
+        `Rejected move for ${entry.displayName}: distance=${distance.toFixed(2)} > max=${maxAllowedDistance.toFixed(2)}`,
+      );
+      return { ok: false, reason: 'speed_limit_exceeded' };
+    }
+
+    entry.x = body.x;
+    entry.y = body.y;
+    entry.z = body.z;
+    entry.rotY = body.rotY;
+    entry.anim = body.anim ?? 'idle';
+    entry.vehicleId = body.vehicleId;
+    entry.lastMoveAt = now;
+
+    this.dirtyZones.add(entry.locationId);
+
+    return { ok: true };
+  }
+
+  // ─── Helpers (callable from other services) ──────────────────────────
 
   onModuleInit() {
     // Evento de mundo cada 3 minutos (demo); en prod ajustar
-    this.worldEventTimer = setInterval(() => this.broadcastRandomWorldEvent(), 3 * 60 * 1000);
+    this.worldEventTimer = setInterval(
+      () => this.broadcastRandomWorldEvent(),
+      3 * 60 * 1000,
+    );
     // Primer evento a los 45s para que se note en pruebas
-    setTimeout(() => this.broadcastRandomWorldEvent(), 45_000);
-    this.logger.log('World events scheduler started');
+    this.worldEventInitialTimer = setTimeout(
+      () => this.broadcastRandomWorldEvent(),
+      45_000,
+    );
+    // Tick loop autoritativo a 10 Hz (~100ms)
+    this.tickTimer = setInterval(
+      () => this.flushWorldSnapshots(),
+      this.TICK_INTERVAL_MS,
+    );
+    this.logger.log('World events scheduler and 10 Hz tick loop started');
   }
 
   onModuleDestroy() {
-    if (this.worldEventTimer) clearInterval(this.worldEventTimer);
+    if (this.worldEventTimer) {
+      clearInterval(this.worldEventTimer);
+      this.worldEventTimer = undefined;
+    }
+    if (this.worldEventInitialTimer) {
+      clearTimeout(this.worldEventInitialTimer);
+      this.worldEventInitialTimer = undefined;
+    }
+    if (this.tickTimer) {
+      clearInterval(this.tickTimer);
+      this.tickTimer = undefined;
+    }
+  }
+
+  flushWorldSnapshots() {
+    if (this.dirtyZones.size === 0 || !this.server) return;
+
+    const timestamp = Date.now();
+    for (const locationId of this.dirtyZones) {
+      const players = this.getZoneSnapshotPlayers(locationId);
+      if (players.length === 0) continue;
+
+      this.server.to(`zone:${locationId}`).emit('world:snapshot', {
+        locationId,
+        timestamp,
+        players,
+      });
+    }
+    this.dirtyZones.clear();
   }
 
   private broadcastRandomWorldEvent() {
@@ -400,6 +552,21 @@ export class RealtimeGateway
         playerId,
         displayName,
         locationId: loc,
+      }));
+  }
+
+  private getZoneSnapshotPlayers(locationId: string) {
+    return [...this.presence.values()]
+      .filter((p) => p.locationId === locationId)
+      .map(({ playerId, displayName, x, y, z, rotY, anim, vehicleId }) => ({
+        playerId,
+        displayName,
+        x,
+        y,
+        z,
+        rotY,
+        anim,
+        vehicleId,
       }));
   }
 }

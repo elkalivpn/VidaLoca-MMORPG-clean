@@ -61,3 +61,38 @@ export interface WorldEvent {
   timestamp: string;
   [key: string]: unknown;
 }
+
+export interface SpatialPlayer {
+  playerId: string;
+  displayName: string;
+  locationId: string;
+  x: number;
+  y: number;
+  z: number;
+  rotationY: number;
+  speed?: number;
+  isMoving?: boolean;
+  lifestyle?: string;
+  updatedAt?: number;
+}
+
+export interface PlayerMovePayload {
+  x: number;
+  y: number;
+  z: number;
+  rotationY: number;
+  speed?: number;
+  isMoving?: boolean;
+  locationId?: string;
+}
+
+export interface WorldSnapshotPayload {
+  locationId?: string;
+  players: SpatialPlayer[];
+  timestamp?: number;
+}
+
+export function emitPlayerMove(payload: PlayerMovePayload) {
+  if (!socket?.connected) return;
+  socket.emit('player:move', payload);
+}

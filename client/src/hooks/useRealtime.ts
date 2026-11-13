@@ -1,22 +1,28 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   connectSocket,
   disconnectSocket,
+  emitPlayerMove,
   getSocket,
   type ChatMessage,
+  type PlayerMovePayload,
   type PresencePlayer,
+  type SpatialPlayer,
   type WorldEvent,
+  type WorldSnapshotPayload,
 } from '@/lib/socket';
 
 export function useRealtime(enabled: boolean) {
   const [connected, setConnected] = useState(false);
+  const [playerId, setPlayerId] = useState<string | null>(null);
   const [zonePlayers, setZonePlayers] = useState<PresencePlayer[]>([]);
   const [onlineTotal, setOnlineTotal] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [worldEvents, setWorldEvents] = useState<WorldEvent[]>([]);
   const [locationId, setLocationId] = useState<string | null>(null);
+  const remotePlayersRef = useRef<Map<string, SpatialPlayer>>(new Map());
 
   useEffect(() => {
     if (!enabled) return;
@@ -29,7 +35,12 @@ export function useRealtime(enabled: boolean) {
     const onConnect = () => setConnected(true);
     const onDisconnect = () => setConnected(false);
 
-    const onConnected = (data: { locationId: string; displayName: string }) => {
+    const onConnected = (data: {
+      playerId?: string;
+      locationId: string;
+      displayName: string;
+    }) => {
+      if (data.playerId) setPlayerId(data.playerId);
       setLocationId(data.locationId);
       setConnected(true);
     };
@@ -40,6 +51,11 @@ export function useRealtime(enabled: boolean) {
     }) => {
       setLocationId(data.locationId);
       setZonePlayers(data.players || []);
+      for (const [id, entry] of remotePlayersRef.current.entries()) {
+        if (entry.locationId && entry.locationId !== data.locationId) {
+          remotePlayersRef.current.delete(id);
+        }
+      }
     };
 
     const onPlayerJoined = (p: PresencePlayer) => {
@@ -51,6 +67,32 @@ export function useRealtime(enabled: boolean) {
 
     const onPlayerLeft = (p: { playerId: string }) => {
       setZonePlayers((prev) => prev.filter((x) => x.playerId !== p.playerId));
+      remotePlayersRef.current.delete(p.playerId);
+    };
+
+    const onWorldSnapshot = (
+      payload: WorldSnapshotPayload | SpatialPlayer[],
+    ) => {
+      const list = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.players)
+          ? payload.players
+          : [];
+      const now = Date.now();
+      const activeIds = new Set<string>();
+      for (const p of list) {
+        if (!p?.playerId) continue;
+        activeIds.add(p.playerId);
+        remotePlayersRef.current.set(p.playerId, {
+          ...p,
+          updatedAt: now,
+        });
+      }
+      for (const id of remotePlayersRef.current.keys()) {
+        if (!activeIds.has(id)) {
+          remotePlayersRef.current.delete(id);
+        }
+      }
     };
 
     const onChat = (msg: ChatMessage) => {
@@ -71,6 +113,7 @@ export function useRealtime(enabled: boolean) {
     socket.on('presence:zone', onPresenceZone);
     socket.on('player:joined', onPlayerJoined);
     socket.on('player:left', onPlayerLeft);
+    socket.on('world:snapshot', onWorldSnapshot);
     socket.on('chat:message', onChat);
     socket.on('world:event', onWorldEvent);
     socket.on('error', onError);
@@ -84,6 +127,7 @@ export function useRealtime(enabled: boolean) {
       socket.off('presence:zone', onPresenceZone);
       socket.off('player:joined', onPlayerJoined);
       socket.off('player:left', onPlayerLeft);
+      socket.off('world:snapshot', onWorldSnapshot);
       socket.off('chat:message', onChat);
       socket.off('world:event', onWorldEvent);
       socket.off('error', onError);
@@ -136,17 +180,24 @@ export function useRealtime(enabled: boolean) {
     );
   }, []);
 
+  const emitMove = useCallback((payload: PlayerMovePayload) => {
+    emitPlayerMove(payload);
+  }, []);
+
   return {
     connected,
+    playerId,
     zonePlayers,
     onlineTotal,
     messages,
     worldEvents,
     locationId,
+    remotePlayersRef,
     joinZone,
     sendZoneChat,
     sendGlobalChat,
     requestPresence,
+    emitMove,
     disconnect: disconnectSocket,
   };
 }
