@@ -4,7 +4,14 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ZONE_VIBES } from '../common/constants/zones';
+import {
+  ZONE_VIBES,
+  ZONES,
+  ZONES_BY_ID,
+  HIGHWAY_ROUTES,
+  isValidZoneId,
+  calculateRouteBetweenZones,
+} from '../common/constants/zones';
 import { calculateLevelFromXp } from '../common/utils/level.util';
 
 type ActionDef = {
@@ -145,6 +152,187 @@ export class WorldService {
       activeMissions,
       avatars: AVATARS,
     };
+  }
+
+  async getMapState() {
+    const territories = await this.prisma.territory.findMany({
+      include: {
+        controller: {
+          select: { id: true, name: true, tag: true },
+        },
+      },
+      orderBy: { city: 'asc' },
+    });
+
+    return {
+      zones: ZONES,
+      routes: HIGHWAY_ROUTES,
+      territories,
+    };
+  }
+
+  async travel(userId: string, destinationId: string) {
+    if (!isValidZoneId(destinationId)) {
+      throw new BadRequestException('Destino no válido');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const player = await tx.player.findUnique({ where: { userId } });
+      if (!player) {
+        throw new NotFoundException('Player not found');
+      }
+
+      const fromId = player.locationId || 'madrid_centro';
+      if (fromId === destinationId) {
+        throw new BadRequestException('Ya te encuentras en esa zona');
+      }
+
+      const fromZone = ZONES_BY_ID[fromId] ?? ZONES_BY_ID['madrid_centro'];
+      const toZone = ZONES_BY_ID[destinationId];
+      const route = calculateRouteBetweenZones(fromZone.id, toZone.id);
+
+      const primaryVehicle = await tx.playerVehicle.findFirst({
+        where: { playerId: player.id },
+        include: { template: true },
+        orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }],
+      });
+
+      let durationSec: number;
+      let baseCostEuros: number;
+      let vehicleUsed: {
+        mode: 'VEHICLE' | 'PUBLIC_TRANSPORT';
+        id: string | null;
+        name: string;
+        brand: string | null;
+        licensePlate: string | null;
+        speed: number | null;
+        condition: number | null;
+      };
+
+      if (primaryVehicle) {
+        const speed = Math.max(20, primaryVehicle.template.speed);
+        const condition = Math.max(
+          10,
+          Math.min(100, primaryVehicle.condition ?? 100),
+        );
+        const effectiveKmh = speed * 1.35 * (0.5 + 0.5 * (condition / 100));
+        durationSec = Math.max(
+          3,
+          Math.round((route.distanceKm / effectiveKmh) * 60),
+        );
+        baseCostEuros = route.isIntercity
+          ? Math.round(
+              (route.distanceKm * 0.12 * (1 + (100 - condition) / 200) +
+                route.tollEuros) *
+                100,
+            ) / 100
+          : Math.max(1, Math.round(route.distanceKm * 0.4 * 100) / 100);
+
+        vehicleUsed = {
+          mode: 'VEHICLE',
+          id: primaryVehicle.id,
+          name: primaryVehicle.template.name,
+          brand: primaryVehicle.template.brand,
+          licensePlate: primaryVehicle.licensePlate,
+          speed: primaryVehicle.template.speed,
+          condition,
+        };
+      } else {
+        if (route.isIntercity) {
+          durationSec = Math.max(
+            15,
+            Math.round((route.distanceKm / 80) * 60),
+          );
+          baseCostEuros = Math.max(
+            15,
+            Math.round(route.distanceKm * 0.18 * 100) / 100,
+          );
+        } else {
+          durationSec = Math.max(8, Math.round(route.distanceKm * 6));
+          baseCostEuros = 3;
+        }
+
+        vehicleUsed = {
+          mode: 'PUBLIC_TRANSPORT',
+          id: null,
+          name: 'Transporte Público',
+          brand: null,
+          licensePlate: null,
+          speed: null,
+          condition: null,
+        };
+      }
+
+      if (player.euros < baseCostEuros) {
+        throw new BadRequestException(
+          `No tienes suficientes euros para viajar (necesitas ${baseCostEuros}€)`,
+        );
+      }
+
+      let totalCost = baseCostEuros;
+      let newHeat = player.heat ?? 0;
+      const narrativeParts: string[] = [
+        `Viajas de ${fromZone.name} (${fromZone.city}) a ${toZone.name} (${toZone.city}) por ${route.highway} (${route.distanceKm} km) en ${vehicleUsed.name}.`,
+      ];
+
+      if (route.isIntercity && newHeat >= 50) {
+        if (primaryVehicle && primaryVehicle.template.speed >= 80) {
+          narrativeParts.push(
+            `Control de la Guardia Civil en la ${route.highway}, pero tu ${primaryVehicle.template.name} acelera a fondo y logras evadirlo sin consecuencias.`,
+          );
+        } else {
+          const checkpointTriggered = Math.random() < 0.65;
+          if (checkpointTriggered) {
+            const availableForFine = Math.max(0, player.euros - baseCostEuros);
+            const rawFine = Math.round(40 + newHeat * 0.8);
+            const fine = Math.min(
+              Math.round(availableForFine * 100) / 100,
+              rawFine,
+            );
+            const heatDelta = 5 + Math.floor(Math.random() * 6);
+            newHeat = Math.min(100, newHeat + heatDelta);
+            totalCost = Math.round((baseCostEuros + fine) * 100) / 100;
+            narrativeParts.push(
+              `Control de la Guardia Civil en la ${route.highway}: te paran y te cae una multa de ${fine}€ (+${heatDelta} calor).`,
+            );
+          } else {
+            narrativeParts.push(
+              `Avistas un control de la Guardia Civil en la ${route.highway}, pero logras pasar desapercibido.`,
+            );
+          }
+        }
+      }
+
+      const updatedPlayer = await tx.player.update({
+        where: { userId },
+        data: {
+          locationId: destinationId,
+          euros: Math.max(0, Math.round((player.euros - totalCost) * 100) / 100),
+          heat: newHeat,
+        },
+      });
+
+      return {
+        from: fromZone,
+        to: toZone,
+        distanceKm: route.distanceKm,
+        durationSec,
+        costEuros: totalCost,
+        highway: route.highway,
+        vehicleUsed,
+        narrative: narrativeParts.join(' '),
+        player: {
+          id: updatedPlayer.id,
+          displayName: updatedPlayer.displayName,
+          level: updatedPlayer.level,
+          xp: updatedPlayer.xp,
+          euros: updatedPlayer.euros,
+          heat: updatedPlayer.heat,
+          reputation: updatedPlayer.reputation,
+          locationId: updatedPlayer.locationId,
+        },
+      };
+    });
   }
 
   async setLifestyle(userId: string, lifestyle: 'LEGAL' | 'GREY' | 'STREET') {

@@ -1,3 +1,5 @@
+import type { WorldMapResponse, WorldTravelResponse } from '@/types/game';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 type ApiSuccess<T> = { success: true; data: T; timestamp: string };
@@ -153,6 +155,12 @@ export const api = {
     request(`/inventory/weapons/equip/${weaponId}`, { method: 'POST' }),
 
   worldStreet: () => request('/world/street'),
+  worldMap: () => request<WorldMapResponse>('/world/map'),
+  worldTravel: (destinationId: string) =>
+    request<WorldTravelResponse>('/world/travel', {
+      method: 'POST',
+      body: JSON.stringify({ destinationId }),
+    }),
   worldAction: (actionId: string) =>
     request('/world/action', {
       method: 'POST',

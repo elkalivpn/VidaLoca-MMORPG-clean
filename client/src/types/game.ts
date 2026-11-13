@@ -171,8 +171,68 @@ export interface CityLocation {
   id: string;
   name: string;
   city: string;
-  x: number; // % on map
-  y: number;
+  lng: number;
+  lat: number;
+  x?: number; // % fallback on schematic map
+  y?: number;
   description: string;
   vibe: 'luxury' | 'street' | 'business' | 'nightlife' | 'industrial';
+}
+
+export interface WorldMapZone {
+  id: string;
+  name?: string;
+  city?: string;
+  lng?: number;
+  lat?: number;
+  vibe?: CityLocation['vibe'];
+  description?: string;
+  controlledByClan?: { id?: string; name: string; tag: string } | null;
+  clanTag?: string | null;
+  clanName?: string | null;
+  playerCount?: number;
+}
+
+export interface WorldMapRoute {
+  from: string;
+  to: string;
+  highway: string;
+  distanceKm?: number;
+}
+
+export interface WorldMapResponse {
+  currentLocationId?: string;
+  zones?: WorldMapZone[];
+  routes?: WorldMapRoute[];
+  territories?: Array<{
+    locationId?: string;
+    zoneId?: string;
+    clan?: { id?: string; name: string; tag: string } | null;
+  }>;
+}
+
+export interface WorldTravelResponse {
+  ok?: boolean;
+  fromId?: string;
+  destinationId: string;
+  highway?: string;
+  distanceKm?: number;
+  costEuros?: number;
+  durationMinutes?: number;
+  vehicleUsed?: string | null;
+  narrative?: string;
+  guardiaCivil?: {
+    encountered: boolean;
+    fined?: boolean;
+    fineEuros?: number;
+    heatDelta?: number;
+    message?: string;
+  } | null;
+  checkpoint?: {
+    triggered?: boolean;
+    outcome?: string;
+    fineEuros?: number;
+    message?: string;
+  } | null;
+  player?: Partial<Player>;
 }

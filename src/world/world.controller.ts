@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, UseGuards, Req } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { IsIn, IsNotEmpty, IsString } from 'class-validator';
 import { WorldService } from './world.service';
+import { TravelDto } from './dto/travel.dto';
 
 class PerformActionDto {
   @IsString()
@@ -22,6 +23,16 @@ export class WorldController {
   @Get('street')
   street(@Req() req: any) {
     return this.world.getStreetState(req.user.id);
+  }
+
+  @Get('map')
+  map() {
+    return this.world.getMapState();
+  }
+
+  @Post('travel')
+  travel(@Req() req: any, @Body() dto: TravelDto) {
+    return this.world.travel(req.user.id, dto.destinationId);
   }
 
   @Post('action')
