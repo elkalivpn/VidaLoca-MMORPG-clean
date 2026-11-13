@@ -6,6 +6,26 @@
   color-scheme: dark;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   @apply bg-zinc-950 text-zinc-100 antialiased;
+}
+
+@keyframes kenburns {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: scale(1.08) translate3d(-1.2%, -0.8%, 0);
+  }
+  100% {
+    transform: scale(1.03) translate3d(1%, -0.4%, 0);
+  }
+}
+
+.animate-kenburns {
+  animation: kenburns 18s ease-in-out infinite alternate;
 }
