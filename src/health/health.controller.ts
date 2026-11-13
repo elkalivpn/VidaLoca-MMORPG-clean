@@ -28,4 +28,36 @@ export class HealthController {
       timestamp: new Date().toISOString(),
     };
   }
+
+  @Get('live')
+  live() {
+    return {
+      status: 'ok',
+      service: 'VidaLoca MMORPG Backend',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  @Get('ready')
+  async ready(@Res({ passthrough: true }) res: Response) {
+    let database = 'ok';
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+    } catch {
+      database = 'error';
+    }
+
+    if (database !== 'ok') {
+      res.status(HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    return {
+      status: database === 'ok' ? 'ready' : 'not_ready',
+      service: 'VidaLoca MMORPG Backend',
+      database,
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+    };
+  }
 }

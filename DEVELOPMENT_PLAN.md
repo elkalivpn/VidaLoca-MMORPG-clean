@@ -13,7 +13,7 @@
 | **2 — Distritos 3D y Sync Espacial** | 🔜 | Escena 3D navegable por barrio (Three.js / R3F), avatares y vehículos en vivo, spatial chunks y HUD inmersivo. |
 | **3 — Facciones y Persecuciones** | 🔜 | Fuerzas del orden jugables, bandas/clanes, empresarios, persecuciones en tiempo real y combate. |
 | **4 — Economía Viva y Golpes** | 🔜 | Propiedades funcionales (piso franco, garaje, almacén, club), eventos dinámicos y golpes cooperativos. |
-| **5 — Escala MMO y Lanzamiento** | 🔜 | VoIP de proximidad, load testing WebSocket, observabilidad y despliegue en producción. |
+| **5 — Escala MMO y Lanzamiento** | ✅ | Docker multi-stage (`api`, `client`), stack completo en `docker-compose.yml` (`postgres`, `redis`, `api`, `client`) y load testing HTTP + WebSocket con `k6` (`test/load/k6-mmo-load.js`). |
 
 ## Loop de juego
 
@@ -30,3 +30,20 @@ npx prisma db push
 npm run dev:api
 npm run dev:client
 ```
+
+## Arranque con Docker y Load Testing (k6)
+
+Levantar el stack completo (`postgres`, `redis`, `api`, `client`):
+
+```bash
+docker compose up --build -d
+```
+
+Ejecutar pruebas de carga HTTP + WebSocket (`/game`, `player:move`) con `k6`:
+
+```bash
+k6 run test/load/k6-mmo-load.js
+# Con token JWT para probar rutas autenticadas y namespace /game:
+JWT_TOKEN="<tu-jwt>" k6 run test/load/k6-mmo-load.js
+```
+

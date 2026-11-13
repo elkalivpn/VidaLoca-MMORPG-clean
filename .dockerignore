@@ -1,0 +1,16 @@
+node_modules
+client/node_modules
+dist
+client/.next
+coverage
+.git
+.github
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+test
+supabase
+.DS_Store
+Thumbs.db

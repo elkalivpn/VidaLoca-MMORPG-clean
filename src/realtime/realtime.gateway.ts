@@ -57,11 +57,14 @@ export class RealtimeGateway
 
   private readonly logger = new Logger(RealtimeGateway.name);
   private readonly MOVE_RATE_LIMIT_MS = 40;
+  private readonly CHAT_RATE_LIMIT_MS = 500;
   private readonly MAX_SPEED_UNITS_PER_SEC = 60;
   private readonly TICK_INTERVAL_MS = 100;
 
   /** socketId → presence */
   private presence = new Map<string, PresenceEntry>();
+  /** socketId → last chat timestamp (ms) */
+  private lastChatAt = new Map<string, number>();
   /** Zonas con movimiento pendiente de emitir en el siguiente tick */
   private dirtyZones = new Set<string>();
   private worldEventTimer?: ReturnType<typeof setInterval>;
@@ -217,6 +220,7 @@ export class RealtimeGateway
   }
 
   async handleDisconnect(client: AuthenticatedSocket) {
+    this.lastChatAt.delete(client.id);
     const entry = this.presence.get(client.id);
     if (!entry) return;
 
@@ -339,8 +343,12 @@ export class RealtimeGateway
       return { error: 'Not authenticated' };
     }
 
-    const message = (body.message || '').trim().slice(0, 500);
+    const message = (body?.message || '').trim().slice(0, 500);
     if (!message) return { error: 'Empty message' };
+
+    if (this.isChatRateLimited(client.id)) {
+      return { ok: false, error: 'Rate limit exceeded', reason: 'rate_limited' };
+    }
 
     const locationId = client.locationId || 'madrid_centro';
     const payload = {
@@ -365,8 +373,12 @@ export class RealtimeGateway
       return { error: 'Not authenticated' };
     }
 
-    const message = (body.message || '').trim().slice(0, 500);
+    const message = (body?.message || '').trim().slice(0, 500);
     if (!message) return { error: 'Empty message' };
+
+    if (this.isChatRateLimited(client.id)) {
+      return { ok: false, error: 'Rate limit exceeded', reason: 'rate_limited' };
+    }
 
     const payload = {
       id: `${Date.now()}-${client.id.slice(0, 6)}`,
@@ -379,6 +391,15 @@ export class RealtimeGateway
 
     this.server.emit('chat:message', payload);
     return { ok: true, ...payload };
+  }
+
+  private isChatRateLimited(socketId: string, now = Date.now()): boolean {
+    const last = this.lastChatAt.get(socketId) ?? 0;
+    if (last > 0 && now - last < this.CHAT_RATE_LIMIT_MS) {
+      return true;
+    }
+    this.lastChatAt.set(socketId, now);
+    return false;
   }
 
   // ─── Presence query ──────────────────────────────────────────────────
