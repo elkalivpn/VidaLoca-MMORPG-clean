@@ -7,7 +7,7 @@ import StreetPlay from '@/components/StreetPlay';
 import CityMap from '@/components/CityMap';
 import MissionsPanel from '@/components/MissionsPanel';
 import InventoryPanel from '@/components/InventoryPanel';
-import VehiclesPanel from '@/components/VehiclesPanel';
+import { VehiclesPanel } from '@/components/VehiclesPanel';
 import PropertiesPanel from '@/components/PropertiesPanel';
 import SkillsBattlePass from '@/components/SkillsBattlePass';
 import ClansPanel from '@/components/ClansPanel';
@@ -15,17 +15,32 @@ import ChatPanel from '@/components/ChatPanel';
 import StatsBar from '@/components/StatsBar';
 import { useRealtime } from '@/hooks/useRealtime';
 
-type Tab = 'calle' | 'mapa' | 'misiones' | 'inventario' | 'vehiculos' | 'propiedades' | 'skills' | 'clanes';
+type Tab =
+  | 'calle'
+  | 'mapa'
+  | 'misiones'
+  | 'inventario'
+  | 'vehiculos'
+  | 'propiedades'
+  | 'skills'
+  | 'clanes';
 
 export default function PlayPage() {
   const router = useRouter();
-  const { token, player, logout } = useAuth();
+  const { token, player, refreshPlayer, logout } = useAuth();
   const [tab, setTab] = useState<Tab>('calle');
-  const { connected, messages, sendChat } = useRealtime(token);
+  const { connected, messages, sendZoneChat, sendGlobalChat, joinZone } =
+    useRealtime(Boolean(token));
 
   useEffect(() => {
     if (!token) router.replace('/');
   }, [token, router]);
+
+  useEffect(() => {
+    if (token && !player) {
+      void refreshPlayer();
+    }
+  }, [token, player, refreshPlayer]);
 
   if (!token || !player) {
     return (
@@ -56,7 +71,9 @@ export default function PlayPage() {
             type="button"
             onClick={() => setTab(t.id)}
             className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-              tab === t.id ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400 hover:text-zinc-200'
+              tab === t.id
+                ? 'bg-amber-500/20 text-amber-300'
+                : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
             {t.label}
@@ -66,7 +83,13 @@ export default function PlayPage() {
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_320px] min-h-0">
         <div className="overflow-auto p-3">
           {tab === 'calle' && <StreetPlay />}
-          {tab === 'mapa' && <CityMap />}
+          {tab === 'mapa' && (
+            <CityMap
+              onZoneChanged={(z) => {
+                void joinZone(z);
+              }}
+            />
+          )}
           {tab === 'misiones' && <MissionsPanel />}
           {tab === 'inventario' && <InventoryPanel />}
           {tab === 'vehiculos' && <VehiclesPanel />}
@@ -75,7 +98,12 @@ export default function PlayPage() {
           {tab === 'clanes' && <ClansPanel />}
         </div>
         <aside className="border-t lg:border-t-0 lg:border-l border-zinc-800 p-2">
-          <ChatPanel messages={messages} onSend={sendChat} />
+          <ChatPanel
+            messages={messages}
+            onSend={(text, scope) =>
+              scope === 'global' ? sendGlobalChat(text) : sendZoneChat(text)
+            }
+          />
         </aside>
       </div>
     </div>

@@ -1,14 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-
-type Msg = { id?: string; user?: string; text: string; zone?: string; at?: string };
+import type { ChatMessage } from '@/lib/socket';
 
 export default function ChatPanel({
   messages,
   onSend,
 }: {
-  messages: Msg[];
+  messages: ChatMessage[];
   onSend: (text: string, scope: 'zone' | 'global') => void;
 }) {
   const [text, setText] = useState('');
@@ -32,14 +31,34 @@ export default function ChatPanel({
         )}
         {messages.map((m, i) => (
           <div key={m.id || i} className="text-zinc-300">
-            <span className="text-amber-400/90 font-medium">{m.user || 'sistema'}</span>
-            {m.zone && <span className="text-zinc-600 text-xs ml-1">[{m.zone}]</span>}
+            <span className="text-amber-400/90 font-medium">
+              {m.displayName || 'sistema'}
+            </span>
+            {m.locationId && (
+              <span className="text-zinc-600 text-xs ml-1">
+                [{m.locationId}]
+              </span>
+            )}
+            {m.channel === 'global' && (
+              <span className="text-sky-400/80 text-xs ml-1">[Global]</span>
+            )}
             <span className="text-zinc-500">: </span>
-            {m.text}
+            {m.message}
+            {m.timestamp && (
+              <span className="text-zinc-600 text-[10px] ml-1.5">
+                {new Date(m.timestamp).toLocaleTimeString('es-ES', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+            )}
           </div>
         ))}
       </div>
-      <form onSubmit={submit} className="flex gap-1 border-t border-zinc-800 p-2">
+      <form
+        onSubmit={submit}
+        className="flex gap-1 border-t border-zinc-800 p-2"
+      >
         <select
           value={scope}
           onChange={(e) => setScope(e.target.value as 'zone' | 'global')}
@@ -54,7 +73,10 @@ export default function ChatPanel({
           onChange={(e) => setText(e.target.value)}
           placeholder="Escribe…"
         />
-        <button type="submit" className="rounded bg-zinc-700 px-2 text-xs hover:bg-zinc-600">
+        <button
+          type="submit"
+          className="rounded bg-zinc-700 px-2 text-xs hover:bg-zinc-600"
+        >
           Enviar
         </button>
       </form>

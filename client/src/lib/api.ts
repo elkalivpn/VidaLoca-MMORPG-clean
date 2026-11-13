@@ -8,10 +8,7 @@ type ApiError = {
   error: string;
 };
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token =
     typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
 
@@ -24,9 +21,11 @@ async function request<T>(
     },
   });
 
-  const body = await res.json().catch(() => ({}));
+  const raw: unknown = await res.json().catch(() => ({}));
+  const body = (raw && typeof raw === 'object' ? raw : {}) as
+    ApiSuccess<T> | ApiError | Record<string, unknown>;
 
-  if (!res.ok || body.success === false) {
+  if (!res.ok || ('success' in body && body.success === false)) {
     const err = body as ApiError;
     const msg = Array.isArray(err.message)
       ? err.message.join(', ')
@@ -34,7 +33,7 @@ async function request<T>(
     throw new Error(msg);
   }
 
-  if (body && typeof body === 'object' && 'data' in body && body.success === true) {
+  if ('data' in body && 'success' in body && body.success === true) {
     return (body as ApiSuccess<T>).data;
   }
   return body as T;
@@ -46,7 +45,8 @@ export const api = {
     username: string;
     password: string;
     displayName: string;
-  }) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+  }) =>
+    request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
 
   login: (data: { email: string; password: string }) =>
     request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
@@ -59,7 +59,9 @@ export const api = {
     }),
 
   missionTemplates: (difficulty?: string) =>
-    request(`/missions/templates${difficulty ? `?difficulty=${difficulty}` : ''}`),
+    request(
+      `/missions/templates${difficulty ? `?difficulty=${difficulty}` : ''}`,
+    ),
   myMissions: () => request('/missions/my'),
   startMission: (templateId: string) =>
     request('/missions/start', {
@@ -162,4 +164,3 @@ export const api = {
       body: JSON.stringify({ lifestyle }),
     }),
 };
-

@@ -6,9 +6,11 @@ import { useAuth } from '@/store/auth';
 import { api } from '@/lib/api';
 import CinematicBackdrop from '@/components/CinematicBackdrop';
 
+import type { Player } from '@/types/game';
+
 type AuthResult = {
   accessToken: string;
-  user?: { player?: any; username?: string };
+  user?: { player?: Player | null; username?: string };
 };
 
 export default function HomePage() {
@@ -26,14 +28,16 @@ export default function HomePage() {
     setError('');
     setLoading(true);
     try {
-      const data = (mode === 'login'
-        ? await api.login({ email, password })
-        : await api.register({
-            email,
-            username,
-            password,
-            displayName: username,
-          })) as AuthResult;
+      const data = (
+        mode === 'login'
+          ? await api.login({ email, password })
+          : await api.register({
+              email,
+              username,
+              password,
+              displayName: username,
+            })
+      ) as AuthResult;
       const player = data.user?.player ?? null;
       setAuth(data.accessToken, player);
       router.push('/play');
@@ -48,15 +52,21 @@ export default function HomePage() {
     <main className="relative min-h-screen flex items-center justify-center overflow-hidden">
       <CinematicBackdrop />
       <div className="relative z-10 w-full max-w-md mx-4 rounded-2xl border border-zinc-700/80 bg-zinc-900/90 p-8 shadow-2xl backdrop-blur">
-        <h1 className="text-3xl font-bold tracking-tight text-amber-400">VidaLoca</h1>
-        <p className="mt-1 text-sm text-zinc-400">Mundo libre. Tú decides quién eres.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-amber-400">
+          VidaLoca
+        </h1>
+        <p className="mt-1 text-sm text-zinc-400">
+          Mundo libre. Tú decides quién eres.
+        </p>
 
         <div className="mt-6 flex gap-2 text-sm">
           <button
             type="button"
             onClick={() => setMode('login')}
             className={`flex-1 rounded-lg py-2 ${
-              mode === 'login' ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400'
+              mode === 'login'
+                ? 'bg-amber-500/20 text-amber-300'
+                : 'text-zinc-400'
             }`}
           >
             Entrar
@@ -65,14 +75,21 @@ export default function HomePage() {
             type="button"
             onClick={() => setMode('register')}
             className={`flex-1 rounded-lg py-2 ${
-              mode === 'register' ? 'bg-amber-500/20 text-amber-300' : 'text-zinc-400'
+              mode === 'register'
+                ? 'bg-amber-500/20 text-amber-300'
+                : 'text-zinc-400'
             }`}
           >
             Registrarse
           </button>
         </div>
 
-        <form onSubmit={submit} className="mt-4 space-y-3">
+        <form
+          onSubmit={(e) => {
+            void submit(e);
+          }}
+          className="mt-4 space-y-3"
+        >
           <input
             type="email"
             className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500"
@@ -98,7 +115,9 @@ export default function HomePage() {
             placeholder="Contraseña"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            autoComplete={
+              mode === 'login' ? 'current-password' : 'new-password'
+            }
             required
           />
           {error && <p className="text-sm text-red-400">{error}</p>}

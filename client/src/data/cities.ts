@@ -8,7 +8,8 @@ export const CITIES: CityLocation[] = [
     city: 'Madrid',
     x: 48,
     y: 42,
-    description: 'El corazón de la capital. Negocios, turistas y oportunidades.',
+    description:
+      'El corazón de la capital. Negocios, turistas y oportunidades.',
     vibe: 'business',
   },
   {
@@ -53,7 +54,8 @@ export const CITIES: CityLocation[] = [
     city: 'Marbella',
     x: 38,
     y: 78,
-    description: 'Sol, playa y ostentación. El lugar donde se hacen los grandes tratos.',
+    description:
+      'Sol, playa y ostentación. El lugar donde se hacen los grandes tratos.',
     vibe: 'luxury',
   },
   {
@@ -62,7 +64,8 @@ export const CITIES: CityLocation[] = [
     city: 'Marbella',
     x: 36,
     y: 80,
-    description: 'Yates, supercoches y VIP. El sueño de muchos, la realidad de pocos.',
+    description:
+      'Yates, supercoches y VIP. El sueño de muchos, la realidad de pocos.',
     vibe: 'luxury',
   },
   {

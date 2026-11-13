@@ -1,6 +1,9 @@
 import { Controller, Get, Post, Body, Param, UseGuards, Req } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import { AuthGuard } from '@nestjs/passport';
+import { UserRole } from '@prisma/client';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/guards/roles.guard';
 
 @Controller('inventory')
 @UseGuards(AuthGuard('jwt'))
@@ -13,6 +16,8 @@ export class InventoryController {
   }
 
   @Post('add')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   async addItem(
     @Req() req,
     @Body('templateId') templateId: string,
@@ -36,6 +41,8 @@ export class InventoryController {
   }
 
   @Post('weapons/add')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   async addWeapon(
     @Req() req,
     @Body('name') name: string,

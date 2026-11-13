@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { MissionStatus, Difficulty } from '@prisma/client';
 import { CreateMissionTemplateDto } from './dto/missions.dto';
+import { calculateLevelFromXp } from '../common/utils/level.util';
 
 @Injectable()
 export class MissionsService {
@@ -168,7 +169,7 @@ export class MissionsService {
 
       // Give rewards
       const newXp = player.xp + rewardXp;
-      const newLevel = Math.floor(newXp / 1000) + 1;
+      const newLevel = calculateLevelFromXp(newXp);
 
       const updatedPlayer = await tx.player.update({
         where: { id: player.id },

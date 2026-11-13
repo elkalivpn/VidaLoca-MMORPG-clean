@@ -13,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatMessageDto, JoinZoneDto } from './dto/realtime.dto';
+import { isValidZoneId } from '../common/constants/zones';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -52,14 +53,14 @@ export class RealtimeGateway
       type: 'raid',
       title: 'Redada en Malasaña',
       message: 'La policía peina Malasaña. Evita la zona o prepárate para correr.',
-      zone: 'madrid_malasana',
+      zone: 'malasana',
       severity: 'high',
     },
     {
       type: 'deal',
       title: 'Negocio en Puerto Banús',
       message: 'Un contacto ofrece un trato opaco en los yates. Solo para los que se atreven.',
-      zone: 'marbella_puerto_banus',
+      zone: 'puerto_banus',
       severity: 'medium',
     },
     {
@@ -80,7 +81,7 @@ export class RealtimeGateway
       type: 'heist',
       title: 'Alarma en Salamanca',
       message: 'Algo grande se mueve en los áticos de Salamanca. Los clanes ya están al tanto.',
-      zone: 'madrid_salamanca',
+      zone: 'salamanca',
       severity: 'high',
     },
     {
@@ -113,9 +114,7 @@ export class RealtimeGateway
         return;
       }
 
-      const secret =
-        this.configService.get<string>('JWT_SECRET') ||
-        'default-secret-change-in-production';
+      const secret = this.configService.getOrThrow<string>('JWT_SECRET');
       const payload = this.jwtService.verify(token, { secret });
       const userId = payload.sub as string;
 
@@ -221,8 +220,12 @@ export class RealtimeGateway
   ) {
     if (!client.userId || !client.playerId) return { error: 'Not authenticated' };
 
+    const nextZone = body?.locationId;
+    if (!nextZone || !isValidZoneId(nextZone)) {
+      return { error: 'Invalid locationId' };
+    }
+
     const prevZone = client.locationId;
-    const nextZone = body.locationId;
 
     if (prevZone === nextZone) {
       return { ok: true, locationId: nextZone };
@@ -291,7 +294,7 @@ export class RealtimeGateway
     const message = (body.message || '').trim().slice(0, 500);
     if (!message) return { error: 'Empty message' };
 
-    const locationId = body.locationId || client.locationId || 'madrid_centro';
+    const locationId = client.locationId || 'madrid_centro';
     const payload = {
       id: `${Date.now()}-${client.id.slice(0, 6)}`,
       playerId: client.playerId,

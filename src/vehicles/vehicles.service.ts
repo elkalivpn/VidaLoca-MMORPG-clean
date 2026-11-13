@@ -33,16 +33,21 @@ export class VehiclesService {
 
     if (!template) throw new NotFoundException('Vehicle not found in catalog');
 
-    // Prefer Euros, fallback to VidaCoins if priced that way
-    const priceEuros = template.priceEuros ?? 0;
-    const priceVida = template.priceVida ?? 0;
+    // Prefer Euros, fallback to VidaCoins if priced that way (never charge both)
+    const useEuros = (template.priceEuros ?? 0) > 0;
+    const priceEuros = useEuros ? template.priceEuros! : 0;
+    const priceVida = !useEuros ? (template.priceVida ?? 0) : 0;
 
-    if (priceEuros > 0 && player.euros < priceEuros) {
+    if (priceEuros <= 0 && priceVida <= 0) {
+      throw new BadRequestException('Vehicle has no valid price');
+    }
+
+    if (useEuros && player.euros < priceEuros) {
       throw new BadRequestException(
         `Not enough Euros. Need ${priceEuros}, have ${player.euros}`,
       );
     }
-    if (priceVida > 0 && player.vidaCoins < priceVida) {
+    if (!useEuros && player.vidaCoins < priceVida) {
       throw new BadRequestException(
         `Not enough VidaCoins. Need ${priceVida}, have ${player.vidaCoins}`,
       );
@@ -51,15 +56,24 @@ export class VehiclesService {
     const licensePlate = this.generateLicensePlate();
 
     return this.prisma.$transaction(async (tx) => {
-      // Deduct money
-      const updateData: any = {};
-      if (priceEuros > 0) updateData.euros = { decrement: priceEuros };
-      if (priceVida > 0) updateData.vidaCoins = { decrement: priceVida };
-
-      await tx.player.update({
-        where: { id: player.id },
-        data: updateData,
-      });
+      // Atomic deduct money
+      if (useEuros) {
+        const debit = await tx.player.updateMany({
+          where: { id: player.id, euros: { gte: priceEuros } },
+          data: { euros: { decrement: priceEuros } },
+        });
+        if (debit.count === 0) {
+          throw new BadRequestException('Not enough Euros');
+        }
+      } else {
+        const debit = await tx.player.updateMany({
+          where: { id: player.id, vidaCoins: { gte: priceVida } },
+          data: { vidaCoins: { decrement: priceVida } },
+        });
+        if (debit.count === 0) {
+          throw new BadRequestException('Not enough VidaCoins');
+        }
+      }
 
       // Create vehicle
       const vehicle = await tx.playerVehicle.create({
@@ -74,31 +88,17 @@ export class VehiclesService {
         include: { template: true },
       });
 
-      // Log transaction
-      if (priceEuros > 0) {
-        await tx.transactionLog.create({
-          data: {
-            playerId: player.id,
-            type: 'PURCHASE',
-            amount: priceEuros,
-            currency: 'EUR',
-            reason: `Bought vehicle: ${template.name}`,
-            reference: vehicle.id,
-          },
-        });
-      }
-      if (priceVida > 0) {
-        await tx.transactionLog.create({
-          data: {
-            playerId: player.id,
-            type: 'PURCHASE',
-            amount: priceVida,
-            currency: 'VIDACOIN',
-            reason: `Bought vehicle: ${template.name}`,
-            reference: vehicle.id,
-          },
-        });
-      }
+      // Log transaction for the selected currency
+      await tx.transactionLog.create({
+        data: {
+          playerId: player.id,
+          type: 'PURCHASE',
+          amount: useEuros ? priceEuros : priceVida,
+          currency: useEuros ? 'EUR' : 'VIDACOIN',
+          reason: `Bought vehicle: ${template.name}`,
+          reference: vehicle.id,
+        },
+      });
 
       return vehicle;
     });
@@ -149,10 +149,14 @@ export class VehiclesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      await tx.player.update({
-        where: { id: player.id },
+      const debit = await tx.player.updateMany({
+        where: { id: player.id, euros: { gte: cost } },
         data: { euros: { decrement: cost } },
       });
+
+      if (debit.count === 0) {
+        throw new BadRequestException(`Repair costs ${cost}€. Insufficient Euros`);
+      }
 
       const repaired = await tx.playerVehicle.update({
         where: { id: vehicleId },

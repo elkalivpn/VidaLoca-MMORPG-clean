@@ -47,12 +47,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const player = (await api.me()) as Player;
       set({ player, loading: false, token: readToken() });
-    } catch (e: any) {
-      set({ error: e.message, loading: false });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error';
+      set({ error: msg, loading: false });
       if (
-        e.message?.includes('Unauthorized') ||
-        e.message?.includes('401') ||
-        e.message?.includes('not found')
+        msg.includes('Unauthorized') ||
+        msg.includes('401') ||
+        msg.includes('not found')
       ) {
         get().logout();
       }

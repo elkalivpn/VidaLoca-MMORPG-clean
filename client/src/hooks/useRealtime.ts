@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   connectSocket,
   disconnectSocket,
@@ -17,7 +17,6 @@ export function useRealtime(enabled: boolean) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [worldEvents, setWorldEvents] = useState<WorldEvent[]>([]);
   const [locationId, setLocationId] = useState<string | null>(null);
-  const handlersBound = useRef(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -30,10 +29,7 @@ export function useRealtime(enabled: boolean) {
     const onConnect = () => setConnected(true);
     const onDisconnect = () => setConnected(false);
 
-    const onConnected = (data: {
-      locationId: string;
-      displayName: string;
-    }) => {
+    const onConnected = (data: { locationId: string; displayName: string }) => {
       setLocationId(data.locationId);
       setConnected(true);
     };
@@ -98,12 +94,19 @@ export function useRealtime(enabled: boolean) {
   const joinZone = useCallback((nextLocationId: string) => {
     const socket = getSocket();
     if (!socket?.connected) return Promise.resolve(null);
-    return new Promise<any>((resolve) => {
-      socket.emit('zone:join', { locationId: nextLocationId }, (res: any) => {
-        if (res?.players) setZonePlayers(res.players);
-        if (res?.locationId) setLocationId(res.locationId);
-        resolve(res);
-      });
+    return new Promise<{
+      players?: PresencePlayer[];
+      locationId?: string;
+    } | null>((resolve) => {
+      socket.emit(
+        'zone:join',
+        { locationId: nextLocationId },
+        (res: { players?: PresencePlayer[]; locationId?: string } | null) => {
+          if (res?.players) setZonePlayers(res.players);
+          if (res?.locationId) setLocationId(res.locationId);
+          resolve(res);
+        },
+      );
     });
   }, []);
 
@@ -122,10 +125,15 @@ export function useRealtime(enabled: boolean) {
   const requestPresence = useCallback(() => {
     const socket = getSocket();
     if (!socket?.connected) return;
-    socket.emit('presence:request', {}, (res: any) => {
-      if (res?.players) setZonePlayers(res.players);
-      if (typeof res?.onlineTotal === 'number') setOnlineTotal(res.onlineTotal);
-    });
+    socket.emit(
+      'presence:request',
+      {},
+      (res: { players?: PresencePlayer[]; onlineTotal?: number } | null) => {
+        if (res?.players) setZonePlayers(res.players);
+        if (typeof res?.onlineTotal === 'number')
+          setOnlineTotal(res.onlineTotal);
+      },
+    );
   }, []);
 
   return {

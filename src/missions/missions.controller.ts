@@ -60,6 +60,8 @@ export class MissionsController {
   }
 
   @Post(':missionId/progress')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   async updateProgress(
     @CurrentUser('id') userId: string,
     @Param('missionId') missionId: string,

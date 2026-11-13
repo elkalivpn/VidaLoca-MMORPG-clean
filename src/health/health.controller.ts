@@ -1,4 +1,5 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('health')
@@ -6,12 +7,16 @@ export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get()
-  async check() {
+  async check(@Res({ passthrough: true }) res: Response) {
     let database = 'ok';
     try {
       await this.prisma.$queryRaw`SELECT 1`;
     } catch {
       database = 'error';
+    }
+
+    if (database !== 'ok') {
+      res.status(HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     return {

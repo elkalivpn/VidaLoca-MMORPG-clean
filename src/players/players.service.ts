@@ -1,5 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { isValidZoneId } from '../common/constants/zones';
+import { calculateLevelFromXp } from '../common/utils/level.util';
 
 @Injectable()
 export class PlayersService {
@@ -27,6 +29,10 @@ export class PlayersService {
   }
 
   async updatePlayerLocation(userId: string, locationId: string) {
+    if (!isValidZoneId(locationId)) {
+      throw new BadRequestException('Invalid locationId');
+    }
+
     return this.prisma.player.update({
       where: { userId },
       data: { locationId },
@@ -43,7 +49,7 @@ export class PlayersService {
     }
 
     const newXp = player.xp + xp;
-    const newLevel = Math.floor(newXp / 1000) + 1;
+    const newLevel = calculateLevelFromXp(newXp);
 
     return this.prisma.player.update({
       where: { userId },
@@ -75,7 +81,7 @@ export class PlayersService {
         skip,
         take: limit,
         include: {
-          user: { select: { username: true, email: true } },
+          user: { select: { username: true } },
           clanMember: { include: { clan: { select: { name: true, tag: true } } } },
         },
         orderBy: { level: 'desc' },

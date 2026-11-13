@@ -135,15 +135,25 @@ export class InventoryService {
       throw new NotFoundException('Player not found');
     }
 
-    // Unequip all weapons
-    await this.prisma.playerWeapon.updateMany({
-      where: { playerId: player.id, equipped: true },
-      data: { equipped: false },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const weapon = await tx.playerWeapon.findFirst({
+        where: { id: weaponId, playerId: player.id },
+      });
 
-    return this.prisma.playerWeapon.update({
-      where: { id: weaponId },
-      data: { equipped: true },
+      if (!weapon) {
+        throw new NotFoundException('Weapon not found');
+      }
+
+      // Unequip all weapons
+      await tx.playerWeapon.updateMany({
+        where: { playerId: player.id, equipped: true },
+        data: { equipped: false },
+      });
+
+      return tx.playerWeapon.update({
+        where: { id: weaponId },
+        data: { equipped: true },
+      });
     });
   }
 }

@@ -15,12 +15,17 @@ export class EconomyService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.player.findUnique({ where: { userId } });
+      if (!existing) {
+        throw new BadRequestException('Player not found');
+      }
+
       const player = await tx.player.update({
         where: { userId },
         data: { euros: { increment: amount } },
       });
 
-      await this.transactionsService.logTransaction(tx, userId, 'EARN', amount, 'EUR', reason, reference);
+      await this.transactionsService.logTransaction(tx, player.id, 'EARN', amount, 'EUR', reason, reference);
 
       return player;
     });
@@ -32,18 +37,21 @@ export class EconomyService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const player = await tx.player.findUnique({ where: { userId } });
-
-      if (!player || player.euros < amount) {
-        throw new BadRequestException('Insufficient euros');
-      }
-
-      const updatedPlayer = await tx.player.update({
-        where: { userId },
+      const res = await tx.player.updateMany({
+        where: { userId, euros: { gte: amount } },
         data: { euros: { decrement: amount } },
       });
 
-      await this.transactionsService.logTransaction(tx, userId, 'SPEND', amount, 'EUR', reason, reference);
+      if (res.count === 0) {
+        throw new BadRequestException('Insufficient euros');
+      }
+
+      const updatedPlayer = await tx.player.findUnique({ where: { userId } });
+      if (!updatedPlayer) {
+        throw new BadRequestException('Player not found');
+      }
+
+      await this.transactionsService.logTransaction(tx, updatedPlayer.id, 'SPEND', amount, 'EUR', reason, reference);
 
       return updatedPlayer;
     });
@@ -55,12 +63,17 @@ export class EconomyService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.player.findUnique({ where: { userId } });
+      if (!existing) {
+        throw new BadRequestException('Player not found');
+      }
+
       const player = await tx.player.update({
         where: { userId },
         data: { vidaCoins: { increment: amount } },
       });
 
-      await this.transactionsService.logTransaction(tx, userId, 'EARN', amount, 'VIDACOIN', reason, reference);
+      await this.transactionsService.logTransaction(tx, player.id, 'EARN', amount, 'VIDACOIN', reason, reference);
 
       return player;
     });
@@ -72,18 +85,21 @@ export class EconomyService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const player = await tx.player.findUnique({ where: { userId } });
-
-      if (!player || player.vidaCoins < amount) {
-        throw new BadRequestException('Insufficient VidaCoins');
-      }
-
-      const updatedPlayer = await tx.player.update({
-        where: { userId },
+      const res = await tx.player.updateMany({
+        where: { userId, vidaCoins: { gte: amount } },
         data: { vidaCoins: { decrement: amount } },
       });
 
-      await this.transactionsService.logTransaction(tx, userId, 'SPEND', amount, 'VIDACOIN', reason, reference);
+      if (res.count === 0) {
+        throw new BadRequestException('Insufficient VidaCoins');
+      }
+
+      const updatedPlayer = await tx.player.findUnique({ where: { userId } });
+      if (!updatedPlayer) {
+        throw new BadRequestException('Player not found');
+      }
+
+      await this.transactionsService.logTransaction(tx, updatedPlayer.id, 'SPEND', amount, 'VIDACOIN', reason, reference);
 
       return updatedPlayer;
     });

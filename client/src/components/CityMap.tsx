@@ -5,7 +5,11 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { CITIES } from '@/data/cities';
 
-export default function CityMap() {
+export default function CityMap({
+  onZoneChanged,
+}: {
+  onZoneChanged?: (zoneId: string) => void;
+}) {
   const { token, player, refreshPlayer } = useAuth();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -17,6 +21,7 @@ export default function CityMap() {
     setMsg('');
     try {
       await api.updateLocation(zoneId);
+      onZoneChanged?.(zoneId);
       await refreshPlayer();
       setMsg(`Viajaste a ${zoneId}`);
     } catch (e: unknown) {
@@ -39,7 +44,9 @@ export default function CityMap() {
             key={c.id}
             type="button"
             disabled={busy || here === c.id}
-            onClick={() => travel(c.id)}
+            onClick={() => {
+              void travel(c.id);
+            }}
             className="rounded-xl border border-zinc-700 bg-zinc-900/80 p-4 text-left hover:border-amber-500/50 disabled:opacity-50"
           >
             <div className="font-medium text-zinc-100">{c.name}</div>

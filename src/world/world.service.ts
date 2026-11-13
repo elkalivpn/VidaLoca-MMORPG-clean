@@ -4,20 +4,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-
-/** Acciones de calle por vibe de zona – mundo libre */
-const ZONE_VIBES: Record<string, string> = {
-  madrid_centro: 'business',
-  malasana: 'nightlife',
-  salamanca: 'luxury',
-  barcelona_ramblas: 'street',
-  barcelona_gotico: 'street',
-  marbella_centro: 'luxury',
-  puerto_banus: 'luxury',
-  sevilla_casco: 'street',
-  valencia_artes: 'business',
-  bilbao_casco: 'street',
-};
+import { ZONE_VIBES } from '../common/constants/zones';
+import { calculateLevelFromXp } from '../common/utils/level.util';
 
 type ActionDef = {
   id: string;
@@ -130,7 +118,7 @@ export class WorldService {
 
   async getStreetState(userId: string) {
     const p = await this.player(userId);
-    const loc = (p as any).locationId || 'madrid_centro';
+    const loc = p.locationId || 'madrid_centro';
     const zone = this.getZoneInfo(loc);
     const activeMissions = await this.prisma.playerMission.findMany({
       where: {
@@ -149,8 +137,8 @@ export class WorldService {
         euros: p.euros,
         vidaCoins: p.vidaCoins,
         reputation: p.reputation,
-        heat: (p as any).heat ?? 0,
-        lifestyle: (p as any).lifestyle ?? 'GREY',
+        heat: p.heat ?? 0,
+        lifestyle: p.lifestyle ?? 'GREY',
         locationId: loc,
       },
       zone,
@@ -162,96 +150,99 @@ export class WorldService {
   async setLifestyle(userId: string, lifestyle: 'LEGAL' | 'GREY' | 'STREET') {
     return this.prisma.player.update({
       where: { userId },
-      data: { lifestyle } as any,
+      data: { lifestyle },
     });
   }
 
   async performAction(userId: string, actionId: string) {
-    const p = await this.player(userId);
     const action = ACTIONS.find((a) => a.id === actionId);
     if (!action) throw new NotFoundException('Acción desconocida');
-    if (p.level < action.minLevel) {
-      throw new BadRequestException(`Necesitas nivel ${action.minLevel}`);
-    }
-    const loc = (p as any).locationId || 'madrid_centro';
-    const vibe = ZONE_VIBES[loc] || 'street';
-    if (action.vibes.length && !action.vibes.includes(vibe)) {
-      throw new BadRequestException('Esa movida no encaja en este barrio');
-    }
-    let heat = (p as any).heat ?? 0;
-    if (heat >= 90 && action.id !== 'huir_calor') {
-      throw new BadRequestException(
-        'El barrio está demasiado caliente. Enfría antes de seguir.',
-      );
-    }
-    const failed = Math.random() < action.risk;
-    let eurosDelta = 0;
-    let xpDelta = 0;
-    let repDelta = 0;
-    let heatDelta = 0;
-    let narrative = '';
-    if (action.id === 'huir_calor') {
-      heatDelta = -15 - Math.floor(Math.random() * 10);
-      narrative = 'Te escondes y dejas pasar el ruido. El calor baja.';
-      xpDelta = 5;
-    } else if (failed) {
-      heatDelta = 8 + Math.floor(Math.random() * 12);
-      eurosDelta =
-        action.lifestyle === 'STREET' ? -Math.floor(20 + Math.random() * 80) : 0;
-      narrative = `La movida "${action.label}" se torció. El barrio te mira.`;
-      xpDelta = 3;
-    } else {
-      eurosDelta = 30 + p.level * 5 + Math.floor(Math.random() * 40);
-      xpDelta = 10 + Math.floor(Math.random() * 10);
-      repDelta = action.lifestyle === 'STREET' ? 2 : 1;
-      heatDelta = Math.floor(action.risk * 20);
-      narrative = `"${action.label}" sale bien. +${eurosDelta}€`;
-    }
-    const newHeat = Math.max(0, Math.min(100, heat + heatDelta));
-    let newXp = p.xp + xpDelta;
-    let newLevel = p.level;
-    while (newXp >= newLevel * 100) {
-      newXp -= newLevel * 100;
-      newLevel += 1;
-    }
-    const updated = await this.prisma.player.update({
-      where: { userId },
-      data: {
-        euros: Math.max(0, p.euros + eurosDelta),
-        xp: newXp,
-        level: newLevel,
-        reputation: p.reputation + repDelta,
-        heat: newHeat,
-      } as any,
-    });
-    const missions = await this.prisma.playerMission.findMany({
-      where: { playerId: p.id, status: 'IN_PROGRESS' },
-      take: 3,
-    });
-    for (const m of missions) {
-      const prog = Math.min(100, m.progress + 20 + Math.floor(Math.random() * 15));
-      await this.prisma.playerMission.update({
-        where: { id: m.id },
+
+    return this.prisma.$transaction(async (tx) => {
+      const p = await tx.player.findUnique({ where: { userId } });
+      if (!p) throw new NotFoundException('Player not found');
+
+      if (p.level < action.minLevel) {
+        throw new BadRequestException(`Necesitas nivel ${action.minLevel}`);
+      }
+      const loc = p.locationId || 'madrid_centro';
+      const vibe = ZONE_VIBES[loc] || 'street';
+      if (action.vibes.length && !action.vibes.includes(vibe)) {
+        throw new BadRequestException('Esa movida no encaja en este barrio');
+      }
+      const heat = p.heat ?? 0;
+      if (heat >= 90 && action.id !== 'huir_calor') {
+        throw new BadRequestException(
+          'El barrio está demasiado caliente. Enfría antes de seguir.',
+        );
+      }
+      const failed = Math.random() < action.risk;
+      let eurosDelta = 0;
+      let xpDelta = 0;
+      let repDelta = 0;
+      let heatDelta = 0;
+      let narrative = '';
+      if (action.id === 'huir_calor') {
+        heatDelta = -15 - Math.floor(Math.random() * 10);
+        narrative = 'Te escondes y dejas pasar el ruido. El calor baja.';
+        xpDelta = 5;
+      } else if (failed) {
+        heatDelta = 8 + Math.floor(Math.random() * 12);
+        eurosDelta =
+          action.lifestyle === 'STREET' ? -Math.floor(20 + Math.random() * 80) : 0;
+        narrative = `La movida "${action.label}" se torció. El barrio te mira.`;
+        xpDelta = 3;
+      } else {
+        eurosDelta = 30 + p.level * 5 + Math.floor(Math.random() * 40);
+        xpDelta = 10 + Math.floor(Math.random() * 10);
+        repDelta = action.lifestyle === 'STREET' ? 2 : 1;
+        heatDelta = Math.floor(action.risk * 20);
+        narrative = `"${action.label}" sale bien. +${eurosDelta}€`;
+      }
+      const newHeat = Math.max(0, Math.min(100, heat + heatDelta));
+      const newXp = p.xp + xpDelta;
+      const calculatedLevel = calculateLevelFromXp(newXp);
+      const newLevel = calculatedLevel > p.level ? calculatedLevel : p.level;
+
+      const updated = await tx.player.update({
+        where: { userId },
         data: {
-          progress: prog,
-          status: prog >= 100 ? 'COMPLETED' : 'IN_PROGRESS',
-          completedAt: prog >= 100 ? new Date() : undefined,
+          euros: Math.max(0, p.euros + eurosDelta),
+          xp: newXp,
+          level: newLevel,
+          reputation: p.reputation + repDelta,
+          heat: newHeat,
         },
       });
-    }
-    return {
-      ok: !failed,
-      failed,
-      actionId,
-      narrative,
-      deltas: { euros: eurosDelta, xp: xpDelta, reputation: repDelta, heat: heatDelta },
-      player: {
-        level: updated.level,
-        xp: updated.xp,
-        euros: updated.euros,
-        heat: (updated as any).heat,
-        reputation: updated.reputation,
-      },
-    };
+      const missions = await tx.playerMission.findMany({
+        where: { playerId: p.id, status: 'IN_PROGRESS' },
+        take: 3,
+      });
+      for (const m of missions) {
+        const prog = Math.min(100, m.progress + 20 + Math.floor(Math.random() * 15));
+        await tx.playerMission.update({
+          where: { id: m.id },
+          data: {
+            progress: prog,
+            status: prog >= 100 ? 'COMPLETED' : 'IN_PROGRESS',
+            completedAt: prog >= 100 ? new Date() : undefined,
+          },
+        });
+      }
+      return {
+        ok: !failed,
+        failed,
+        actionId,
+        narrative,
+        deltas: { euros: eurosDelta, xp: xpDelta, reputation: repDelta, heat: heatDelta },
+        player: {
+          level: updated.level,
+          xp: updated.xp,
+          euros: updated.euros,
+          heat: updated.heat,
+          reputation: updated.reputation,
+        },
+      };
+    });
   }
 }
