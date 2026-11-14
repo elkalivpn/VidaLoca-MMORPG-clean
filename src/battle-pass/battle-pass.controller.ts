@@ -6,8 +6,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { UserRole } from '@prisma/client';
 import { BattlePassService } from './battle-pass.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { IsNumber, Min, Max } from 'class-validator';
 
 class ClaimRewardDto {
@@ -20,6 +23,7 @@ class ClaimRewardDto {
 class AddXpDto {
   @IsNumber()
   @Min(1)
+  @Max(5000)
   amount: number;
 }
 
@@ -39,6 +43,8 @@ export class BattlePassController {
   }
 
   @Post('xp')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   async addXp(
     @CurrentUser('id') userId: string,
     @Body() dto: AddXpDto,

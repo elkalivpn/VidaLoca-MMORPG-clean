@@ -159,8 +159,34 @@ export class PropertiesService {
     if (!property) throw new NotFoundException('Property not found');
 
     const type = property.template.type;
+    const cooldownMsByType: Record<string, number> = {
+      WAREHOUSE: 15 * 60 * 1000,
+      APARTMENT: 3 * 60 * 1000,
+      MANSION: 3 * 60 * 1000,
+      CLUB: 30 * 1000,
+      GARAGE: 30 * 1000,
+    };
+    const cooldownMs = cooldownMsByType[type] ?? 60 * 1000;
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - cooldownMs);
 
     return this.prisma.$transaction(async (tx) => {
+      const claimUse = await tx.playerProperty.updateMany({
+        where: {
+          id: propertyId,
+          playerId: player.id,
+          OR: [{ lastUsedAt: null }, { lastUsedAt: { lte: cutoff } }],
+        },
+        data: { lastUsedAt: now },
+      });
+
+      if (claimUse.count === 0) {
+        const waitSec = Math.ceil(cooldownMs / 1000);
+        throw new BadRequestException(
+          `Esta propiedad está en enfriamiento. Espera unos minutos antes de volver a usarla (cooldown ${waitSec}s).`,
+        );
+      }
+
       const freshPlayer = await tx.player.findUnique({
         where: { id: player.id },
       });

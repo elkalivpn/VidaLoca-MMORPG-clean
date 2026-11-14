@@ -9,6 +9,20 @@ import {
 } from '@nestjs/common';
 import { ClansService } from './clans.service';
 import { AuthGuard } from '@nestjs/passport';
+import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
+
+class CreateClanDto {
+  @IsString()
+  @MinLength(3)
+  @MaxLength(32)
+  name: string;
+
+  @IsString()
+  @Matches(/^[A-Za-z0-9]{2,6}$/, {
+    message: 'El tag debe tener entre 2 y 6 caracteres alfanuméricos',
+  })
+  tag: string;
+}
 
 @Controller('clans')
 @UseGuards(AuthGuard('jwt'))
@@ -16,12 +30,12 @@ export class ClansController {
   constructor(private clansService: ClansService) {}
 
   @Post('create')
-  async createClan(
-    @Req() req: any,
-    @Body('name') name: string,
-    @Body('tag') tag: string,
-  ) {
-    return this.clansService.createClan(req.user.id, name, tag);
+  async createClan(@Req() req: any, @Body() dto: CreateClanDto) {
+    return this.clansService.createClan(
+      req.user.id,
+      dto.name.trim(),
+      dto.tag.trim().toUpperCase(),
+    );
   }
 
   @Get('my')

@@ -95,7 +95,7 @@ describe('HeistsService', () => {
   });
 
   describe('getCatalogAndLobbies', () => {
-    it('returns the 3 Spain heists and active open lobbies', async () => {
+    it('returns all regional Spain heists and active open lobbies', async () => {
       prisma.player.findUnique.mockResolvedValue(leaderPlayer);
       await service.createLobby('user-1', {
         heistId: 'blindado_castellana',
@@ -104,7 +104,7 @@ describe('HeistsService', () => {
 
       const res = service.getCatalogAndLobbies();
 
-      expect(res.catalog).toHaveLength(3);
+      expect(res.catalog).toHaveLength(HEIST_CATALOG.length);
       expect(res.catalog.map((h) => h.id)).toEqual(
         HEIST_CATALOG.map((h) => h.id),
       );

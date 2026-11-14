@@ -64,8 +64,38 @@ function inferHighway(from: CityLocation, to: CityLocation): string {
     return `Red Urbana ${from.city}`;
   }
   const cities = new Set([from.city, to.city]);
-  if (cities.has('Madrid') && cities.has('Bilbao'))
-    return 'Autovía A-1 / AP-68';
+  if (cities.has('Las Palmas') || cities.has('Tenerife')) {
+    if (cities.has('Las Palmas') && cities.has('Tenerife')) {
+      return 'Ferry Canario / Binter';
+    }
+    return 'Puente Aéreo Atlántico';
+  }
+  if (cities.has('Palma') || cities.has('Ibiza')) {
+    if (cities.has('Palma') && cities.has('Ibiza')) {
+      return 'Ferry Interinsular Balear';
+    }
+    return 'Ferry / Puente Aéreo Balear';
+  }
+  if (
+    cities.has('A Coruña') ||
+    cities.has('Vigo') ||
+    cities.has('Santiago de Compostela')
+  ) {
+    return 'Corredor A-6 / AP-9 Galicia';
+  }
+  if (
+    cities.has('San Sebastián') ||
+    cities.has('Vitoria-Gasteiz') ||
+    cities.has('Bilbao')
+  ) {
+    return 'Autopista AP-8 / AP-68 País Vasco';
+  }
+  if (cities.has('Madrid') && cities.has('Toledo')) return 'Autovía A-42';
+  if (cities.has('Madrid') && cities.has('Valladolid'))
+    return 'Autovía A-6 / A-601';
+  if (cities.has('Valladolid') && cities.has('Salamanca'))
+    return 'Autovía A-62';
+  if (cities.has('Madrid') && cities.has('Zaragoza')) return 'Autovía A-2';
   if (cities.has('Madrid') && cities.has('Barcelona'))
     return 'Autovía A-2 / AP-2';
   if (cities.has('Madrid') && cities.has('Valencia')) return 'Autovía A-3';
@@ -80,8 +110,6 @@ function inferHighway(from: CityLocation, to: CityLocation): string {
     return 'Autovía A-7 / AP-7';
   if (cities.has('Sevilla') && cities.has('Marbella'))
     return 'Autovía A-92 / AP-7';
-  if (cities.has('Bilbao') && cities.has('Barcelona'))
-    return 'Autopista AP-68 / AP-2';
   return 'Red de Autovías del Estado';
 }
 
@@ -448,6 +476,13 @@ export default function CityMap({
     }
   }
 
+  function flyToRegion(center: [number, number], zoom: number) {
+    const map = mapInstanceRef.current;
+    if (map) {
+      map.flyTo({ center, zoom, duration: 750 });
+    }
+  }
+
   async function handleTravel(zoneId: string) {
     if (!token || busy || zoneId === hereId) return;
     setBusy(true);
@@ -493,13 +528,36 @@ export default function CityMap({
         </div>
 
         {webglOk && (
-          <button
-            type="button"
-            onClick={resetSpainView}
-            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:border-amber-500/50 hover:text-amber-300"
-          >
-            Vista España
-          </button>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={resetSpainView}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-200 hover:border-amber-500/50 hover:text-amber-300"
+            >
+              Península
+            </button>
+            <button
+              type="button"
+              onClick={() => flyToRegion([-5.6, 42.9], 6.4)}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-200 hover:border-amber-500/50 hover:text-amber-300"
+            >
+              Galicia & Norte
+            </button>
+            <button
+              type="button"
+              onClick={() => flyToRegion([2.1, 39.3], 7.4)}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-200 hover:border-amber-500/50 hover:text-amber-300"
+            >
+              Baleares
+            </button>
+            <button
+              type="button"
+              onClick={() => flyToRegion([-15.85, 28.25], 7.6)}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-200 hover:border-amber-500/50 hover:text-amber-300"
+            >
+              Canarias
+            </button>
+          </div>
         )}
       </div>
 
@@ -565,82 +623,217 @@ export default function CityMap({
             <div className="relative h-full min-h-[460px] w-full bg-[radial-gradient(circle_at_50%_45%,rgba(245,158,11,0.08),rgba(9,9,11,0.98))] p-4">
               <div className="mb-2 flex items-center justify-between text-xs text-zinc-400">
                 <span>Modo esquemático (WebGL no disponible)</span>
-                <span className="text-amber-400">Península Ibérica</span>
+                <span className="text-amber-400">
+                  España + Baleares + Canarias
+                </span>
               </div>
               <svg
                 viewBox="0 0 100 100"
                 className="h-[390px] w-full rounded-lg border border-zinc-800/80 bg-zinc-900/40"
               >
-                {/* Schematic Iberian highway lines */}
+                {/* Canarias inset frame */}
+                <rect
+                  x="4"
+                  y="78"
+                  width="24"
+                  height="18"
+                  rx="2"
+                  fill="rgba(14,165,233,0.06)"
+                  stroke="#38bdf8"
+                  strokeOpacity="0.35"
+                  strokeWidth="0.4"
+                  strokeDasharray="1 1"
+                />
+                {/* Schematic Iberian, Balearic & Atlantic corridors */}
                 <line
                   x1="48"
-                  y1="42"
+                  y1="44"
                   x2="42"
-                  y2="18"
+                  y2="16"
                   stroke="#f59e0b"
                   strokeOpacity="0.45"
-                  strokeWidth="0.6"
+                  strokeWidth="0.55"
+                  strokeDasharray="1.5 1"
+                />
+                <line
+                  x1="42"
+                  y1="16"
+                  x2="52"
+                  y2="15"
+                  stroke="#f59e0b"
+                  strokeOpacity="0.45"
+                  strokeWidth="0.55"
                   strokeDasharray="1.5 1"
                 />
                 <line
                   x1="48"
-                  y1="42"
-                  x2="72"
+                  y1="44"
+                  x2="39"
+                  y2="31"
+                  stroke="#f59e0b"
+                  strokeOpacity="0.45"
+                  strokeWidth="0.55"
+                  strokeDasharray="1.5 1"
+                />
+                <line
+                  x1="39"
+                  y1="31"
+                  x2="31"
+                  y2="37"
+                  stroke="#f59e0b"
+                  strokeOpacity="0.45"
+                  strokeWidth="0.55"
+                  strokeDasharray="1.5 1"
+                />
+                <line
+                  x1="39"
+                  y1="31"
+                  x2="16"
+                  y2="15"
+                  stroke="#f59e0b"
+                  strokeOpacity="0.45"
+                  strokeWidth="0.55"
+                  strokeDasharray="1.5 1"
+                />
+                <line
+                  x1="16"
+                  y1="15"
+                  x2="15"
+                  y2="21"
+                  stroke="#f59e0b"
+                  strokeOpacity="0.45"
+                  strokeWidth="0.55"
+                  strokeDasharray="1.5 1"
+                />
+                <line
+                  x1="15"
+                  y1="21"
+                  x2="14"
+                  y2="27"
+                  stroke="#f59e0b"
+                  strokeOpacity="0.45"
+                  strokeWidth="0.55"
+                  strokeDasharray="1.5 1"
+                />
+                <line
+                  x1="48"
+                  y1="44"
+                  x2="61"
+                  y2="30"
+                  stroke="#f59e0b"
+                  strokeOpacity="0.45"
+                  strokeWidth="0.55"
+                  strokeDasharray="1.5 1"
+                />
+                <line
+                  x1="61"
+                  y1="30"
+                  x2="74"
                   y2="28"
                   stroke="#f59e0b"
                   strokeOpacity="0.45"
-                  strokeWidth="0.6"
+                  strokeWidth="0.55"
                   strokeDasharray="1.5 1"
                 />
                 <line
                   x1="48"
-                  y1="42"
-                  x2="62"
-                  y2="52"
+                  y1="44"
+                  x2="64"
+                  y2="53"
                   stroke="#f59e0b"
                   strokeOpacity="0.45"
-                  strokeWidth="0.6"
+                  strokeWidth="0.55"
                   strokeDasharray="1.5 1"
                 />
                 <line
                   x1="48"
-                  y1="42"
-                  x2="32"
-                  y2="68"
+                  y1="44"
+                  x2="45"
+                  y2="50"
                   stroke="#f59e0b"
                   strokeOpacity="0.45"
-                  strokeWidth="0.6"
+                  strokeWidth="0.55"
                   strokeDasharray="1.5 1"
                 />
                 <line
-                  x1="72"
+                  x1="45"
+                  y1="50"
+                  x2="31"
+                  y2="69"
+                  stroke="#f59e0b"
+                  strokeOpacity="0.45"
+                  strokeWidth="0.55"
+                  strokeDasharray="1.5 1"
+                />
+                <line
+                  x1="74"
                   y1="28"
-                  x2="62"
-                  y2="52"
+                  x2="64"
+                  y2="53"
                   stroke="#f59e0b"
                   strokeOpacity="0.45"
-                  strokeWidth="0.6"
+                  strokeWidth="0.55"
                   strokeDasharray="1.5 1"
                 />
                 <line
-                  x1="62"
-                  y1="52"
-                  x2="38"
+                  x1="64"
+                  y1="53"
+                  x2="39"
                   y2="78"
                   stroke="#f59e0b"
                   strokeOpacity="0.45"
-                  strokeWidth="0.6"
+                  strokeWidth="0.55"
                   strokeDasharray="1.5 1"
                 />
                 <line
-                  x1="32"
-                  y1="68"
-                  x2="38"
+                  x1="31"
+                  y1="69"
+                  x2="39"
                   y2="78"
                   stroke="#f59e0b"
                   strokeOpacity="0.45"
-                  strokeWidth="0.6"
+                  strokeWidth="0.55"
                   strokeDasharray="1.5 1"
+                />
+                <line
+                  x1="64"
+                  y1="53"
+                  x2="78"
+                  y2="57"
+                  stroke="#38bdf8"
+                  strokeOpacity="0.45"
+                  strokeWidth="0.5"
+                  strokeDasharray="1 1"
+                />
+                <line
+                  x1="78"
+                  y1="57"
+                  x2="86"
+                  y2="49"
+                  stroke="#38bdf8"
+                  strokeOpacity="0.45"
+                  strokeWidth="0.5"
+                  strokeDasharray="1 1"
+                />
+                <line
+                  x1="74"
+                  y1="28"
+                  x2="86"
+                  y2="49"
+                  stroke="#38bdf8"
+                  strokeOpacity="0.45"
+                  strokeWidth="0.5"
+                  strokeDasharray="1 1"
+                />
+                <line
+                  x1="11"
+                  y1="85"
+                  x2="20"
+                  y2="88"
+                  stroke="#38bdf8"
+                  strokeOpacity="0.5"
+                  strokeWidth="0.55"
+                  strokeDasharray="1 1"
                 />
               </svg>
               {zones.map((z) => {

@@ -8,6 +8,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  schemas  = ["public", "vault"]
 }
 
 // ============================================
@@ -15,24 +16,33 @@ datasource db {
 // ============================================
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  username      String    @unique
-  password      String
-  role          UserRole  @default(PLAYER)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  username            String    @unique
+  password            String
+  role                UserRole  @default(PLAYER)
+  isBanned            Boolean   @default(false)
+  banReason           String?
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  tokenVersion        Int       @default(0)
+  lastPasswordChange  DateTime  @default(now())
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
   
-  player        Player?
-  refreshTokens RefreshToken[]
+  player              Player?
+  refreshTokens       RefreshToken[]
   
   @@map("users")
+  @@schema("public")
 }
 
 enum UserRole {
   PLAYER
   ADMIN
   MODERATOR
+
+  @@schema("public")
 }
 
 enum FactionType {
@@ -41,6 +51,8 @@ enum FactionType {
   GUARDIA_CIVIL
   SYNDICATE
   ENTREPRENEUR
+
+  @@schema("public")
 }
 
 model Player {
@@ -84,6 +96,7 @@ model Player {
   updatedAt       DateTime @updatedAt
 
   @@map("players")
+  @@schema("public")
 }
 
 model ItemTemplate {
@@ -99,6 +112,7 @@ model ItemTemplate {
   items       InventoryItem[]
   
   @@map("item_templates")
+  @@schema("public")
 }
 
 enum ItemType {
@@ -108,6 +122,8 @@ enum ItemType {
   CONSUMABLE
   SKILL_CARD
   COSMETIC
+
+  @@schema("public")
 }
 
 enum Rarity {
@@ -115,6 +131,8 @@ enum Rarity {
   RARE
   EPIC
   LEGENDARY
+
+  @@schema("public")
 }
 
 model InventoryItem {
@@ -129,6 +147,7 @@ model InventoryItem {
   acquiredAt DateTime @default(now())
   
   @@map("inventory")
+  @@schema("public")
 }
 
 model VehicleTemplate {
@@ -145,6 +164,7 @@ model VehicleTemplate {
   vehicles    PlayerVehicle[]
   
   @@map("vehicle_templates")
+  @@schema("public")
 }
 
 model PlayerVehicle {
@@ -160,6 +180,7 @@ model PlayerVehicle {
   isPrimary    Boolean  @default(false)
   
   @@map("player_vehicles")
+  @@schema("public")
 }
 
 model PropertyTemplate {
@@ -176,6 +197,7 @@ model PropertyTemplate {
   properties  PlayerProperty[]
   
   @@map("property_templates")
+  @@schema("public")
 }
 
 enum PropertyType {
@@ -184,6 +206,8 @@ enum PropertyType {
   WAREHOUSE
   CLUB
   GARAGE
+
+  @@schema("public")
 }
 
 model PlayerProperty {
@@ -195,9 +219,11 @@ model PlayerProperty {
   
   purchasedAt         DateTime  @default(now())
   lastRentCollectedAt DateTime?
+  lastUsedAt          DateTime?
   customized          Json?
   
   @@map("player_properties")
+  @@schema("public")
 }
 
 model Clan {
@@ -216,6 +242,7 @@ model Clan {
   createdAt   DateTime @default(now())
   
   @@map("clans")
+  @@schema("public")
 }
 
 model ClanMember {
@@ -229,6 +256,7 @@ model ClanMember {
   joinedAt  DateTime @default(now())
   
   @@map("clan_members")
+  @@schema("public")
 }
 
 enum ClanRole {
@@ -236,6 +264,8 @@ enum ClanRole {
   OFFICER
   MEMBER
   RECRUIT
+
+  @@schema("public")
 }
 
 model Territory {
@@ -250,6 +280,7 @@ model Territory {
   controls     ClanTerritory[]
   
   @@map("territories")
+  @@schema("public")
 }
 
 model ClanTerritory {
@@ -262,21 +293,45 @@ model ClanTerritory {
   capturedAt  DateTime @default(now())
   
   @@map("clan_territories")
+  @@schema("public")
+}
+
+enum MissionMode {
+  STORY
+  ONLINE_SOLO
+  ONLINE_COOP
+
+  @@schema("public")
 }
 
 model MissionTemplate {
-  id          String   @id @default(uuid())
-  title       String
-  description String
-  difficulty  Difficulty
-  rewardEuros Float
-  rewardXp    Int
-  requirement Json?
+  id              String      @id @default(uuid())
+  title           String
+  description     String
+  difficulty      Difficulty
+  mode            MissionMode @default(ONLINE_SOLO)
+  category        String      @default("GENERAL")
+  city            String?
+  minLevel        Int         @default(1)
+  minPlayers      Int         @default(1)
+  maxPlayers      Int         @default(1)
+  isOptional      Boolean     @default(true)
+  isRepeatable    Boolean     @default(false)
+  cooldownHours   Int         @default(0)
+  requiredSteps   Int         @default(3)
+  rewardEuros     Float
+  rewardXp        Int
+  rewardVidaCoins Int         @default(0)
+  rewardReputation Int        @default(0)
+  rewardItemName  String?
+  unlockBenefit   String?
+  requirement     Json?
   
-  instances   PlayerMission[]
-  completions CompletedMission[]
+  instances       PlayerMission[]
+  completions     CompletedMission[]
   
   @@map("mission_templates")
+  @@schema("public")
 }
 
 enum Difficulty {
@@ -284,21 +339,27 @@ enum Difficulty {
   MEDIUM
   HARD
   SUICIDE
+
+  @@schema("public")
 }
 
 model PlayerMission {
-  id          String   @id @default(uuid())
-  playerId    String
-  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  templateId  String
-  template    MissionTemplate @relation(fields: [templateId], references: [id])
+  id               String        @id @default(uuid())
+  playerId         String
+  player           Player        @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  templateId       String
+  template         MissionTemplate @relation(fields: [templateId], references: [id])
   
-  status      MissionStatus @default(PENDING)
-  progress    Int      @default(0)
-  startedAt   DateTime @default(now())
-  completedAt DateTime?
+  status           MissionStatus @default(PENDING)
+  progress         Int           @default(0)
+  squadCode        String?
+  coOpParticipants Json?
+  lastStepAt       DateTime?
+  startedAt        DateTime      @default(now())
+  completedAt      DateTime?
   
   @@map("player_missions")
+  @@schema("public")
 }
 
 enum MissionStatus {
@@ -307,19 +368,24 @@ enum MissionStatus {
   COMPLETED
   FAILED
   CLAIMED
+  ABANDONED
+  SKIPPED
+
+  @@schema("public")
 }
 
 model CompletedMission {
-  id          String   @id @default(uuid())
-  playerId    String
-  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  missionId   String
-  mission     MissionTemplate @relation(fields: [missionId], references: [id])
+  id            String          @id @default(uuid())
+  playerId      String
+  player        Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  missionId     String
+  mission       MissionTemplate @relation(fields: [missionId], references: [id])
   
-  completedAt DateTime @default(now())
-  rewardClaimed Boolean @default(false)
+  completedAt   DateTime        @default(now())
+  rewardClaimed Boolean         @default(false)
   
   @@map("completed_missions")
+  @@schema("public")
 }
 
 model BattlePassSeason {
@@ -333,6 +399,7 @@ model BattlePassSeason {
   progresses   BattlePassProgress[]
   
   @@map("battle_pass_seasons")
+  @@schema("public")
 }
 
 model BattlePassProgress {
@@ -348,6 +415,7 @@ model BattlePassProgress {
   rewardsClaimed Int[]
   
   @@map("battle_pass_progress")
+  @@schema("public")
 }
 
 model TransactionLog {
@@ -365,6 +433,7 @@ model TransactionLog {
   createdAt DateTime @default(now())
   
   @@map("transaction_logs")
+  @@schema("public")
 }
 
 enum TransactionType {
@@ -373,22 +442,29 @@ enum TransactionType {
   PURCHASE
   GIFT
   PENALTY
+
+  @@schema("public")
 }
 
 enum Currency {
   EUR
   VIDACOIN
+
+  @@schema("public")
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
+  id        String    @id @default(uuid())
+  token     String    @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipHash    String?
+  revokedAt DateTime?
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
   
   @@map("refresh_tokens")
+  @@schema("public")
 }
 
 model Skill {
@@ -401,6 +477,7 @@ model Skill {
   players     PlayerSkill[]
   
   @@map("skills")
+  @@schema("public")
 }
 
 enum SkillCategory {
@@ -409,6 +486,8 @@ enum SkillCategory {
   STEALTH
   BUSINESS
   SOCIAL
+
+  @@schema("public")
 }
 
 model PlayerSkill {
@@ -423,6 +502,7 @@ model PlayerSkill {
   
   @@unique([playerId, skillId])
   @@map("player_skills")
+  @@schema("public")
 }
 
 model Achievement {
@@ -436,6 +516,7 @@ model Achievement {
   players     PlayerAchievement[]
   
   @@map("achievements")
+  @@schema("public")
 }
 
 model PlayerAchievement {
@@ -449,6 +530,7 @@ model PlayerAchievement {
   
   @@unique([playerId, achievementId])
   @@map("player_achievements")
+  @@schema("public")
 }
 
 model PlayerWeapon {
@@ -462,6 +544,7 @@ model PlayerWeapon {
   equipped  Boolean  @default(false)
   
   @@map("player_weapons")
+  @@schema("public")
 }
 
 model GameSession {
@@ -474,4 +557,105 @@ model GameSession {
   sessionData Json?    // Actividad durante la sesión
   
   @@map("game_sessions")
+  @@schema("public")
 }
+
+// ============================================
+// SECURITY AUDIT & ANTI-CHEAT TELEMETRY
+// ============================================
+
+model SecurityAuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  eventType  String
+  severity   String   @default("INFO") // INFO | WARN | HIGH | CRITICAL
+  target     String?
+  ipHash     String?
+  details    Json?
+  prevHash   String
+  entryHash  String   @unique
+  createdAt  DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([eventType, createdAt])
+  @@map("security_audit_logs")
+  @@schema("public")
+}
+
+model AntiCheatIncident {
+  id          String   @id @default(uuid())
+  userId      String?
+  playerId    String?
+  rule        String   // SPEEDHACK | TELEPORT | RATE_ABUSE | PROMPT_INJECT | ECONOMY_TAMPER | DOUBLE_CLAIM
+  severity    String   @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  strikes     Int      @default(1)
+  blocked     Boolean  @default(true)
+  evidence    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([playerId, createdAt])
+  @@index([userId, createdAt])
+  @@map("anti_cheat_incidents")
+  @@schema("public")
+}
+
+// ============================================
+// CAJA ULTRA-BLINDADA (ISOLATED SCHEMA "vault")
+// Envelope-encrypted (AES-256-GCM) payment tokens & sensitive PII/KYC
+// ============================================
+
+enum VaultRecordType {
+  PAYMENT_CARD
+  IDENTITY_KYC
+  RECOVERY_SECRET
+
+  @@schema("vault")
+}
+
+model VaultRecord {
+  id               String          @id @default(uuid())
+  vaultToken       String          @unique // Opaque token returned to app layer (never raw PAN/SSN)
+  ownerUserIdHash  String          // HMAC-SHA256 keyed hash of userId (no plain user FK leakage)
+  recordType       VaultRecordType
+  keyVersion       Int             @default(1)
+  algorithm        String          @default("AES-256-GCM")
+  encryptedDek     String          // Per-record DEK wrapped by VAULT_MASTER_KEY (iv:tag:cipher)
+  iv               String          // 96-bit random IV (base64)
+  authTag          String          // 128-bit GCM auth tag (base64)
+  encryptedPayload String          // AES-256-GCM ciphertext of sensitive JSON
+  blindIndex       String          // HMAC-SHA256 blind index for deduplication without decrypting
+  maskedSummary    String          // Safe display string ONLY e.g. "VISA •••• 4242 (12/29)"
+  cardBrand        String?
+  cardLast4        String?
+  expMonth         Int?
+  expYear          Int?
+  isRevoked        Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  accessLogs       VaultAccessLog[]
+
+  @@index([ownerUserIdHash, recordType])
+  @@index([blindIndex])
+  @@map("vault_records")
+  @@schema("vault")
+}
+
+model VaultAccessLog {
+  id            String      @id @default(uuid())
+  vaultRecordId String?
+  vaultRecord   VaultRecord? @relation(fields: [vaultRecordId], references: [id], onDelete: SetNull)
+  actorIdHash   String
+  action        String      // TOKENIZE | LIST_MASKED | VERIFY_TOKEN | REVOKE | ROTATE_KEY | DENIED
+  outcome       String      // ALLOWED | BLOCKED
+  ipHash        String?
+  reason        String?
+  prevHash      String
+  entryHash     String      @unique
+  createdAt     DateTime    @default(now())
+
+  @@index([actorIdHash, createdAt])
+  @@map("vault_access_logs")
+  @@schema("vault")
+}
+

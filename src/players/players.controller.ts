@@ -46,10 +46,9 @@ export class PlayersController {
     @Query('page') page = '1',
     @Query('limit') limit = '20',
   ) {
-    return this.playersService.getAllPlayers(
-      parseInt(page, 10),
-      parseInt(limit, 10),
-    );
+    const safePage = Math.max(1, Number.parseInt(page, 10) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
+    return this.playersService.getAllPlayers(safePage, safeLimit);
   }
 
   @Post('location')

@@ -22,6 +22,10 @@ export class InventoryService {
   }
 
   async addItemToInventory(userId: string, templateId: string, quantity: number = 1) {
+    if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 1000) {
+      throw new BadRequestException('Quantity must be a positive integer (1..1000)');
+    }
+
     const player = await this.prisma.player.findUnique({ where: { userId } });
 
     if (!player) {
@@ -58,6 +62,10 @@ export class InventoryService {
   }
 
   async removeItemFromInventory(userId: string, itemId: string, quantity: number = 1) {
+    if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 1000) {
+      throw new BadRequestException('Quantity must be a positive integer (1..1000)');
+    }
+
     const player = await this.prisma.player.findUnique({ where: { userId } });
 
     if (!player) {

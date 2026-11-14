@@ -10,8 +10,8 @@ export class EconomyService {
   ) {}
 
   async addEuros(userId: string, amount: number, reason: string, reference?: string) {
-    if (amount <= 0) {
-      throw new BadRequestException('Amount must be positive');
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('Amount must be a finite positive number');
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -32,8 +32,8 @@ export class EconomyService {
   }
 
   async spendEuros(userId: string, amount: number, reason: string, reference?: string) {
-    if (amount <= 0) {
-      throw new BadRequestException('Amount must be positive');
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('Amount must be a finite positive number');
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -58,8 +58,8 @@ export class EconomyService {
   }
 
   async addVidaCoins(userId: string, amount: number, reason: string, reference?: string) {
-    if (amount <= 0) {
-      throw new BadRequestException('Amount must be positive');
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('Amount must be a finite positive number');
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -80,8 +80,8 @@ export class EconomyService {
   }
 
   async spendVidaCoins(userId: string, amount: number, reason: string, reference?: string) {
-    if (amount <= 0) {
-      throw new BadRequestException('Amount must be positive');
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('Amount must be a finite positive number');
     }
 
     return this.prisma.$transaction(async (tx) => {

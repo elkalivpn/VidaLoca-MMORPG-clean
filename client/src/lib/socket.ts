@@ -2,7 +2,8 @@
 
 import { io, Socket } from 'socket.io-client';
 
-const WS_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const WS_URL =
+  process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_API_URL || '';
 
 let socket: Socket | null = null;
 
@@ -21,7 +22,7 @@ export function connectSocket(token: string): Socket {
 
   socket = io(`${WS_URL}/game`, {
     auth: { token },
-    transports: ['websocket', 'polling'],
+    transports: ['polling', 'websocket'],
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 1000,

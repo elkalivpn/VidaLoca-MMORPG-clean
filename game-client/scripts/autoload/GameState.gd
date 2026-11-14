@@ -9,36 +9,24 @@ signal chapter_updated(chapter_index: int)
 const SAVE_PATH := "user://vidaloca_save.json"
 
 const STORY_CHAPTERS: Array[Dictionary] = [
-	{
-		"id": 1,
-		"title": "Capítulo 1: Luces de Gran Vía",
-		"city": "Madrid Centro",
-		"objective": "Consigue tu primer contacto nocturno y domina las calles del centro."
-	},
-	{
-		"id": 2,
-		"title": "Capítulo 2: Sombras en Lavapiés",
-		"city": "Madrid Sur",
-		"objective": "Evita las patrullas locales y entrega el paquete en el callejón."
-	},
-	{
-		"id": 3,
-		"title": "Capítulo 3: Muelle de Carga",
-		"city": "Valencia Puerto",
-		"objective": "Intercepta el convoy nocturno en los muelles antes del amanecer."
-	},
-	{
-		"id": 4,
-		"title": "Capítulo 4: Asfalto Ardiente",
-		"city": "Sevilla Polígono",
-		"objective": "Gana la carrera clandestina de derrape sin subir el calor policial."
-	},
-	{
-		"id": 5,
-		"title": "Capítulo 5: El Golpe del Estrecho",
-		"city": "Costa del Sol",
-		"objective": "Consolida tu facción y toma el control definitivo del sindicato."
-	}
+	{"id": 1, "title": "Cap. 1: Luces de Gran Vía", "city": "Madrid Centro", "optional": true, "benefit": "+450 XP + Chaleco II", "objective": "Establece tu primer contacto nocturno en Madrid Centro."},
+	{"id": 2, "title": "Cap. 2: Sombras en Malasaña", "city": "Malasaña (Madrid)", "optional": true, "benefit": "+700 XP + Glock 19", "objective": "Recupera el maletín cifrado esquivando patrullas."},
+	{"id": 3, "title": "Cap. 3: Murallas de Toledo", "city": "Toledo Alcázar", "optional": true, "benefit": "+950 XP + Nitro N2O", "objective": "Negocia paso seguro por los túneles del Alcázar sobre el Tajo."},
+	{"id": 4, "title": "Cap. 4: Convoy del Pisuerga", "city": "Valladolid", "optional": true, "benefit": "+1.400 XP + Remington 870", "objective": "Intercepta rutas logísticas en el corazón de Castilla."},
+	{"id": 5, "title": "Cap. 5: Pacto en Salamanca", "city": "Salamanca Plaza Mayor", "optional": true, "benefit": "+1.850 XP + Kit Derrape", "objective": "Cierra el acuerdo nocturno hacia la frontera oeste."},
+	{"id": 6, "title": "Cap. 6: Corredor del Ebro", "city": "Zaragoza Delicias", "optional": true, "benefit": "+2.400 XP + SIG P226", "objective": "Desmantela el peaje clandestino entre Madrid y Barcelona."},
+	{"id": 7, "title": "Cap. 7: Niebla en la Ría", "city": "Puerto de Vigo (Galicia)", "optional": true, "benefit": "+3.100 XP + HK MP5A3", "objective": "Sigue la descarga furtiva frente a las Islas Cíes."},
+	{"id": 8, "title": "Cap. 8: Soportales de Santiago", "city": "Santiago de Compostela", "optional": true, "benefit": "+3.600 XP + Chaleco IIIA", "objective": "Descifra los libros contables ocultos bajo la tormenta."},
+	{"id": 9, "title": "Cap. 9: Navieras de A Coruña", "city": "A Coruña Marina", "optional": true, "benefit": "+4.400 XP + AK-47", "objective": "Asegura el muelle estratégico atlántico."},
+	{"id": 10, "title": "Cap. 10: Acero en Bilbao", "city": "Bilbao Abando (País Vasco)", "optional": true, "benefit": "+5.400 XP + Suspensión Racing", "objective": "Infiltración corporativa en la ría de Bilbao."},
+	{"id": 11, "title": "Cap. 11: Cruce de Vitoria", "city": "Vitoria-Gasteiz", "optional": true, "benefit": "+6.400 XP + Desert Eagle", "objective": "Corta las rutas del eje norte en Álava."},
+	{"id": 12, "title": "Cap. 12: Gala de La Concha", "city": "San Sebastián", "optional": true, "benefit": "+7.600 XP + FN P90", "objective": "Golpe de guante blanco junto a la bahía donostiarra."},
+	{"id": 13, "title": "Cap. 13: Las Ramblas", "city": "Barcelona", "optional": true, "benefit": "+9.000 XP + Benelli M4", "objective": "Desvía el envío blindado hacia el puerto mediterráneo."},
+	{"id": 14, "title": "Cap. 14: Regata en Palma", "city": "Palma de Mallorca (Baleares)", "optional": true, "benefit": "+11.000 XP + Chaleco IV", "objective": "Cruza a Baleares e intercepta cuentas offshore."},
+	{"id": 15, "title": "Cap. 15: Dalt Vila Nocturna", "city": "Ibiza (Baleares)", "optional": true, "benefit": "+13.500 XP + HK416 D", "objective": "Operación VIP entre villas blindadas y pistas privadas."},
+	{"id": 16, "title": "Cap. 16: Puerto de La Luz", "city": "Las Palmas (Canarias)", "optional": true, "benefit": "+17.000 XP + Kit Biturbo", "objective": "Domina el nodo tricontinental atlántico en Gran Canaria."},
+	{"id": 17, "title": "Cap. 17: Sombra del Teide", "city": "Tenerife (Canarias)", "optional": true, "benefit": "+22.000 XP + SCAR-H CQC", "objective": "Persecución por carreteras volcánicas hasta Anaga."},
+	{"id": 18, "title": "Cap. 18: Corona Ibérica", "city": "Marbella / Puerto Banús", "optional": true, "benefit": "+32.000 XP + Leyenda", "objective": "Unifica la red peninsular e insular bajo tu sindicato."}
 ]
 
 var player_name: String = "ElNómada"

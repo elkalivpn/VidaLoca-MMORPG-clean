@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -15,6 +16,7 @@ import {
 } from '../common/constants/zones';
 import { calculateLevelFromXp } from '../common/utils/level.util';
 import { MarketGoodId, MarketTradeDto } from './dto/market-trade.dto';
+import { AntiCheatService } from '../security/anti-cheat.service';
 
 interface MarketGoodDef {
   id: MarketGoodId;
@@ -37,6 +39,19 @@ const MARKET_GOODS: MarketGoodDef[] = [
       Valencia: 0.9,
       Sevilla: 0.85,
       Bilbao: 0.95,
+      'San Sebastián': 1.22,
+      'Vitoria-Gasteiz': 0.95,
+      Toledo: 0.88,
+      Valladolid: 0.9,
+      Salamanca: 0.92,
+      Zaragoza: 0.94,
+      'A Coruña': 1.04,
+      Vigo: 0.86,
+      'Santiago de Compostela': 0.95,
+      Palma: 1.28,
+      Ibiza: 1.34,
+      'Las Palmas': 0.82,
+      Tenerife: 0.84,
     },
   },
   {
@@ -48,9 +63,22 @@ const MARKET_GOODS: MarketGoodDef[] = [
       Madrid: 1.15,
       Barcelona: 1.2,
       Valencia: 1.0,
-      Bilbao: 1.05,
+      Bilbao: 1.12,
       Sevilla: 0.85,
       Marbella: 0.9,
+      'San Sebastián': 1.08,
+      'Vitoria-Gasteiz': 1.14,
+      Toledo: 0.92,
+      Valladolid: 1.05,
+      Salamanca: 1.02,
+      Zaragoza: 1.1,
+      'A Coruña': 0.96,
+      Vigo: 0.92,
+      'Santiago de Compostela': 0.98,
+      Palma: 0.9,
+      Ibiza: 0.88,
+      'Las Palmas': 0.78,
+      Tenerife: 0.8,
     },
   },
   {
@@ -65,6 +93,19 @@ const MARKET_GOODS: MarketGoodDef[] = [
       Bilbao: 1.25,
       Valencia: 0.95,
       Marbella: 1.1,
+      'San Sebastián': 1.32,
+      'Vitoria-Gasteiz': 1.15,
+      Toledo: 0.78,
+      Valladolid: 0.92,
+      Salamanca: 0.88,
+      Zaragoza: 0.96,
+      'A Coruña': 1.18,
+      Vigo: 1.16,
+      'Santiago de Compostela': 1.22,
+      Palma: 1.24,
+      Ibiza: 1.28,
+      'Las Palmas': 1.12,
+      Tenerife: 1.14,
     },
   },
   {
@@ -79,6 +120,19 @@ const MARKET_GOODS: MarketGoodDef[] = [
       Barcelona: 1.05,
       Sevilla: 0.95,
       Marbella: 1.2,
+      'San Sebastián': 1.1,
+      'Vitoria-Gasteiz': 0.88,
+      Toledo: 0.94,
+      Valladolid: 0.86,
+      Salamanca: 0.98,
+      Zaragoza: 0.9,
+      'A Coruña': 1.06,
+      Vigo: 0.92,
+      'Santiago de Compostela': 1.02,
+      Palma: 1.18,
+      Ibiza: 1.15,
+      'Las Palmas': 1.22,
+      Tenerife: 1.25,
     },
   },
 ];
@@ -180,7 +234,10 @@ const AVATARS = [
 export class WorldService {
   private readonly marketCargo = new Map<string, Record<MarketGoodId, number>>();
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private readonly antiCheat?: AntiCheatService,
+  ) {}
 
   private async player(userId: string) {
     const p = await this.prisma.player.findUnique({ where: { userId } });
@@ -444,10 +501,18 @@ export class WorldService {
       if (!p) throw new NotFoundException('Player not found');
       this.assertNotJailed(p.jailUntil);
 
+      this.antiCheat?.assertActionCooldown(
+        userId,
+        'world_action',
+        2000,
+        'Espera un momento antes de realizar otra acción en la calle.',
+      );
+
       if (p.level < action.minLevel) {
         throw new BadRequestException(`Necesitas nivel ${action.minLevel}`);
       }
       const loc = p.locationId || 'madrid_centro';
+      const currentCity = ZONES_BY_ID[loc]?.city;
       const vibe = ZONE_VIBES[loc] || 'street';
       if (action.vibes.length && !action.vibes.includes(vibe)) {
         throw new BadRequestException('Esa movida no encaja en este barrio');
@@ -498,20 +563,32 @@ export class WorldService {
           wantedLevel: newWantedLevel,
         },
       });
-      const missions = await tx.playerMission.findMany({
-        where: { playerId: p.id, status: 'IN_PROGRESS' },
-        take: 3,
-      });
-      for (const m of missions) {
-        const prog = Math.min(100, m.progress + 20 + Math.floor(Math.random() * 15));
-        await tx.playerMission.update({
-          where: { id: m.id },
-          data: {
-            progress: prog,
-            status: prog >= 100 ? 'COMPLETED' : 'IN_PROGRESS',
-            completedAt: prog >= 100 ? new Date() : undefined,
-          },
+      if (!failed && action.id !== 'huir_calor') {
+        const missions = await tx.playerMission.findMany({
+          where: { playerId: p.id, status: 'IN_PROGRESS' },
+          include: { template: true },
+          take: 3,
         });
+        for (const m of missions) {
+          const tpl = m.template as
+            | { mode?: string; city?: string | null; requiredSteps?: number }
+            | undefined;
+          // Online Co-op missions require explicit team advancement via /missions
+          if (tpl?.mode === 'ONLINE_COOP') continue;
+          if (tpl?.city && currentCity && tpl.city !== currentCity) continue;
+          const steps = Math.max(1, tpl?.requiredSteps ?? 3);
+          const stepPct = Math.max(5, Math.floor(100 / steps));
+          const prog = Math.min(100, m.progress + stepPct);
+          await tx.playerMission.update({
+            where: { id: m.id },
+            data: {
+              progress: prog,
+              status: prog >= 100 ? 'COMPLETED' : 'IN_PROGRESS',
+              completedAt: prog >= 100 ? new Date() : undefined,
+              lastStepAt: new Date(),
+            },
+          });
+        }
       }
       return {
         ok: !failed,
@@ -606,6 +683,17 @@ export class WorldService {
     if (!good) {
       throw new BadRequestException('Bien comerciable no válido');
     }
+
+    if (
+      !Number.isInteger(dto.quantity) ||
+      dto.quantity <= 0 ||
+      dto.quantity > 1000
+    ) {
+      throw new BadRequestException(
+        'La cantidad debe ser un entero entre 1 y 1000',
+      );
+    }
+    this.antiCheat?.assertFinitePositive(dto.quantity, 'quantity', 1000);
 
     return this.prisma.$transaction(async (tx) => {
       const p = await tx.player.findUnique({ where: { userId } });

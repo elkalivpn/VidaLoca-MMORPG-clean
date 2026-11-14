@@ -125,21 +125,56 @@ export interface Clan {
   funds: number;
 }
 
+export type MissionMode = 'STORY' | 'ONLINE_SOLO' | 'ONLINE_COOP';
+
 export interface MissionTemplate {
   id: string;
   title: string;
   description: string;
   difficulty: 'EASY' | 'MEDIUM' | 'HARD' | 'SUICIDE';
+  mode?: MissionMode;
+  category?: string;
+  city?: string | null;
+  minLevel?: number;
+  minPlayers?: number;
+  maxPlayers?: number;
+  isOptional?: boolean;
+  isRepeatable?: boolean;
+  cooldownHours?: number;
+  requiredSteps?: number;
   rewardEuros: number;
   rewardXp: number;
+  rewardVidaCoins?: number;
+  rewardReputation?: number;
+  rewardItemName?: string | null;
+  unlockBenefit?: string | null;
+}
+
+export interface CoopParticipant {
+  playerId: string;
+  userId: string;
+  displayName: string;
+  role: 'LEADER' | 'MEMBER';
+  joinedAt: string;
 }
 
 export interface PlayerMission {
   id: string;
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CLAIMED';
+  status:
+    | 'PENDING'
+    | 'IN_PROGRESS'
+    | 'COMPLETED'
+    | 'FAILED'
+    | 'CLAIMED'
+    | 'ABANDONED'
+    | 'SKIPPED';
   progress: number;
+  squadCode?: string | null;
+  coOpParticipants?: CoopParticipant[] | null;
+  lastStepAt?: string | null;
   startedAt: string;
   completedAt?: string;
+  player?: { id: string; displayName: string; level?: number };
   template: MissionTemplate;
 }
 

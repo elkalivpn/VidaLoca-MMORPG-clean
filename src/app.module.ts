@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
+import { SecurityModule } from './security/security.module';
+import { PromptInjectionInterceptor } from './security/prompt-injection.interceptor';
 import { AuthModule } from './auth/auth.module';
 import { PlayersModule } from './players/players.module';
 import { EconomyModule } from './economy/economy.module';
@@ -34,6 +36,7 @@ import { HeistsModule } from './heists/heists.module';
       },
     ]),
     PrismaModule,
+    SecurityModule,
     AuthModule,
     PlayersModule,
     EconomyModule,
@@ -56,6 +59,10 @@ import { HeistsModule } from './heists/heists.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: PromptInjectionInterceptor,
     },
   ],
 })

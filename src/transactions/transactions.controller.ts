@@ -14,7 +14,9 @@ export class TransactionsController {
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '20',
   ) {
-    return this.transactionsService.getPlayerTransactions(req.user.id, parseInt(page), parseInt(limit));
+    const safePage = Math.max(1, Number.parseInt(page, 10) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
+    return this.transactionsService.getPlayerTransactions(req.user.id, safePage, safeLimit);
   }
 
   @Get('history')

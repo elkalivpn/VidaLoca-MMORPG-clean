@@ -9,7 +9,7 @@ export const CITIES: CityLocation[] = [
     lng: -3.7038,
     lat: 40.4168,
     x: 48,
-    y: 42,
+    y: 44,
     description:
       'El corazón de la capital. Negocios, turistas y oportunidades.',
     vibe: 'business',
@@ -20,8 +20,8 @@ export const CITIES: CityLocation[] = [
     city: 'Madrid',
     lng: -3.7065,
     lat: 40.426,
-    x: 46,
-    y: 40,
+    x: 45,
+    y: 41,
     description: 'Barrio alternativo. Vida nocturna, arte y negocios grises.',
     vibe: 'nightlife',
   },
@@ -31,10 +31,58 @@ export const CITIES: CityLocation[] = [
     city: 'Madrid',
     lng: -3.682,
     lat: 40.4295,
-    x: 50,
-    y: 38,
+    x: 51,
+    y: 40,
     description: 'Lujo puro. Boutiques, áticos y gente con dinero.',
     vibe: 'luxury',
+  },
+  {
+    id: 'toledo_alcazar',
+    name: 'Alcázar / Casco',
+    city: 'Toledo',
+    lng: -4.0273,
+    lat: 39.8628,
+    x: 45,
+    y: 50,
+    description:
+      'Murallas sobre el Tajo, pasadizos y contrabando discreto en el Centro.',
+    vibe: 'street',
+  },
+  {
+    id: 'valladolid_campo',
+    name: 'Campo Grande',
+    city: 'Valladolid',
+    lng: -4.7245,
+    lat: 41.6523,
+    x: 39,
+    y: 31,
+    description:
+      'Nudo logístico de Castilla. Flotas de camiones y rutas hacia el norte.',
+    vibe: 'business',
+  },
+  {
+    id: 'salamanca_plaza',
+    name: 'Plaza Mayor',
+    city: 'Salamanca',
+    lng: -5.6635,
+    lat: 40.9701,
+    x: 31,
+    y: 37,
+    description:
+      'Noche universitaria, contactos discretos y enlace hacia la frontera oeste.',
+    vibe: 'nightlife',
+  },
+  {
+    id: 'zaragoza_delicias',
+    name: 'El Pilar / Delicias',
+    city: 'Zaragoza',
+    lng: -0.8891,
+    lat: 41.6488,
+    x: 61,
+    y: 30,
+    description:
+      'Corredor estratégico entre Madrid, Barcelona y el norte peninsular.',
+    vibe: 'street',
   },
   {
     id: 'barcelona_ramblas',
@@ -42,7 +90,7 @@ export const CITIES: CityLocation[] = [
     city: 'Barcelona',
     lng: 2.1734,
     lat: 41.3809,
-    x: 72,
+    x: 74,
     y: 28,
     description: 'El paseo más famoso. Turistas, carteristas y contactos.',
     vibe: 'street',
@@ -53,8 +101,8 @@ export const CITIES: CityLocation[] = [
     city: 'Barcelona',
     lng: 2.1769,
     lat: 41.3833,
-    x: 74,
-    y: 30,
+    x: 77,
+    y: 31,
     description: 'Callejones históricos. Secretos antiguos y nuevos tratos.',
     vibe: 'street',
   },
@@ -64,7 +112,7 @@ export const CITIES: CityLocation[] = [
     city: 'Marbella',
     lng: -4.8824,
     lat: 36.5101,
-    x: 38,
+    x: 39,
     y: 78,
     description:
       'Sol, playa y ostentación. El lugar donde se hacen los grandes tratos.',
@@ -76,8 +124,8 @@ export const CITIES: CityLocation[] = [
     city: 'Marbella',
     lng: -4.9524,
     lat: 36.4883,
-    x: 36,
-    y: 80,
+    x: 35,
+    y: 81,
     description:
       'Yates, supercoches y VIP. El sueño de muchos, la realidad de pocos.',
     vibe: 'luxury',
@@ -88,8 +136,8 @@ export const CITIES: CityLocation[] = [
     city: 'Sevilla',
     lng: -5.9845,
     lat: 37.3891,
-    x: 32,
-    y: 68,
+    x: 31,
+    y: 69,
     description: 'Historia, tapas y negocios familiares con peso.',
     vibe: 'street',
   },
@@ -99,8 +147,8 @@ export const CITIES: CityLocation[] = [
     city: 'Valencia',
     lng: -0.3522,
     lat: 39.4549,
-    x: 62,
-    y: 52,
+    x: 64,
+    y: 53,
     description: 'Arquitectura futurista y oportunidades modernas.',
     vibe: 'business',
   },
@@ -111,9 +159,121 @@ export const CITIES: CityLocation[] = [
     lng: -2.9235,
     lat: 43.257,
     x: 42,
-    y: 18,
+    y: 16,
     description: 'Norte industrial reconvertido. Duro, leal y con carácter.',
     vibe: 'industrial',
+  },
+  {
+    id: 'bilbao_abando',
+    name: 'Abando / Gran Vía',
+    city: 'Bilbao',
+    lng: -2.9349,
+    lat: 43.263,
+    x: 45,
+    y: 19,
+    description:
+      'Banca vasca, torres de cristal y contratos blindados en la ría.',
+    vibe: 'business',
+  },
+  {
+    id: 'sansebastian_concha',
+    name: 'La Concha',
+    city: 'San Sebastián',
+    lng: -1.9812,
+    lat: 43.3183,
+    x: 52,
+    y: 15,
+    description: 'Bahía señorial, lujo discreto y enlace rápido con Francia.',
+    vibe: 'luxury',
+  },
+  {
+    id: 'vitoria_ensanche',
+    name: 'Ensanche Vitoria',
+    city: 'Vitoria-Gasteiz',
+    lng: -2.6714,
+    lat: 42.8467,
+    x: 47,
+    y: 23,
+    description: 'Encrucijada del norte y plataformas logísticas del Ebro.',
+    vibe: 'business',
+  },
+  {
+    id: 'coruna_marina',
+    name: 'La Marina / Riazor',
+    city: 'A Coruña',
+    lng: -8.4115,
+    lat: 43.3623,
+    x: 16,
+    y: 15,
+    description: 'Atlántico puro, puerto pesquero y capital naviero gallego.',
+    vibe: 'business',
+  },
+  {
+    id: 'santiago_obradoiro',
+    name: 'Obradoiro',
+    city: 'Santiago de Compostela',
+    lng: -8.5448,
+    lat: 42.8782,
+    x: 15,
+    y: 21,
+    description: 'Piedra húmeda, soportales discretos y vida nocturna gallega.',
+    vibe: 'nightlife',
+  },
+  {
+    id: 'vigo_puerto',
+    name: 'Puerto de Vigo',
+    city: 'Vigo',
+    lng: -8.7207,
+    lat: 42.2406,
+    x: 14,
+    y: 27,
+    description: 'La ría más activa del Atlántico: planeadoras y descargas.',
+    vibe: 'street',
+  },
+  {
+    id: 'palma_paseo',
+    name: 'Paseo Marítimo',
+    city: 'Palma',
+    lng: 2.6502,
+    lat: 39.5696,
+    x: 86,
+    y: 49,
+    description: 'Megayates en Mallorca, banca offshore y clubes VIP.',
+    vibe: 'luxury',
+  },
+  {
+    id: 'ibiza_daltvila',
+    name: 'Dalt Vila / Botafoch',
+    city: 'Ibiza',
+    lng: 1.432,
+    lat: 38.9067,
+    x: 78,
+    y: 57,
+    description:
+      'Capital mundial de la noche y reservas privadas frente al mar.',
+    vibe: 'nightlife',
+  },
+  {
+    id: 'laspalmas_canteras',
+    name: 'Puerto La Luz',
+    city: 'Las Palmas',
+    lng: -15.4363,
+    lat: 28.1235,
+    x: 20,
+    y: 88,
+    description: 'Zona franca atlántica entre Europa, África y América.',
+    vibe: 'business',
+  },
+  {
+    id: 'tenerife_santacruz',
+    name: 'Santa Cruz / Anaga',
+    city: 'Tenerife',
+    lng: -16.2518,
+    lat: 28.4636,
+    x: 11,
+    y: 85,
+    description: 'Muelle bajo el Teide, carnaval y carreteras volcánicas.',
+    vibe: 'nightlife',
   },
 ];
 
@@ -149,7 +309,7 @@ export interface HighwayCorridor {
   coordinates: [number, number][];
 }
 
-/** Real Spanish highway network connecting the playable cities */
+/** Real Spanish highway, maritime and air corridors connecting all playable regions */
 export const SPAIN_HIGHWAYS: HighwayCorridor[] = [
   {
     id: 'a1-norte',
@@ -158,9 +318,46 @@ export const SPAIN_HIGHWAYS: HighwayCorridor[] = [
     to: 'bilbao_casco',
     coordinates: [
       [-3.7038, 40.4168],
-      [-3.7026, 42.3439], // Burgos
-      [-2.6714, 42.8467], // Vitoria
-      [-2.9235, 43.257], // Bilbao
+      [-3.7026, 42.3439],
+      [-2.6714, 42.8467],
+      [-2.9235, 43.257],
+    ],
+  },
+  {
+    id: 'ap8-cantabrico',
+    name: 'Autopista del Cantábrico AP-8',
+    from: 'bilbao_casco',
+    to: 'sansebastian_concha',
+    coordinates: [
+      [-2.9235, 43.257],
+      [-2.47, 43.18],
+      [-1.9812, 43.3183],
+    ],
+  },
+  {
+    id: 'a6-ap9-galicia',
+    name: 'Corredor Noroeste A-6 / AP-9',
+    from: 'madrid_centro',
+    to: 'vigo_puerto',
+    coordinates: [
+      [-3.7038, 40.4168],
+      [-4.7245, 41.6523],
+      [-6.59, 42.55],
+      [-8.4115, 43.3623],
+      [-8.5448, 42.8782],
+      [-8.7207, 42.2406],
+    ],
+  },
+  {
+    id: 'a62-castilla',
+    name: 'Autovía de Castilla A-62 / A-52',
+    from: 'valladolid_campo',
+    to: 'vigo_puerto',
+    coordinates: [
+      [-4.7245, 41.6523],
+      [-5.6635, 40.9701],
+      [-7.86, 42.34],
+      [-8.7207, 42.2406],
     ],
   },
   {
@@ -170,9 +367,9 @@ export const SPAIN_HIGHWAYS: HighwayCorridor[] = [
     to: 'barcelona_ramblas',
     coordinates: [
       [-3.7038, 40.4168],
-      [-0.8891, 41.6488], // Zaragoza
-      [0.62, 41.6176], // Lleida
-      [2.1734, 41.3809], // Barcelona
+      [-0.8891, 41.6488],
+      [0.62, 41.6176],
+      [2.1734, 41.3809],
     ],
   },
   {
@@ -182,19 +379,20 @@ export const SPAIN_HIGHWAYS: HighwayCorridor[] = [
     to: 'valencia_artes',
     coordinates: [
       [-3.7038, 40.4168],
-      [-2.1374, 40.0704], // Cuenca
-      [-0.3522, 39.4549], // Valencia
+      [-2.1374, 40.0704],
+      [-0.3522, 39.4549],
     ],
   },
   {
-    id: 'a4-sur',
-    name: 'Autovía A-4',
+    id: 'a42-a4-sur',
+    name: 'Autovía A-42 / A-4',
     from: 'madrid_centro',
     to: 'sevilla_casco',
     coordinates: [
       [-3.7038, 40.4168],
-      [-4.7794, 37.8882], // Córdoba
-      [-5.9845, 37.3891], // Sevilla
+      [-4.0273, 39.8628],
+      [-4.7794, 37.8882],
+      [-5.9845, 37.3891],
     ],
   },
   {
@@ -204,9 +402,9 @@ export const SPAIN_HIGHWAYS: HighwayCorridor[] = [
     to: 'valencia_artes',
     coordinates: [
       [2.1734, 41.3809],
-      [1.2445, 41.1189], // Tarragona
-      [-0.0513, 39.9864], // Castellón
-      [-0.3522, 39.4549], // Valencia
+      [1.2445, 41.1189],
+      [-0.0513, 39.9864],
+      [-0.3522, 39.4549],
     ],
   },
   {
@@ -216,10 +414,10 @@ export const SPAIN_HIGHWAYS: HighwayCorridor[] = [
     to: 'marbella_centro',
     coordinates: [
       [-0.3522, 39.4549],
-      [-1.1307, 37.9922], // Murcia
-      [-3.5986, 37.1773], // Granada
-      [-4.4214, 36.7213], // Málaga
-      [-4.8824, 36.5101], // Marbella
+      [-1.1307, 37.9922],
+      [-3.5986, 37.1773],
+      [-4.4214, 36.7213],
+      [-4.8824, 36.5101],
     ],
   },
   {
@@ -229,8 +427,31 @@ export const SPAIN_HIGHWAYS: HighwayCorridor[] = [
     to: 'marbella_centro',
     coordinates: [
       [-5.9845, 37.3891],
-      [-5.1604, 36.7423], // Ronda
-      [-4.8824, 36.5101], // Marbella
+      [-5.1604, 36.7423],
+      [-4.8824, 36.5101],
+    ],
+  },
+  {
+    id: 'baleares-sea-air',
+    name: 'Corredor Balear (Ferry / Puente Aéreo)',
+    from: 'valencia_artes',
+    to: 'palma_paseo',
+    coordinates: [
+      [-0.3522, 39.4549],
+      [1.432, 38.9067],
+      [2.6502, 39.5696],
+      [2.1734, 41.3809],
+    ],
+  },
+  {
+    id: 'canarias-atlantic-air',
+    name: 'Puente Atlántico Canarias',
+    from: 'sevilla_casco',
+    to: 'laspalmas_canteras',
+    coordinates: [
+      [-5.9845, 37.3891],
+      [-15.4363, 28.1235],
+      [-16.2518, 28.4636],
     ],
   },
 ];

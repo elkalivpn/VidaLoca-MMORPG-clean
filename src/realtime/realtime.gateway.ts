@@ -8,7 +8,7 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Logger, OnModuleInit, OnModuleDestroy, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -19,6 +19,8 @@ import {
   PlayerMoveDto,
 } from './dto/realtime.dto';
 import { isValidZoneId } from '../common/constants/zones';
+import { AntiCheatService } from '../security/anti-cheat.service';
+import { AntiPromptInjectionService } from '../security/anti-prompt-injection.service';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -44,7 +46,24 @@ export interface PresenceEntry {
 
 @WebSocketGateway({
   cors: {
-    origin: true,
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      if (process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+        return;
+      }
+      const allowed = (process.env.FRONTEND_URL || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (!origin || allowed.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Origin not allowed by WebSocket CORS policy'), false);
+      }
+    },
     credentials: true,
   },
   namespace: '/game',
@@ -120,6 +139,8 @@ export class RealtimeGateway
     private jwtService: JwtService,
     private configService: ConfigService,
     private prisma: PrismaService,
+    @Optional() private readonly antiCheat?: AntiCheatService,
+    @Optional() private readonly antiPromptInjection?: AntiPromptInjectionService,
   ) {}
 
   // ─── Connection lifecycle ────────────────────────────────────────────
@@ -139,6 +160,11 @@ export class RealtimeGateway
 
       const secret = this.configService.getOrThrow<string>('JWT_SECRET');
       const payload = this.jwtService.verify(token, { secret });
+      if (payload?.tokenType && payload.tokenType !== 'access') {
+        client.emit('error', { message: 'Invalid token type' });
+        client.disconnect(true);
+        return;
+      }
       const userId = payload.sub as string;
 
       const user = await this.prisma.user.findUnique({
@@ -146,7 +172,23 @@ export class RealtimeGateway
         include: { player: true },
       });
 
-      if (!user?.player) {
+      if (!user || user.isBanned) {
+        client.emit('error', { message: 'Account banned or not found' });
+        client.disconnect(true);
+        return;
+      }
+
+      if (
+        typeof payload.tv === 'number' &&
+        typeof user.tokenVersion === 'number' &&
+        payload.tv !== user.tokenVersion
+      ) {
+        client.emit('error', { message: 'Session revoked' });
+        client.disconnect(true);
+        return;
+      }
+
+      if (!user.player) {
         client.emit('error', { message: 'Player not found' });
         client.disconnect(true);
         return;
@@ -343,8 +385,31 @@ export class RealtimeGateway
       return { error: 'Not authenticated' };
     }
 
-    const message = (body?.message || '').trim().slice(0, 500);
+    let message = (body?.message || '').trim().slice(0, 500);
     if (!message) return { error: 'Empty message' };
+
+    if (this.antiPromptInjection) {
+      const inspection = this.antiPromptInjection.inspectInput(message, 500);
+      if (!inspection.safe) {
+        const res = await this.antiCheat?.recordViolation({
+          userId: client.userId,
+          playerId: client.playerId,
+          rule: 'PROMPT_INJECT',
+          severity: 'HIGH',
+          evidence: { channel: 'chat:zone', rules: inspection.matchedRules },
+        });
+        if (res?.shouldDisconnect) {
+          client.disconnect(true);
+        }
+        return {
+          ok: false,
+          error: 'Mensaje bloqueado por el escudo anti-inyección',
+          reason: 'security_blocked',
+        };
+      }
+      message = inspection.sanitized;
+      if (!message) return { error: 'Empty message' };
+    }
 
     if (this.isChatRateLimited(client.id)) {
       return { ok: false, error: 'Rate limit exceeded', reason: 'rate_limited' };
@@ -373,8 +438,31 @@ export class RealtimeGateway
       return { error: 'Not authenticated' };
     }
 
-    const message = (body?.message || '').trim().slice(0, 500);
+    let message = (body?.message || '').trim().slice(0, 500);
     if (!message) return { error: 'Empty message' };
+
+    if (this.antiPromptInjection) {
+      const inspection = this.antiPromptInjection.inspectInput(message, 500);
+      if (!inspection.safe) {
+        const res = await this.antiCheat?.recordViolation({
+          userId: client.userId,
+          playerId: client.playerId,
+          rule: 'PROMPT_INJECT',
+          severity: 'HIGH',
+          evidence: { channel: 'chat:global', rules: inspection.matchedRules },
+        });
+        if (res?.shouldDisconnect) {
+          client.disconnect(true);
+        }
+        return {
+          ok: false,
+          error: 'Mensaje bloqueado por el escudo anti-inyección',
+          reason: 'security_blocked',
+        };
+      }
+      message = inspection.sanitized;
+      if (!message) return { error: 'Empty message' };
+    }
 
     if (this.isChatRateLimited(client.id)) {
       return { ok: false, error: 'Rate limit exceeded', reason: 'rate_limited' };
@@ -440,6 +528,23 @@ export class RealtimeGateway
       return { ok: false, error: 'Invalid coordinates' };
     }
 
+    if (
+      this.antiCheat &&
+      !this.antiCheat.isWithinWorldBounds(body.x, body.y, body.z)
+    ) {
+      void this.antiCheat
+        .recordViolation({
+          userId: client.userId,
+          playerId: client.playerId,
+          rule: 'OUT_OF_BOUNDS',
+          evidence: { x: body.x, y: body.y, z: body.z },
+        })
+        .then(({ shouldDisconnect }) => {
+          if (shouldDisconnect) client.disconnect(true);
+        });
+      return { ok: false, reason: 'out_of_bounds' };
+    }
+
     const now = Date.now();
 
     // Rate-limit por socket (< 40ms desde el último move)
@@ -464,6 +569,16 @@ export class RealtimeGateway
       this.logger.warn(
         `Rejected move for ${entry.displayName}: distance=${distance.toFixed(2)} > max=${maxAllowedDistance.toFixed(2)}`,
       );
+      void this.antiCheat
+        ?.recordViolation({
+          userId: client.userId,
+          playerId: client.playerId,
+          rule: distance > maxAllowedDistance * 4 ? 'TELEPORT' : 'SPEEDHACK',
+          evidence: { distance, maxAllowedDistance },
+        })
+        .then(({ shouldDisconnect }) => {
+          if (shouldDisconnect) client.disconnect(true);
+        });
       return { ok: false, reason: 'speed_limit_exceeded' };
     }
 

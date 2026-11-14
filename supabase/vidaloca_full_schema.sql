@@ -1,6 +1,9 @@
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "vault";
+
 -- CreateEnum
 CREATE TYPE "UserRole" AS ENUM ('PLAYER', 'ADMIN', 'MODERATOR');
 
@@ -20,10 +23,13 @@ CREATE TYPE "PropertyType" AS ENUM ('APARTMENT', 'MANSION', 'WAREHOUSE', 'CLUB',
 CREATE TYPE "ClanRole" AS ENUM ('LEADER', 'OFFICER', 'MEMBER', 'RECRUIT');
 
 -- CreateEnum
+CREATE TYPE "MissionMode" AS ENUM ('STORY', 'ONLINE_SOLO', 'ONLINE_COOP');
+
+-- CreateEnum
 CREATE TYPE "Difficulty" AS ENUM ('EASY', 'MEDIUM', 'HARD', 'SUICIDE');
 
 -- CreateEnum
-CREATE TYPE "MissionStatus" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'CLAIMED');
+CREATE TYPE "MissionStatus" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'CLAIMED', 'ABANDONED', 'SKIPPED');
 
 -- CreateEnum
 CREATE TYPE "TransactionType" AS ENUM ('EARN', 'SPEND', 'PURCHASE', 'GIFT', 'PENALTY');
@@ -34,6 +40,9 @@ CREATE TYPE "Currency" AS ENUM ('EUR', 'VIDACOIN');
 -- CreateEnum
 CREATE TYPE "SkillCategory" AS ENUM ('COMBAT', 'DRIVING', 'STEALTH', 'BUSINESS', 'SOCIAL');
 
+-- CreateEnum
+CREATE TYPE "vault"."VaultRecordType" AS ENUM ('PAYMENT_CARD', 'IDENTITY_KYC', 'RECOVERY_SECRET');
+
 -- CreateTable
 CREATE TABLE "users" (
     "id" TEXT NOT NULL,
@@ -41,6 +50,12 @@ CREATE TABLE "users" (
     "username" TEXT NOT NULL,
     "password" TEXT NOT NULL,
     "role" "UserRole" NOT NULL DEFAULT 'PLAYER',
+    "isBanned" BOOLEAN NOT NULL DEFAULT false,
+    "banReason" TEXT,
+    "failedLoginAttempts" INTEGER NOT NULL DEFAULT 0,
+    "lockedUntil" TIMESTAMP(3),
+    "tokenVersion" INTEGER NOT NULL DEFAULT 0,
+    "lastPasswordChange" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -149,6 +164,7 @@ CREATE TABLE "player_properties" (
     "templateId" TEXT NOT NULL,
     "purchasedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "lastRentCollectedAt" TIMESTAMP(3),
+    "lastUsedAt" TIMESTAMP(3),
     "customized" JSONB,
 
     CONSTRAINT "player_properties_pkey" PRIMARY KEY ("id")
@@ -207,8 +223,22 @@ CREATE TABLE "mission_templates" (
     "title" TEXT NOT NULL,
     "description" TEXT NOT NULL,
     "difficulty" "Difficulty" NOT NULL,
+    "mode" "MissionMode" NOT NULL DEFAULT 'ONLINE_SOLO',
+    "category" TEXT NOT NULL DEFAULT 'GENERAL',
+    "city" TEXT,
+    "minLevel" INTEGER NOT NULL DEFAULT 1,
+    "minPlayers" INTEGER NOT NULL DEFAULT 1,
+    "maxPlayers" INTEGER NOT NULL DEFAULT 1,
+    "isOptional" BOOLEAN NOT NULL DEFAULT true,
+    "isRepeatable" BOOLEAN NOT NULL DEFAULT false,
+    "cooldownHours" INTEGER NOT NULL DEFAULT 0,
+    "requiredSteps" INTEGER NOT NULL DEFAULT 3,
     "rewardEuros" DOUBLE PRECISION NOT NULL,
     "rewardXp" INTEGER NOT NULL,
+    "rewardVidaCoins" INTEGER NOT NULL DEFAULT 0,
+    "rewardReputation" INTEGER NOT NULL DEFAULT 0,
+    "rewardItemName" TEXT,
+    "unlockBenefit" TEXT,
     "requirement" JSONB,
 
     CONSTRAINT "mission_templates_pkey" PRIMARY KEY ("id")
@@ -221,6 +251,9 @@ CREATE TABLE "player_missions" (
     "templateId" TEXT NOT NULL,
     "status" "MissionStatus" NOT NULL DEFAULT 'PENDING',
     "progress" INTEGER NOT NULL DEFAULT 0,
+    "squadCode" TEXT,
+    "coOpParticipants" JSONB,
+    "lastStepAt" TIMESTAMP(3),
     "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "completedAt" TIMESTAMP(3),
 
@@ -282,6 +315,8 @@ CREATE TABLE "refresh_tokens" (
     "id" TEXT NOT NULL,
     "token" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
+    "ipHash" TEXT,
+    "revokedAt" TIMESTAMP(3),
     "expiresAt" TIMESTAMP(3) NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -356,6 +391,78 @@ CREATE TABLE "game_sessions" (
     CONSTRAINT "game_sessions_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "security_audit_logs" (
+    "id" TEXT NOT NULL,
+    "actorId" TEXT,
+    "eventType" TEXT NOT NULL,
+    "severity" TEXT NOT NULL DEFAULT 'INFO',
+    "target" TEXT,
+    "ipHash" TEXT,
+    "details" JSONB,
+    "prevHash" TEXT NOT NULL,
+    "entryHash" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "security_audit_logs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "anti_cheat_incidents" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT,
+    "playerId" TEXT,
+    "rule" TEXT NOT NULL,
+    "severity" TEXT NOT NULL DEFAULT 'MEDIUM',
+    "strikes" INTEGER NOT NULL DEFAULT 1,
+    "blocked" BOOLEAN NOT NULL DEFAULT true,
+    "evidence" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "anti_cheat_incidents_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "vault"."vault_records" (
+    "id" TEXT NOT NULL,
+    "vaultToken" TEXT NOT NULL,
+    "ownerUserIdHash" TEXT NOT NULL,
+    "recordType" "vault"."VaultRecordType" NOT NULL,
+    "keyVersion" INTEGER NOT NULL DEFAULT 1,
+    "algorithm" TEXT NOT NULL DEFAULT 'AES-256-GCM',
+    "encryptedDek" TEXT NOT NULL,
+    "iv" TEXT NOT NULL,
+    "authTag" TEXT NOT NULL,
+    "encryptedPayload" TEXT NOT NULL,
+    "blindIndex" TEXT NOT NULL,
+    "maskedSummary" TEXT NOT NULL,
+    "cardBrand" TEXT,
+    "cardLast4" TEXT,
+    "expMonth" INTEGER,
+    "expYear" INTEGER,
+    "isRevoked" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "vault_records_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "vault"."vault_access_logs" (
+    "id" TEXT NOT NULL,
+    "vaultRecordId" TEXT,
+    "actorIdHash" TEXT NOT NULL,
+    "action" TEXT NOT NULL,
+    "outcome" TEXT NOT NULL,
+    "ipHash" TEXT,
+    "reason" TEXT,
+    "prevHash" TEXT NOT NULL,
+    "entryHash" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "vault_access_logs_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
@@ -394,6 +501,36 @@ CREATE UNIQUE INDEX "player_skills_playerId_skillId_key" ON "player_skills"("pla
 
 -- CreateIndex
 CREATE UNIQUE INDEX "player_achievements_playerId_achievementId_key" ON "player_achievements"("playerId", "achievementId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "security_audit_logs_entryHash_key" ON "security_audit_logs"("entryHash");
+
+-- CreateIndex
+CREATE INDEX "security_audit_logs_actorId_createdAt_idx" ON "security_audit_logs"("actorId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "security_audit_logs_eventType_createdAt_idx" ON "security_audit_logs"("eventType", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "anti_cheat_incidents_playerId_createdAt_idx" ON "anti_cheat_incidents"("playerId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "anti_cheat_incidents_userId_createdAt_idx" ON "anti_cheat_incidents"("userId", "createdAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "vault_records_vaultToken_key" ON "vault"."vault_records"("vaultToken");
+
+-- CreateIndex
+CREATE INDEX "vault_records_ownerUserIdHash_recordType_idx" ON "vault"."vault_records"("ownerUserIdHash", "recordType");
+
+-- CreateIndex
+CREATE INDEX "vault_records_blindIndex_idx" ON "vault"."vault_records"("blindIndex");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "vault_access_logs_entryHash_key" ON "vault"."vault_access_logs"("entryHash");
+
+-- CreateIndex
+CREATE INDEX "vault_access_logs_actorIdHash_createdAt_idx" ON "vault"."vault_access_logs"("actorIdHash", "createdAt");
 
 -- AddForeignKey
 ALTER TABLE "players" ADD CONSTRAINT "players_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -472,4 +609,7 @@ ALTER TABLE "player_weapons" ADD CONSTRAINT "player_weapons_playerId_fkey" FOREI
 
 -- AddForeignKey
 ALTER TABLE "game_sessions" ADD CONSTRAINT "game_sessions_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "vault"."vault_access_logs" ADD CONSTRAINT "vault_access_logs_vaultRecordId_fkey" FOREIGN KEY ("vaultRecordId") REFERENCES "vault"."vault_records"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 

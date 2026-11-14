@@ -10,7 +10,10 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { MissionsService } from './missions.service';
 import {
+  CreateCoopMissionDto,
   CreateMissionTemplateDto,
+  JoinCoopMissionDto,
+  SkipMissionDto,
   StartMissionDto,
   UpdateMissionProgressDto,
   CompleteMissionDto,
@@ -18,7 +21,7 @@ import {
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { UserRole, Difficulty } from '@prisma/client';
+import { UserRole, Difficulty, MissionMode } from '@prisma/client';
 
 @Controller('missions')
 @UseGuards(AuthGuard('jwt'))
@@ -28,8 +31,12 @@ export class MissionsController {
   // ─── Templates ───────────────────────────────────────────────────────
 
   @Get('templates')
-  async getTemplates(@Query('difficulty') difficulty?: Difficulty) {
-    return this.missionsService.getAllTemplates(difficulty);
+  async getTemplates(
+    @Query('difficulty') difficulty?: Difficulty,
+    @Query('mode') mode?: MissionMode,
+    @Query('city') city?: string,
+  ) {
+    return this.missionsService.getAllTemplates(difficulty, mode, city);
   }
 
   @Get('templates/:id')
@@ -44,7 +51,7 @@ export class MissionsController {
     return this.missionsService.createTemplate(dto);
   }
 
-  // ─── Player missions ─────────────────────────────────────────────────
+  // ─── Player missions & Optional Choice ───────────────────────────────
 
   @Get('my')
   async getMyMissions(@CurrentUser('id') userId: string) {
@@ -58,6 +65,55 @@ export class MissionsController {
   ) {
     return this.missionsService.startMission(userId, dto.templateId);
   }
+
+  @Post(':missionId/advance')
+  async advanceMission(
+    @CurrentUser('id') userId: string,
+    @Param('missionId') missionId: string,
+  ) {
+    return this.missionsService.advanceMission(userId, missionId);
+  }
+
+  @Post(':missionId/abandon')
+  async abandonMission(
+    @CurrentUser('id') userId: string,
+    @Param('missionId') missionId: string,
+  ) {
+    return this.missionsService.abandonMission(userId, missionId);
+  }
+
+  @Post('skip')
+  async skipMission(
+    @CurrentUser('id') userId: string,
+    @Body() dto: SkipMissionDto,
+  ) {
+    return this.missionsService.skipMission(userId, dto.templateId);
+  }
+
+  // ─── Online Co-op with Friends ───────────────────────────────────────
+
+  @Get('coop/open')
+  async getOpenCoopSquads() {
+    return this.missionsService.getOpenCoopSquads();
+  }
+
+  @Post('coop/create')
+  async createCoopSquad(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateCoopMissionDto,
+  ) {
+    return this.missionsService.createCoopSquad(userId, dto.templateId);
+  }
+
+  @Post('coop/join')
+  async joinCoopSquad(
+    @CurrentUser('id') userId: string,
+    @Body() dto: JoinCoopMissionDto,
+  ) {
+    return this.missionsService.joinCoopSquad(userId, dto.squadCode);
+  }
+
+  // ─── Admin Progress & Rewards Claim ──────────────────────────────────
 
   @Post(':missionId/progress')
   @UseGuards(RolesGuard)

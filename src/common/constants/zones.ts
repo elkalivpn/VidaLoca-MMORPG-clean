@@ -52,6 +52,46 @@ export const ZONES: ZoneDef[] = [
     lat: 40.4295,
   },
   {
+    id: 'toledo_alcazar',
+    name: 'Casco Histórico / Alcázar',
+    city: 'Toledo',
+    description:
+      'Murallas medievales sobre el Tajo, pasadizos discretos y puntos ciegos a un paso de Madrid.',
+    vibe: 'street',
+    lng: -4.0273,
+    lat: 39.8628,
+  },
+  {
+    id: 'valladolid_campo',
+    name: 'Campo Grande / Pisuerga',
+    city: 'Valladolid',
+    description:
+      'Nudo logístico del centro peninsular. Transporte pesado, despachos de logística y rutas al norte.',
+    vibe: 'business',
+    lng: -4.7245,
+    lat: 41.6523,
+  },
+  {
+    id: 'salamanca_plaza',
+    name: 'Plaza Mayor / Campus',
+    city: 'Salamanca',
+    description:
+      'Piedra dorada, noche universitaria interminable y enlaces rápidos hacia la frontera oeste.',
+    vibe: 'nightlife',
+    lng: -5.6635,
+    lat: 40.9701,
+  },
+  {
+    id: 'zaragoza_delicias',
+    name: 'El Pilar / Delicias',
+    city: 'Zaragoza',
+    description:
+      'Corredor estratégico entre Madrid, Barcelona y el norte. Almacenes, convoys y tráfico de paso.',
+    vibe: 'street',
+    lng: -0.8891,
+    lat: 41.6488,
+  },
+  {
     id: 'barcelona_ramblas',
     name: 'Las Ramblas',
     city: 'Barcelona',
@@ -121,6 +161,106 @@ export const ZONES: ZoneDef[] = [
     lng: -2.9234,
     lat: 43.257,
   },
+  {
+    id: 'bilbao_abando',
+    name: 'Abando / Gran Vía',
+    city: 'Bilbao',
+    description:
+      'El corazón financiero e industrial de la ría. Torres de cristal, banca vasca y contratos blindados.',
+    vibe: 'business',
+    lng: -2.9349,
+    lat: 43.263,
+  },
+  {
+    id: 'sansebastian_concha',
+    name: 'La Concha / Parte Vieja',
+    city: 'San Sebastián',
+    description:
+      'Bahía señorial, gastronomía de élite y dinero discreto a minutos de la frontera francesa.',
+    vibe: 'luxury',
+    lng: -1.9812,
+    lat: 43.3183,
+  },
+  {
+    id: 'vitoria_ensanche',
+    name: 'Ensanche / Almendra',
+    city: 'Vitoria-Gasteiz',
+    description:
+      'Encrucijada entre el Cantábrico y la meseta. Plataformas logísticas y peajes clave.',
+    vibe: 'business',
+    lng: -2.6714,
+    lat: 42.8467,
+  },
+  {
+    id: 'coruna_marina',
+    name: 'La Marina / Riazor',
+    city: 'A Coruña',
+    description:
+      'Galerías frente al Atlántico, puerto pesquero y sede de fortunas textiles y navieras.',
+    vibe: 'business',
+    lng: -8.4115,
+    lat: 43.3623,
+  },
+  {
+    id: 'vigo_puerto',
+    name: 'Puerto de Vigo / Ría',
+    city: 'Vigo',
+    description:
+      'El puerto más activo del Atlántico ibérico. Planeadoras en la ría, astilleros y mercancía sin declarar.',
+    vibe: 'street',
+    lng: -8.7207,
+    lat: 42.2406,
+  },
+  {
+    id: 'santiago_obradoiro',
+    name: 'Obradoiro / Ensanche',
+    city: 'Santiago de Compostela',
+    description:
+      'Lluvia constante sobre piedra milenaria, rutas de peregrinos y encuentros discretos bajo los soportales.',
+    vibe: 'nightlife',
+    lng: -8.5448,
+    lat: 42.8782,
+  },
+  {
+    id: 'palma_paseo',
+    name: 'Paseo Marítimo / La Seu',
+    city: 'Palma',
+    description:
+      'Megayates en la bahía de Mallorca, clubs VIP internacionales y capital offshore frente al mar.',
+    vibe: 'luxury',
+    lng: 2.6502,
+    lat: 39.5696,
+  },
+  {
+    id: 'ibiza_daltvila',
+    name: 'Dalt Vila / Marina Botafoch',
+    city: 'Ibiza',
+    description:
+      'Capital mundial de la noche electrónica, reservados imposibles y jet privado en la pista.',
+    vibe: 'nightlife',
+    lng: 1.432,
+    lat: 38.9067,
+  },
+  {
+    id: 'laspalmas_canteras',
+    name: 'Las Canteras / Puerto La Luz',
+    city: 'Las Palmas',
+    description:
+      'Puente tricontinental en el Atlántico. Zona franca portuaria, contenedores y ruta entre Europa, África y América.',
+    vibe: 'business',
+    lng: -15.4363,
+    lat: 28.1235,
+  },
+  {
+    id: 'tenerife_santacruz',
+    name: 'Santa Cruz / Anaga',
+    city: 'Tenerife',
+    description:
+      'Muelle atlántico bajo el Teide, carnavales eternos y carreteras volcánicas llenas de curvas.',
+    vibe: 'nightlife',
+    lng: -16.2518,
+    lat: 28.4636,
+  },
 ];
 
 export const ZONES_BY_ID: Record<string, ZoneDef> = ZONES.reduce(
@@ -132,7 +272,7 @@ export const ZONES_BY_ID: Record<string, ZoneDef> = ZONES.reduce(
 );
 
 /**
- * Grafo bidireccional de autopistas y autovías reales de España.
+ * Grafo bidireccional de autopistas, autovías, ferris y puentes aéreos reales de España.
  */
 export const HIGHWAY_ROUTES: HighwayRoute[] = [
   {
@@ -206,6 +346,200 @@ export const HIGHWAY_ROUTES: HighwayRoute[] = [
     to: 'barcelona_ramblas',
     distanceKm: 610,
     tollEuros: 32,
+  },
+  // Centro de España
+  {
+    id: 'a42-madrid-toledo',
+    highway: 'A-42',
+    name: 'Autovía de Toledo (A-42)',
+    from: 'madrid_centro',
+    to: 'toledo_alcazar',
+    distanceKm: 72,
+    tollEuros: 0,
+  },
+  {
+    id: 'a4-toledo-sevilla',
+    highway: 'A-4 / N-401',
+    name: 'Ruta La Mancha - Andalucía',
+    from: 'toledo_alcazar',
+    to: 'sevilla_casco',
+    distanceKm: 465,
+    tollEuros: 0,
+  },
+  {
+    id: 'a6-madrid-valladolid',
+    highway: 'A-6 / A-601',
+    name: 'Autovía del Noroeste - Pinares',
+    from: 'madrid_centro',
+    to: 'valladolid_campo',
+    distanceKm: 210,
+    tollEuros: 9,
+  },
+  {
+    id: 'a62-valladolid-salamanca',
+    highway: 'A-62',
+    name: 'Autovía de Castilla (A-62)',
+    from: 'valladolid_campo',
+    to: 'salamanca_plaza',
+    distanceKm: 115,
+    tollEuros: 0,
+  },
+  {
+    id: 'a2-madrid-zaragoza',
+    highway: 'A-2',
+    name: 'Autovía del Nordeste (Madrid - Zaragoza)',
+    from: 'madrid_centro',
+    to: 'zaragoza_delicias',
+    distanceKm: 320,
+    tollEuros: 0,
+  },
+  {
+    id: 'ap2-zaragoza-barcelona',
+    highway: 'AP-2',
+    name: 'Autopista del Nordeste (Zaragoza - Barcelona)',
+    from: 'zaragoza_delicias',
+    to: 'barcelona_ramblas',
+    distanceKm: 310,
+    tollEuros: 15,
+  },
+  {
+    id: 'a23-zaragoza-valencia',
+    highway: 'A-23',
+    name: 'Autovía Mudéjar (A-23)',
+    from: 'zaragoza_delicias',
+    to: 'valencia_artes',
+    distanceKm: 310,
+    tollEuros: 0,
+  },
+  // País Vasco
+  {
+    id: 'ap68-bilbao-vitoria',
+    highway: 'AP-68',
+    name: 'Autopista Vasco-Aragonesa (Bilbao - Vitoria)',
+    from: 'bilbao_casco',
+    to: 'vitoria_ensanche',
+    distanceKm: 65,
+    tollEuros: 6,
+  },
+  {
+    id: 'ap8-bilbao-sansebastian',
+    highway: 'AP-8',
+    name: 'Autopista del Cantábrico (AP-8)',
+    from: 'bilbao_casco',
+    to: 'sansebastian_concha',
+    distanceKm: 100,
+    tollEuros: 11,
+  },
+  {
+    id: 'n1-vitoria-sansebastian',
+    highway: 'A-1 / N-I',
+    name: 'Eje Interior Vasco (Vitoria - Donostia)',
+    from: 'vitoria_ensanche',
+    to: 'sansebastian_concha',
+    distanceKm: 102,
+    tollEuros: 4,
+  },
+  {
+    id: 'ap68-vitoria-zaragoza',
+    highway: 'AP-68',
+    name: 'Corredor del Ebro (Vitoria - Zaragoza)',
+    from: 'vitoria_ensanche',
+    to: 'zaragoza_delicias',
+    distanceKm: 255,
+    tollEuros: 20,
+  },
+  // Galicia
+  {
+    id: 'a6-madrid-coruna',
+    highway: 'A-6',
+    name: 'Autovía del Noroeste (Madrid - A Coruña)',
+    from: 'madrid_centro',
+    to: 'coruna_marina',
+    distanceKm: 590,
+    tollEuros: 14,
+  },
+  {
+    id: 'ap9-coruna-santiago',
+    highway: 'AP-9',
+    name: 'Autopista del Atlántico (A Coruña - Santiago)',
+    from: 'coruna_marina',
+    to: 'santiago_obradoiro',
+    distanceKm: 75,
+    tollEuros: 8,
+  },
+  {
+    id: 'ap9-santiago-vigo',
+    highway: 'AP-9',
+    name: 'Autopista del Atlántico (Santiago - Vigo)',
+    from: 'santiago_obradoiro',
+    to: 'vigo_puerto',
+    distanceKm: 90,
+    tollEuros: 10,
+  },
+  {
+    id: 'a52-salamanca-vigo',
+    highway: 'A-66 / A-52',
+    name: 'Autovía de las Rías Baixas (A-52)',
+    from: 'salamanca_plaza',
+    to: 'vigo_puerto',
+    distanceKm: 430,
+    tollEuros: 0,
+  },
+  // Islas Baleares
+  {
+    id: 'mar-bcn-palma',
+    highway: 'Ferry / Puente Aéreo',
+    name: 'Conexión Marítimo-Aérea Barcelona - Palma',
+    from: 'barcelona_ramblas',
+    to: 'palma_paseo',
+    distanceKm: 210,
+    tollEuros: 45,
+  },
+  {
+    id: 'mar-vlc-ibiza',
+    highway: 'Ferry / Puente Aéreo',
+    name: 'Conexión Marítimo-Aérea Valencia - Ibiza',
+    from: 'valencia_artes',
+    to: 'ibiza_daltvila',
+    distanceKm: 165,
+    tollEuros: 40,
+  },
+  {
+    id: 'mar-ibiza-palma',
+    highway: 'Ferry Interinsular',
+    name: 'Ruta Balear Ibiza - Palma',
+    from: 'ibiza_daltvila',
+    to: 'palma_paseo',
+    distanceKm: 130,
+    tollEuros: 30,
+  },
+  // Islas Canarias
+  {
+    id: 'air-madrid-laspalmas',
+    highway: 'Puente Aéreo Atlántico',
+    name: 'Puente Aéreo Madrid - Gran Canaria',
+    from: 'madrid_centro',
+    to: 'laspalmas_canteras',
+    distanceKm: 1760,
+    tollEuros: 95,
+  },
+  {
+    id: 'air-sevilla-tenerife',
+    highway: 'Ruta Atlántica Sur',
+    name: 'Conexión Aérea / Naviera Sevilla - Tenerife',
+    from: 'sevilla_casco',
+    to: 'tenerife_santacruz',
+    distanceKm: 1410,
+    tollEuros: 85,
+  },
+  {
+    id: 'mar-gc-tf',
+    highway: 'Ferry Canario',
+    name: 'Puente Marítimo-Aéreo Gran Canaria - Tenerife',
+    from: 'laspalmas_canteras',
+    to: 'tenerife_santacruz',
+    distanceKm: 85,
+    tollEuros: 25,
   },
 ];
 

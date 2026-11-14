@@ -17,7 +17,7 @@ import type {
   WorldTravelResponse,
 } from '@/types/game';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 type ApiSuccess<T> = { success: true; data: T; timestamp: string };
 type ApiError = {
@@ -77,15 +77,49 @@ export const api = {
       body: JSON.stringify({ locationId }),
     }),
 
-  missionTemplates: (difficulty?: string) =>
-    request(
-      `/missions/templates${difficulty ? `?difficulty=${difficulty}` : ''}`,
-    ),
+  missionTemplates: (
+    difficultyOrFilters?:
+      string | { difficulty?: string; mode?: string; city?: string },
+  ) => {
+    const params = new URLSearchParams();
+    if (typeof difficultyOrFilters === 'string' && difficultyOrFilters) {
+      params.set('difficulty', difficultyOrFilters);
+    } else if (difficultyOrFilters && typeof difficultyOrFilters === 'object') {
+      if (difficultyOrFilters.difficulty)
+        params.set('difficulty', difficultyOrFilters.difficulty);
+      if (difficultyOrFilters.mode)
+        params.set('mode', difficultyOrFilters.mode);
+      if (difficultyOrFilters.city)
+        params.set('city', difficultyOrFilters.city);
+    }
+    const qs = params.toString();
+    return request(`/missions/templates${qs ? `?${qs}` : ''}`);
+  },
   myMissions: () => request('/missions/my'),
   startMission: (templateId: string) =>
     request('/missions/start', {
       method: 'POST',
       body: JSON.stringify({ templateId }),
+    }),
+  advanceMission: (missionId: string) =>
+    request(`/missions/${missionId}/advance`, { method: 'POST' }),
+  abandonMission: (missionId: string) =>
+    request(`/missions/${missionId}/abandon`, { method: 'POST' }),
+  skipMission: (templateId: string) =>
+    request('/missions/skip', {
+      method: 'POST',
+      body: JSON.stringify({ templateId }),
+    }),
+  openCoopSquads: () => request('/missions/coop/open'),
+  createCoopSquad: (templateId: string) =>
+    request('/missions/coop/create', {
+      method: 'POST',
+      body: JSON.stringify({ templateId }),
+    }),
+  joinCoopSquad: (squadCode: string) =>
+    request('/missions/coop/join', {
+      method: 'POST',
+      body: JSON.stringify({ squadCode }),
     }),
   updateMissionProgress: (missionId: string, progress: number) =>
     request(`/missions/${missionId}/progress`, {
