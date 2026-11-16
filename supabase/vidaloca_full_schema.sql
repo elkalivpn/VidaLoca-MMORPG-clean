@@ -1,50 +1,37 @@
+-- ============================================================================
+-- VIDA LOCA MMORPG — ESQUEMA COMPLETO E IDEMPOTENTE (CREACIÓN + ACTUALIZACIÓN)
+-- Proyecto Supabase: raktyjhhvuqebyiozfib
+-- Seguro para ejecutar tanto en una BD vacía como sobre un esquema previo.
+-- ============================================================================
+
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
-
--- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "vault";
 
--- CreateEnum
-CREATE TYPE "UserRole" AS ENUM ('PLAYER', 'ADMIN', 'MODERATOR');
+-- ----------------------------------------------------------------------------
+-- 1. ENUMS (seguros ante re-ejecución + nuevos valores)
+-- ----------------------------------------------------------------------------
+DO $$ BEGIN CREATE TYPE "UserRole" AS ENUM ('PLAYER', 'ADMIN', 'MODERATOR'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "FactionType" AS ENUM ('CIVILIAN', 'POLICE', 'GUARDIA_CIVIL', 'SYNDICATE', 'ENTREPRENEUR'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "ItemType" AS ENUM ('WEAPON', 'VEHICLE', 'HOUSE', 'CONSUMABLE', 'SKILL_CARD', 'COSMETIC'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "Rarity" AS ENUM ('COMMON', 'RARE', 'EPIC', 'LEGENDARY'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "PropertyType" AS ENUM ('APARTMENT', 'MANSION', 'WAREHOUSE', 'CLUB', 'GARAGE'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "ClanRole" AS ENUM ('LEADER', 'OFFICER', 'MEMBER', 'RECRUIT'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "MissionMode" AS ENUM ('STORY', 'ONLINE_SOLO', 'ONLINE_COOP'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "Difficulty" AS ENUM ('EASY', 'MEDIUM', 'HARD', 'SUICIDE'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "MissionStatus" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'CLAIMED', 'ABANDONED', 'SKIPPED'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "TransactionType" AS ENUM ('EARN', 'SPEND', 'PURCHASE', 'GIFT', 'PENALTY'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "Currency" AS ENUM ('EUR', 'VIDACOIN'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "SkillCategory" AS ENUM ('COMBAT', 'DRIVING', 'STEALTH', 'BUSINESS', 'SOCIAL'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "vault"."VaultRecordType" AS ENUM ('PAYMENT_CARD', 'IDENTITY_KYC', 'RECOVERY_SECRET'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- CreateEnum
-CREATE TYPE "FactionType" AS ENUM ('CIVILIAN', 'POLICE', 'GUARDIA_CIVIL', 'SYNDICATE', 'ENTREPRENEUR');
+ALTER TYPE "MissionStatus" ADD VALUE IF NOT EXISTS 'ABANDONED';
+ALTER TYPE "MissionStatus" ADD VALUE IF NOT EXISTS 'SKIPPED';
 
--- CreateEnum
-CREATE TYPE "ItemType" AS ENUM ('WEAPON', 'VEHICLE', 'HOUSE', 'CONSUMABLE', 'SKILL_CARD', 'COSMETIC');
-
--- CreateEnum
-CREATE TYPE "Rarity" AS ENUM ('COMMON', 'RARE', 'EPIC', 'LEGENDARY');
-
--- CreateEnum
-CREATE TYPE "PropertyType" AS ENUM ('APARTMENT', 'MANSION', 'WAREHOUSE', 'CLUB', 'GARAGE');
-
--- CreateEnum
-CREATE TYPE "ClanRole" AS ENUM ('LEADER', 'OFFICER', 'MEMBER', 'RECRUIT');
-
--- CreateEnum
-CREATE TYPE "MissionMode" AS ENUM ('STORY', 'ONLINE_SOLO', 'ONLINE_COOP');
-
--- CreateEnum
-CREATE TYPE "Difficulty" AS ENUM ('EASY', 'MEDIUM', 'HARD', 'SUICIDE');
-
--- CreateEnum
-CREATE TYPE "MissionStatus" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'CLAIMED', 'ABANDONED', 'SKIPPED');
-
--- CreateEnum
-CREATE TYPE "TransactionType" AS ENUM ('EARN', 'SPEND', 'PURCHASE', 'GIFT', 'PENALTY');
-
--- CreateEnum
-CREATE TYPE "Currency" AS ENUM ('EUR', 'VIDACOIN');
-
--- CreateEnum
-CREATE TYPE "SkillCategory" AS ENUM ('COMBAT', 'DRIVING', 'STEALTH', 'BUSINESS', 'SOCIAL');
-
--- CreateEnum
-CREATE TYPE "vault"."VaultRecordType" AS ENUM ('PAYMENT_CARD', 'IDENTITY_KYC', 'RECOVERY_SECRET');
-
--- CreateTable
-CREATE TABLE "users" (
+-- ----------------------------------------------------------------------------
+-- 2. TABLAS (CREATE TABLE IF NOT EXISTS)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS "users" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "username" TEXT NOT NULL,
@@ -62,8 +49,7 @@ CREATE TABLE "users" (
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "players" (
+CREATE TABLE IF NOT EXISTS "players" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "displayName" TEXT NOT NULL,
@@ -88,8 +74,7 @@ CREATE TABLE "players" (
     CONSTRAINT "players_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "item_templates" (
+CREATE TABLE IF NOT EXISTS "item_templates" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL,
@@ -102,8 +87,7 @@ CREATE TABLE "item_templates" (
     CONSTRAINT "item_templates_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "inventory" (
+CREATE TABLE IF NOT EXISTS "inventory" (
     "id" TEXT NOT NULL,
     "playerId" TEXT NOT NULL,
     "templateId" TEXT NOT NULL,
@@ -114,8 +98,7 @@ CREATE TABLE "inventory" (
     CONSTRAINT "inventory_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "vehicle_templates" (
+CREATE TABLE IF NOT EXISTS "vehicle_templates" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "brand" TEXT NOT NULL,
@@ -129,8 +112,7 @@ CREATE TABLE "vehicle_templates" (
     CONSTRAINT "vehicle_templates_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "player_vehicles" (
+CREATE TABLE IF NOT EXISTS "player_vehicles" (
     "id" TEXT NOT NULL,
     "playerId" TEXT NOT NULL,
     "templateId" TEXT NOT NULL,
@@ -142,8 +124,7 @@ CREATE TABLE "player_vehicles" (
     CONSTRAINT "player_vehicles_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "property_templates" (
+CREATE TABLE IF NOT EXISTS "property_templates" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "location" TEXT NOT NULL,
@@ -157,8 +138,7 @@ CREATE TABLE "property_templates" (
     CONSTRAINT "property_templates_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "player_properties" (
+CREATE TABLE IF NOT EXISTS "player_properties" (
     "id" TEXT NOT NULL,
     "playerId" TEXT NOT NULL,
     "templateId" TEXT NOT NULL,
@@ -170,8 +150,7 @@ CREATE TABLE "player_properties" (
     CONSTRAINT "player_properties_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "clans" (
+CREATE TABLE IF NOT EXISTS "clans" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "tag" TEXT NOT NULL,
@@ -184,8 +163,7 @@ CREATE TABLE "clans" (
     CONSTRAINT "clans_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "clan_members" (
+CREATE TABLE IF NOT EXISTS "clan_members" (
     "id" TEXT NOT NULL,
     "playerId" TEXT NOT NULL,
     "clanId" TEXT NOT NULL,
@@ -195,8 +173,7 @@ CREATE TABLE "clan_members" (
     CONSTRAINT "clan_members_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "territories" (
+CREATE TABLE IF NOT EXISTS "territories" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "city" TEXT NOT NULL,
@@ -207,8 +184,7 @@ CREATE TABLE "territories" (
     CONSTRAINT "territories_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "clan_territories" (
+CREATE TABLE IF NOT EXISTS "clan_territories" (
     "id" TEXT NOT NULL,
     "clanId" TEXT NOT NULL,
     "territoryId" TEXT NOT NULL,
@@ -217,8 +193,7 @@ CREATE TABLE "clan_territories" (
     CONSTRAINT "clan_territories_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "mission_templates" (
+CREATE TABLE IF NOT EXISTS "mission_templates" (
     "id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "description" TEXT NOT NULL,
@@ -244,8 +219,7 @@ CREATE TABLE "mission_templates" (
     CONSTRAINT "mission_templates_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "player_missions" (
+CREATE TABLE IF NOT EXISTS "player_missions" (
     "id" TEXT NOT NULL,
     "playerId" TEXT NOT NULL,
     "templateId" TEXT NOT NULL,
@@ -260,8 +234,7 @@ CREATE TABLE "player_missions" (
     CONSTRAINT "player_missions_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "completed_missions" (
+CREATE TABLE IF NOT EXISTS "completed_missions" (
     "id" TEXT NOT NULL,
     "playerId" TEXT NOT NULL,
     "missionId" TEXT NOT NULL,
@@ -271,8 +244,7 @@ CREATE TABLE "completed_missions" (
     CONSTRAINT "completed_missions_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "battle_pass_seasons" (
+CREATE TABLE IF NOT EXISTS "battle_pass_seasons" (
     "id" TEXT NOT NULL,
     "seasonNumber" INTEGER NOT NULL,
     "name" TEXT NOT NULL,
@@ -283,8 +255,7 @@ CREATE TABLE "battle_pass_seasons" (
     CONSTRAINT "battle_pass_seasons_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "battle_pass_progress" (
+CREATE TABLE IF NOT EXISTS "battle_pass_progress" (
     "id" TEXT NOT NULL,
     "playerId" TEXT NOT NULL,
     "seasonId" TEXT NOT NULL,
@@ -296,8 +267,7 @@ CREATE TABLE "battle_pass_progress" (
     CONSTRAINT "battle_pass_progress_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "transaction_logs" (
+CREATE TABLE IF NOT EXISTS "transaction_logs" (
     "id" TEXT NOT NULL,
     "playerId" TEXT NOT NULL,
     "type" "TransactionType" NOT NULL,
@@ -310,8 +280,7 @@ CREATE TABLE "transaction_logs" (
     CONSTRAINT "transaction_logs_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "refresh_tokens" (
+CREATE TABLE IF NOT EXISTS "refresh_tokens" (
     "id" TEXT NOT NULL,
     "token" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -323,8 +292,7 @@ CREATE TABLE "refresh_tokens" (
     CONSTRAINT "refresh_tokens_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "skills" (
+CREATE TABLE IF NOT EXISTS "skills" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL,
@@ -334,8 +302,7 @@ CREATE TABLE "skills" (
     CONSTRAINT "skills_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "player_skills" (
+CREATE TABLE IF NOT EXISTS "player_skills" (
     "id" TEXT NOT NULL,
     "playerId" TEXT NOT NULL,
     "skillId" TEXT NOT NULL,
@@ -345,8 +312,7 @@ CREATE TABLE "player_skills" (
     CONSTRAINT "player_skills_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "achievements" (
+CREATE TABLE IF NOT EXISTS "achievements" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL,
@@ -357,8 +323,7 @@ CREATE TABLE "achievements" (
     CONSTRAINT "achievements_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "player_achievements" (
+CREATE TABLE IF NOT EXISTS "player_achievements" (
     "id" TEXT NOT NULL,
     "playerId" TEXT NOT NULL,
     "achievementId" TEXT NOT NULL,
@@ -367,8 +332,7 @@ CREATE TABLE "player_achievements" (
     CONSTRAINT "player_achievements_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "player_weapons" (
+CREATE TABLE IF NOT EXISTS "player_weapons" (
     "id" TEXT NOT NULL,
     "playerId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -380,8 +344,7 @@ CREATE TABLE "player_weapons" (
     CONSTRAINT "player_weapons_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "game_sessions" (
+CREATE TABLE IF NOT EXISTS "game_sessions" (
     "id" TEXT NOT NULL,
     "playerId" TEXT NOT NULL,
     "startTime" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -391,8 +354,7 @@ CREATE TABLE "game_sessions" (
     CONSTRAINT "game_sessions_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "security_audit_logs" (
+CREATE TABLE IF NOT EXISTS "security_audit_logs" (
     "id" TEXT NOT NULL,
     "actorId" TEXT,
     "eventType" TEXT NOT NULL,
@@ -407,8 +369,7 @@ CREATE TABLE "security_audit_logs" (
     CONSTRAINT "security_audit_logs_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "anti_cheat_incidents" (
+CREATE TABLE IF NOT EXISTS "anti_cheat_incidents" (
     "id" TEXT NOT NULL,
     "userId" TEXT,
     "playerId" TEXT,
@@ -422,8 +383,7 @@ CREATE TABLE "anti_cheat_incidents" (
     CONSTRAINT "anti_cheat_incidents_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "vault"."vault_records" (
+CREATE TABLE IF NOT EXISTS "vault"."vault_records" (
     "id" TEXT NOT NULL,
     "vaultToken" TEXT NOT NULL,
     "ownerUserIdHash" TEXT NOT NULL,
@@ -447,8 +407,7 @@ CREATE TABLE "vault"."vault_records" (
     CONSTRAINT "vault_records_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "vault"."vault_access_logs" (
+CREATE TABLE IF NOT EXISTS "vault"."vault_access_logs" (
     "id" TEXT NOT NULL,
     "vaultRecordId" TEXT,
     "actorIdHash" TEXT NOT NULL,
@@ -463,153 +422,110 @@ CREATE TABLE "vault"."vault_access_logs" (
     CONSTRAINT "vault_access_logs_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+-- ----------------------------------------------------------------------------
+-- 3. COLUMNAS NUEVAS PARA TABLAS PRE-EXISTENTES (ACTUALIZACIÓN SIN PÉRDIDA DE DATOS)
+-- ----------------------------------------------------------------------------
+ALTER TABLE "users"
+    ADD COLUMN IF NOT EXISTS "isBanned" BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS "banReason" TEXT,
+    ADD COLUMN IF NOT EXISTS "failedLoginAttempts" INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS "lockedUntil" TIMESTAMP(3),
+    ADD COLUMN IF NOT EXISTS "tokenVersion" INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS "lastPasswordChange" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
--- CreateIndex
-CREATE UNIQUE INDEX "users_username_key" ON "users"("username");
+ALTER TABLE "players"
+    ADD COLUMN IF NOT EXISTS "dirtyEuros" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS "heat" INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS "wantedLevel" INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS "faction" "FactionType" NOT NULL DEFAULT 'CIVILIAN',
+    ADD COLUMN IF NOT EXISTS "factionRank" INTEGER NOT NULL DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS "jailUntil" TIMESTAMP(3),
+    ADD COLUMN IF NOT EXISTS "lifestyle" TEXT NOT NULL DEFAULT 'GREY';
+ALTER TABLE "players" ALTER COLUMN "locationId" SET DEFAULT 'madrid_centro';
 
--- CreateIndex
-CREATE UNIQUE INDEX "players_userId_key" ON "players"("userId");
+ALTER TABLE "player_properties"
+    ADD COLUMN IF NOT EXISTS "lastRentCollectedAt" TIMESTAMP(3),
+    ADD COLUMN IF NOT EXISTS "lastUsedAt" TIMESTAMP(3);
 
--- CreateIndex
-CREATE UNIQUE INDEX "player_vehicles_licensePlate_key" ON "player_vehicles"("licensePlate");
+ALTER TABLE "mission_templates"
+    ADD COLUMN IF NOT EXISTS "mode" "MissionMode" NOT NULL DEFAULT 'ONLINE_SOLO',
+    ADD COLUMN IF NOT EXISTS "category" TEXT NOT NULL DEFAULT 'GENERAL',
+    ADD COLUMN IF NOT EXISTS "city" TEXT,
+    ADD COLUMN IF NOT EXISTS "minLevel" INTEGER NOT NULL DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS "minPlayers" INTEGER NOT NULL DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS "maxPlayers" INTEGER NOT NULL DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS "isOptional" BOOLEAN NOT NULL DEFAULT true,
+    ADD COLUMN IF NOT EXISTS "isRepeatable" BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS "cooldownHours" INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS "requiredSteps" INTEGER NOT NULL DEFAULT 3,
+    ADD COLUMN IF NOT EXISTS "rewardVidaCoins" INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS "rewardReputation" INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS "rewardItemName" TEXT,
+    ADD COLUMN IF NOT EXISTS "unlockBenefit" TEXT;
 
--- CreateIndex
-CREATE UNIQUE INDEX "clans_name_key" ON "clans"("name");
+ALTER TABLE "player_missions"
+    ADD COLUMN IF NOT EXISTS "squadCode" TEXT,
+    ADD COLUMN IF NOT EXISTS "coOpParticipants" JSONB,
+    ADD COLUMN IF NOT EXISTS "lastStepAt" TIMESTAMP(3);
 
--- CreateIndex
-CREATE UNIQUE INDEX "clans_tag_key" ON "clans"("tag");
+ALTER TABLE "refresh_tokens"
+    ADD COLUMN IF NOT EXISTS "ipHash" TEXT,
+    ADD COLUMN IF NOT EXISTS "revokedAt" TIMESTAMP(3);
 
--- CreateIndex
-CREATE UNIQUE INDEX "clans_leaderId_key" ON "clans"("leaderId");
+-- ----------------------------------------------------------------------------
+-- 4. ÍNDICES (IF NOT EXISTS)
+-- ----------------------------------------------------------------------------
+CREATE UNIQUE INDEX IF NOT EXISTS "users_email_key" ON "users"("email");
+CREATE UNIQUE INDEX IF NOT EXISTS "users_username_key" ON "users"("username");
+CREATE UNIQUE INDEX IF NOT EXISTS "players_userId_key" ON "players"("userId");
+CREATE UNIQUE INDEX IF NOT EXISTS "player_vehicles_licensePlate_key" ON "player_vehicles"("licensePlate");
+CREATE UNIQUE INDEX IF NOT EXISTS "clans_name_key" ON "clans"("name");
+CREATE UNIQUE INDEX IF NOT EXISTS "clans_tag_key" ON "clans"("tag");
+CREATE UNIQUE INDEX IF NOT EXISTS "clans_leaderId_key" ON "clans"("leaderId");
+CREATE UNIQUE INDEX IF NOT EXISTS "clan_members_playerId_key" ON "clan_members"("playerId");
+CREATE UNIQUE INDEX IF NOT EXISTS "clan_territories_territoryId_key" ON "clan_territories"("territoryId");
+CREATE UNIQUE INDEX IF NOT EXISTS "battle_pass_progress_playerId_key" ON "battle_pass_progress"("playerId");
+CREATE UNIQUE INDEX IF NOT EXISTS "refresh_tokens_token_key" ON "refresh_tokens"("token");
+CREATE UNIQUE INDEX IF NOT EXISTS "player_skills_playerId_skillId_key" ON "player_skills"("playerId", "skillId");
+CREATE UNIQUE INDEX IF NOT EXISTS "player_achievements_playerId_achievementId_key" ON "player_achievements"("playerId", "achievementId");
+CREATE UNIQUE INDEX IF NOT EXISTS "security_audit_logs_entryHash_key" ON "security_audit_logs"("entryHash");
+CREATE INDEX IF NOT EXISTS "security_audit_logs_actorId_createdAt_idx" ON "security_audit_logs"("actorId", "createdAt");
+CREATE INDEX IF NOT EXISTS "security_audit_logs_eventType_createdAt_idx" ON "security_audit_logs"("eventType", "createdAt");
+CREATE INDEX IF NOT EXISTS "anti_cheat_incidents_playerId_createdAt_idx" ON "anti_cheat_incidents"("playerId", "createdAt");
+CREATE INDEX IF NOT EXISTS "anti_cheat_incidents_userId_createdAt_idx" ON "anti_cheat_incidents"("userId", "createdAt");
+CREATE UNIQUE INDEX IF NOT EXISTS "vault_records_vaultToken_key" ON "vault"."vault_records"("vaultToken");
+CREATE INDEX IF NOT EXISTS "vault_records_ownerUserIdHash_recordType_idx" ON "vault"."vault_records"("ownerUserIdHash", "recordType");
+CREATE INDEX IF NOT EXISTS "vault_records_blindIndex_idx" ON "vault"."vault_records"("blindIndex");
+CREATE UNIQUE INDEX IF NOT EXISTS "vault_access_logs_entryHash_key" ON "vault"."vault_access_logs"("entryHash");
+CREATE INDEX IF NOT EXISTS "vault_access_logs_actorIdHash_createdAt_idx" ON "vault"."vault_access_logs"("actorIdHash", "createdAt");
 
--- CreateIndex
-CREATE UNIQUE INDEX "clan_members_playerId_key" ON "clan_members"("playerId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "clan_territories_territoryId_key" ON "clan_territories"("territoryId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "battle_pass_progress_playerId_key" ON "battle_pass_progress"("playerId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "refresh_tokens_token_key" ON "refresh_tokens"("token");
-
--- CreateIndex
-CREATE UNIQUE INDEX "player_skills_playerId_skillId_key" ON "player_skills"("playerId", "skillId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "player_achievements_playerId_achievementId_key" ON "player_achievements"("playerId", "achievementId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "security_audit_logs_entryHash_key" ON "security_audit_logs"("entryHash");
-
--- CreateIndex
-CREATE INDEX "security_audit_logs_actorId_createdAt_idx" ON "security_audit_logs"("actorId", "createdAt");
-
--- CreateIndex
-CREATE INDEX "security_audit_logs_eventType_createdAt_idx" ON "security_audit_logs"("eventType", "createdAt");
-
--- CreateIndex
-CREATE INDEX "anti_cheat_incidents_playerId_createdAt_idx" ON "anti_cheat_incidents"("playerId", "createdAt");
-
--- CreateIndex
-CREATE INDEX "anti_cheat_incidents_userId_createdAt_idx" ON "anti_cheat_incidents"("userId", "createdAt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "vault_records_vaultToken_key" ON "vault"."vault_records"("vaultToken");
-
--- CreateIndex
-CREATE INDEX "vault_records_ownerUserIdHash_recordType_idx" ON "vault"."vault_records"("ownerUserIdHash", "recordType");
-
--- CreateIndex
-CREATE INDEX "vault_records_blindIndex_idx" ON "vault"."vault_records"("blindIndex");
-
--- CreateIndex
-CREATE UNIQUE INDEX "vault_access_logs_entryHash_key" ON "vault"."vault_access_logs"("entryHash");
-
--- CreateIndex
-CREATE INDEX "vault_access_logs_actorIdHash_createdAt_idx" ON "vault"."vault_access_logs"("actorIdHash", "createdAt");
-
--- AddForeignKey
-ALTER TABLE "players" ADD CONSTRAINT "players_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "inventory" ADD CONSTRAINT "inventory_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "inventory" ADD CONSTRAINT "inventory_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "item_templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "player_vehicles" ADD CONSTRAINT "player_vehicles_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "player_vehicles" ADD CONSTRAINT "player_vehicles_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "vehicle_templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "player_properties" ADD CONSTRAINT "player_properties_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "player_properties" ADD CONSTRAINT "player_properties_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "property_templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "clan_members" ADD CONSTRAINT "clan_members_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "clan_members" ADD CONSTRAINT "clan_members_clanId_fkey" FOREIGN KEY ("clanId") REFERENCES "clans"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "territories" ADD CONSTRAINT "territories_controllerId_fkey" FOREIGN KEY ("controllerId") REFERENCES "clans"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "clan_territories" ADD CONSTRAINT "clan_territories_clanId_fkey" FOREIGN KEY ("clanId") REFERENCES "clans"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "clan_territories" ADD CONSTRAINT "clan_territories_territoryId_fkey" FOREIGN KEY ("territoryId") REFERENCES "territories"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "player_missions" ADD CONSTRAINT "player_missions_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "player_missions" ADD CONSTRAINT "player_missions_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "mission_templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "completed_missions" ADD CONSTRAINT "completed_missions_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "completed_missions" ADD CONSTRAINT "completed_missions_missionId_fkey" FOREIGN KEY ("missionId") REFERENCES "mission_templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "battle_pass_progress" ADD CONSTRAINT "battle_pass_progress_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "battle_pass_progress" ADD CONSTRAINT "battle_pass_progress_seasonId_fkey" FOREIGN KEY ("seasonId") REFERENCES "battle_pass_seasons"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "transaction_logs" ADD CONSTRAINT "transaction_logs_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "player_skills" ADD CONSTRAINT "player_skills_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "player_skills" ADD CONSTRAINT "player_skills_skillId_fkey" FOREIGN KEY ("skillId") REFERENCES "skills"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "player_achievements" ADD CONSTRAINT "player_achievements_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "player_achievements" ADD CONSTRAINT "player_achievements_achievementId_fkey" FOREIGN KEY ("achievementId") REFERENCES "achievements"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "player_weapons" ADD CONSTRAINT "player_weapons_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "game_sessions" ADD CONSTRAINT "game_sessions_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "vault"."vault_access_logs" ADD CONSTRAINT "vault_access_logs_vaultRecordId_fkey" FOREIGN KEY ("vaultRecordId") REFERENCES "vault"."vault_records"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
+-- ----------------------------------------------------------------------------
+-- 5. FOREIGN KEYS (idempotentes)
+-- ----------------------------------------------------------------------------
+DO $$ BEGIN ALTER TABLE "players" ADD CONSTRAINT "players_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "inventory" ADD CONSTRAINT "inventory_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "inventory" ADD CONSTRAINT "inventory_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "item_templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "player_vehicles" ADD CONSTRAINT "player_vehicles_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "player_vehicles" ADD CONSTRAINT "player_vehicles_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "vehicle_templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "player_properties" ADD CONSTRAINT "player_properties_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "player_properties" ADD CONSTRAINT "player_properties_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "property_templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "clan_members" ADD CONSTRAINT "clan_members_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "clan_members" ADD CONSTRAINT "clan_members_clanId_fkey" FOREIGN KEY ("clanId") REFERENCES "clans"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "territories" ADD CONSTRAINT "territories_controllerId_fkey" FOREIGN KEY ("controllerId") REFERENCES "clans"("id") ON DELETE SET NULL ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "clan_territories" ADD CONSTRAINT "clan_territories_clanId_fkey" FOREIGN KEY ("clanId") REFERENCES "clans"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "clan_territories" ADD CONSTRAINT "clan_territories_territoryId_fkey" FOREIGN KEY ("territoryId") REFERENCES "territories"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "player_missions" ADD CONSTRAINT "player_missions_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "player_missions" ADD CONSTRAINT "player_missions_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "mission_templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "completed_missions" ADD CONSTRAINT "completed_missions_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "completed_missions" ADD CONSTRAINT "completed_missions_missionId_fkey" FOREIGN KEY ("missionId") REFERENCES "mission_templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "battle_pass_progress" ADD CONSTRAINT "battle_pass_progress_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "battle_pass_progress" ADD CONSTRAINT "battle_pass_progress_seasonId_fkey" FOREIGN KEY ("seasonId") REFERENCES "battle_pass_seasons"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "transaction_logs" ADD CONSTRAINT "transaction_logs_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE RESTRICT ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "player_skills" ADD CONSTRAINT "player_skills_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "player_skills" ADD CONSTRAINT "player_skills_skillId_fkey" FOREIGN KEY ("skillId") REFERENCES "skills"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "player_achievements" ADD CONSTRAINT "player_achievements_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "player_achievements" ADD CONSTRAINT "player_achievements_achievementId_fkey" FOREIGN KEY ("achievementId") REFERENCES "achievements"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "player_weapons" ADD CONSTRAINT "player_weapons_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "game_sessions" ADD CONSTRAINT "game_sessions_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "vault"."vault_access_logs" ADD CONSTRAINT "vault_access_logs_vaultRecordId_fkey" FOREIGN KEY ("vaultRecordId") REFERENCES "vault"."vault_records"("id") ON DELETE SET NULL ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
