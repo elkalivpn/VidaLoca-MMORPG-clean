@@ -8,6 +8,7 @@ import {
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateLevelFromXp } from '../common/utils/level.util';
+import { grantBattlePassXpTx } from '../common/utils/battle-pass.util';
 import { CreateHeistDto, HeistRole, JoinHeistDto } from './dto/heists.dto';
 import { AntiCheatService } from '../security/anti-cheat.service';
 
@@ -489,11 +490,14 @@ export class HeistsService {
           eurosGained: number;
           dirtyEurosGained: number;
           xpGained: number;
+          battlePassXpGained: number;
           heatGained: number;
           newLevel: number;
           newHeat: number;
           newWantedLevel: number;
         }> = [];
+
+        const battlePassXpGain = Math.max(15, Math.round(xpShare * 0.35));
 
         for (const participant of lobby.participants) {
           const dbPlayer = players.find((p) => p.id === participant.playerId)!;
@@ -529,6 +533,8 @@ export class HeistsService {
             });
           }
 
+          await grantBattlePassXpTx(tx, dbPlayer.id, battlePassXpGain);
+
           rewards.push({
             playerId: dbPlayer.id,
             displayName: dbPlayer.displayName,
@@ -536,6 +542,7 @@ export class HeistsService {
             eurosGained: eurosShare,
             dirtyEurosGained: dirtyShare,
             xpGained: xpShare,
+            battlePassXpGained: battlePassXpGain,
             heatGained: heatGain,
             newLevel: updated.level,
             newHeat: updated.heat,

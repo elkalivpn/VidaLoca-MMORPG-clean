@@ -6,6 +6,7 @@ import {
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateLevelFromXp } from '../common/utils/level.util';
+import { grantBattlePassXpTx } from '../common/utils/battle-pass.util';
 
 export interface DailyStreakReward {
   day: number;
@@ -303,9 +304,12 @@ export class EngagementService {
         });
       }
 
+      const battlePassXp = 35;
+      await grantBattlePassXpTx(tx, player.id, battlePassXp);
+
       return {
         day: streakInfo.nextDay,
-        reward: { ...reward, xp: xpGain },
+        reward: { ...reward, xp: xpGain, battlePassXp },
         player: {
           euros: updated.euros,
           vidaCoins: updated.vidaCoins,
@@ -420,12 +424,16 @@ export class EngagementService {
         });
       }
 
+      const battlePassXp = Math.max(25, Math.round(xpGain * 0.35));
+      await grantBattlePassXpTx(tx, player.id, battlePassXp);
+
       return {
         challengeId: def.id,
         reward: {
           euros: def.rewardEuros,
           xp: xpGain,
           vidaCoins: def.rewardVidaCoins,
+          battlePassXp,
         },
         player: {
           euros: updated.euros,

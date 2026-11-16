@@ -226,6 +226,10 @@ export interface BattlePassProgress {
   level: number;
   xp: number;
   isPremium: boolean;
+  hasClubVip?: boolean;
+  effectivePremium?: boolean;
+  premiumPriceVida?: number;
+  xpPerLevel?: number;
   rewardsClaimed: number[];
   season?: BattlePassSeason;
 }

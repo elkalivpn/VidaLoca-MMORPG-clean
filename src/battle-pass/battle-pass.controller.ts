@@ -52,6 +52,11 @@ export class BattlePassController {
     return this.battlePassService.addXp(userId, dto.amount);
   }
 
+  @Post('unlock-premium')
+  async unlockPremium(@CurrentUser('id') userId: string) {
+    return this.battlePassService.unlockPremium(userId);
+  }
+
   @Post('claim')
   async claim(
     @CurrentUser('id') userId: string,

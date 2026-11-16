@@ -11,6 +11,7 @@ import { MissionStatus, Difficulty, MissionMode } from '@prisma/client';
 import { CreateMissionTemplateDto } from './dto/missions.dto';
 import { calculateLevelFromXp } from '../common/utils/level.util';
 import { isPlayerVipActive } from '../common/utils/vip.util';
+import { grantBattlePassXpTx } from '../common/utils/battle-pass.util';
 import { ZONES_BY_ID } from '../common/constants/zones';
 import { AntiCheatService } from '../security/anti-cheat.service';
 import { EngagementService } from '../engagement/engagement.service';
@@ -633,24 +634,8 @@ export class MissionsService {
           },
         });
 
-        // Grant Battle Pass XP acceleration if player has active progress
-        const bpRepo = (tx as any).battlePassProgress;
-        if (bpRepo?.findUnique) {
-          const bp = await bpRepo.findUnique({
-            where: { playerId: dbPlayer.id },
-          });
-          if (bp) {
-            const nextBpXp = bp.xp + battlePassXpGain;
-            const nextBpLevel = Math.floor(nextBpXp / 1000) + 1;
-            await bpRepo.update({
-              where: { playerId: dbPlayer.id },
-              data: {
-                xp: nextBpXp,
-                level: nextBpLevel > bp.level ? nextBpLevel : bp.level,
-              },
-            });
-          }
-        }
+        // Grant Battle Pass XP (unified 200 XP/level curve + auto-init)
+        await grantBattlePassXpTx(tx, dbPlayer.id, battlePassXpGain);
 
         // Direct item unlock benefit
         if (tpl.rewardItemName && (tx as any).itemTemplate?.findFirst) {

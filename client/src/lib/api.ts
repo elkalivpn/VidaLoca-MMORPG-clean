@@ -212,6 +212,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ level }),
     }),
+  unlockBattlePassPremium: () =>
+    request('/battle-pass/unlock-premium', {
+      method: 'POST',
+    }),
 
   // Clans
   myClan: () => request('/clans/my'),
