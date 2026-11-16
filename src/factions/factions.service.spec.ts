@@ -369,5 +369,59 @@ describe('FactionsService', () => {
         }),
       );
     });
+
+    it('applies 25% bail discount for SYNDICATE and 20% bounty bonus for GUARDIA_CIVIL', async () => {
+      prisma.player.findUnique.mockResolvedValue({
+        id: 'player-syn',
+        userId: 'user-syn',
+        faction: FactionType.SYNDICATE,
+        euros: 500,
+        jailUntil: new Date(Date.now() + 30_000),
+      });
+      prisma.player.updateMany.mockResolvedValue({ count: 1 });
+
+      const bailRes: any = await service.payBail('user-syn');
+      expect(bailRes.syndicateDiscount).toBe(true);
+      expect(bailRes.bailCost).toBeLessThan(90);
+
+      jest.spyOn(Math, 'random').mockReturnValue(0.1);
+      prisma.player.findUnique
+        .mockResolvedValueOnce({
+          id: 'gc-1',
+          userId: 'u-gc',
+          displayName: 'Cabo Pérez',
+          faction: FactionType.GUARDIA_CIVIL,
+          locationId: 'madrid_centro',
+          xp: 0,
+          level: 1,
+          euros: 100,
+          jailUntil: null,
+          vehicles: [{ template: { speed: 90 } }],
+        })
+        .mockResolvedValueOnce({
+          id: 'sus-gc',
+          userId: 'u-sus',
+          displayName: 'Fugitivo',
+          faction: FactionType.SYNDICATE,
+          locationId: 'madrid_centro',
+          heat: 60,
+          wantedLevel: 3,
+          euros: 500,
+          jailUntil: null,
+          vehicles: [{ template: { speed: 60 } }],
+        });
+      prisma.player.updateMany.mockResolvedValue({ count: 1 });
+      prisma.player.update.mockResolvedValue({
+        id: 'gc-1',
+        displayName: 'Cabo Pérez',
+        euros: 370,
+        xp: 65,
+        level: 1,
+      });
+
+      const interceptRes: any = await service.interceptSuspect('u-gc', 'sus-gc');
+      expect(interceptRes.captured).toBe(true);
+      expect(interceptRes.bountyEuros).toBe(270);
+    });
   });
 });

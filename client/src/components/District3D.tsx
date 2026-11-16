@@ -9,7 +9,7 @@ import {
 } from 'react';
 import * as THREE from 'three';
 import type { PlayerMovePayload, SpatialPlayer } from '@/lib/socket';
-import type { PlayerAppearance3D } from '@/lib/appearance3d';
+import type { PlayerAppearance3D, VehicleClass3D } from '@/lib/appearance3d';
 
 export type DistrictAction = {
   id: string;
@@ -207,15 +207,15 @@ type RemoteAvatarEntry = {
   labelSprite: THREE.Sprite;
 };
 
-type SupercarRig = {
+type VehicleRig = {
   group: THREE.Group;
   chassis: THREE.Group;
-  frontLeftWheel: THREE.Mesh;
-  frontRightWheel: THREE.Mesh;
-  rearLeftWheel: THREE.Mesh;
-  rearRightWheel: THREE.Mesh;
+  frontWheels: THREE.Mesh[];
+  rearWheels: THREE.Mesh[];
   brakeMat: THREE.MeshStandardMaterial;
   headlightGlow: THREE.PointLight;
+  rotors: Array<{ obj: THREE.Object3D; axis: 'x' | 'y' | 'z' }>;
+  vehicleClass: VehicleClass3D;
 };
 
 type SmokeParticle = {
@@ -457,7 +457,52 @@ function animateAvatarRig(
   }
 }
 
-function createSupercarRig(
+function disposeObject3D(root: THREE.Object3D) {
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  const textures = new Set<THREE.Texture>();
+
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.geometry) {
+      geometries.add(mesh.geometry);
+    }
+    const rawMat = (mesh as { material?: THREE.Material | THREE.Material[] })
+      .material;
+    if (Array.isArray(rawMat)) {
+      for (const m of rawMat) materials.add(m);
+    } else if (rawMat) {
+      materials.add(rawMat);
+    }
+  });
+
+  for (const mat of materials) {
+    for (const val of Object.values(mat) as unknown[]) {
+      if (val instanceof THREE.Texture) {
+        textures.add(val);
+      }
+    }
+    mat.dispose();
+  }
+  for (const geo of geometries) geo.dispose();
+  for (const tex of textures) tex.dispose();
+}
+
+function detectGamepadBadge(id: string): string {
+  const lower = id.toLowerCase();
+  if (/dualsense|dualshock|playstation|wireless controller|054c/.test(lower)) {
+    return 'PS5 / PlayStation';
+  }
+  if (/xbox|xinput|045e/.test(lower)) {
+    return 'Xbox';
+  }
+  if (/nintendo|switch|pro controller|joy-con|057e/.test(lower)) {
+    return 'Switch Pro';
+  }
+  return 'Mando';
+}
+
+function createVehicleRig(
   accentColor: number,
   options?: {
     bodyColor?: number;
@@ -465,8 +510,10 @@ function createSupercarRig(
     underglowOpacity?: number;
     hasBlueNeon?: boolean;
     hasGoldPlate?: boolean;
+    vehicleClass?: VehicleClass3D;
   },
-): SupercarRig {
+): VehicleRig {
+  const vehicleClass: VehicleClass3D = options?.vehicleClass ?? 'SUPERCAR';
   const group = new THREE.Group();
   const chassis = new THREE.Group();
   group.add(chassis);
@@ -490,6 +537,11 @@ function createSupercarRig(
     transparent: true,
     opacity: 0.85,
   });
+  const darkMetalMat = new THREE.MeshStandardMaterial({
+    color: 0x27272a,
+    metalness: 0.7,
+    roughness: 0.35,
+  });
   const wheelMat = new THREE.MeshStandardMaterial({
     color: 0x09090b,
     roughness: 0.85,
@@ -510,10 +562,20 @@ function createSupercarRig(
     emissiveIntensity: 0.9,
   });
 
-  // Underglow ring
+  const glowSize: [number, number] =
+    vehicleClass === 'MOTO'
+      ? [0.9, 2.3]
+      : vehicleClass === 'QUAD'
+        ? [1.45, 2.3]
+        : vehicleClass === 'TRUCK'
+          ? [2.4, 5.6]
+          : vehicleClass === 'PLANE'
+            ? [3.6, 5.2]
+            : [2.05, 4.25];
+
   const glowColor = options?.underglowColor ?? accentColor;
   const underglow = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.05, 4.25),
+    new THREE.PlaneGeometry(glowSize[0], glowSize[1]),
     new THREE.MeshBasicMaterial({
       color: glowColor,
       transparent: true,
@@ -531,77 +593,43 @@ function createSupercarRig(
     group.add(neonLight);
   }
 
-  // Main lower body
-  const lowerBody = new THREE.Mesh(
-    new THREE.BoxGeometry(1.88, 0.46, 4.15),
-    bodyMat,
-  );
-  lowerBody.position.set(0, 0.48, 0);
-  chassis.add(lowerBody);
-
-  // Racing side stripes / splitter
-  const splitter = new THREE.Mesh(
-    new THREE.BoxGeometry(1.94, 0.1, 4.24),
-    accentMat,
-  );
-  splitter.position.set(0, 0.28, 0);
-  chassis.add(splitter);
-
-  // Cabin
-  const cabin = new THREE.Mesh(
-    new THREE.BoxGeometry(1.48, 0.42, 1.95),
-    glassMat,
-  );
-  cabin.position.set(0, 0.86, -0.15);
-  chassis.add(cabin);
-
-  // Roof cap
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.08, 1.45), bodyMat);
-  roof.position.set(0, 1.08, -0.2);
-  chassis.add(roof);
-
-  // Rear spoiler
-  const wing = new THREE.Mesh(
-    new THREE.BoxGeometry(1.84, 0.08, 0.34),
-    accentMat,
-  );
-  wing.position.set(0, 0.96, -1.92);
-  chassis.add(wing);
-
-  const strutL = new THREE.Mesh(
-    new THREE.BoxGeometry(0.08, 0.26, 0.16),
-    bodyMat,
-  );
-  strutL.position.set(-0.62, 0.8, -1.88);
-  const strutR = strutL.clone();
-  strutR.position.x = 0.62;
-  chassis.add(strutL, strutR);
-
-  // Headlights (+Z is forward)
-  const headL = new THREE.Mesh(
-    new THREE.BoxGeometry(0.42, 0.12, 0.08),
-    headlightMat,
-  );
-  headL.position.set(-0.6, 0.5, 2.08);
-  const headR = headL.clone();
-  headR.position.x = 0.6;
-  chassis.add(headL, headR);
-
   const headlightGlow = new THREE.PointLight(0xe0f2fe, 0, 18, 1.6);
-  headlightGlow.position.set(0, 0.7, 2.6);
+  headlightGlow.position.set(0, 0.8, 2.6);
   chassis.add(headlightGlow);
 
-  // Taillights (-Z is rear)
-  const tailL = new THREE.Mesh(
-    new THREE.BoxGeometry(0.5, 0.12, 0.08),
-    brakeMat,
-  );
-  tailL.position.set(-0.56, 0.54, -2.08);
-  const tailR = tailL.clone();
-  tailR.position.x = 0.56;
-  chassis.add(tailL, tailR);
+  const frontWheels: THREE.Mesh[] = [];
+  const rearWheels: THREE.Mesh[] = [];
+  const rotors: Array<{ obj: THREE.Object3D; axis: 'x' | 'y' | 'z' }> = [];
 
-  if (options?.hasGoldPlate) {
+  const makeWheel = (
+    x: number,
+    y: number,
+    z: number,
+    radius = 0.34,
+    width = 0.26,
+  ) => {
+    const wheel = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius, radius, width, 16),
+      wheelMat,
+    );
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(x, y, z);
+    const rim = new THREE.Mesh(
+      new THREE.CylinderGeometry(
+        radius * 0.58,
+        radius * 0.58,
+        width + 0.01,
+        10,
+      ),
+      rimMat,
+    );
+    wheel.add(rim);
+    group.add(wheel);
+    return wheel;
+  };
+
+  const addGoldPlate = (y: number, z: number) => {
+    if (!options?.hasGoldPlate) return;
     const goldPlateMat = new THREE.MeshStandardMaterial({
       color: 0xfbbf24,
       emissive: 0xf59e0b,
@@ -610,45 +638,526 @@ function createSupercarRig(
       roughness: 0.15,
     });
     const plate = new THREE.Mesh(
-      new THREE.BoxGeometry(0.48, 0.13, 0.05),
+      new THREE.BoxGeometry(0.46, 0.13, 0.05),
       goldPlateMat,
     );
-    plate.position.set(0, 0.36, -2.09);
+    plate.position.set(0, y, z);
     chassis.add(plate);
-  }
-
-  // Wheels
-  const makeWheel = (x: number, z: number) => {
-    const wheel = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.34, 0.34, 0.26, 16),
-      wheelMat,
-    );
-    wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(x, 0.34, z);
-    const rim = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.2, 0.2, 0.27, 10),
-      rimMat,
-    );
-    wheel.add(rim);
-    group.add(wheel);
-    return wheel;
   };
 
-  const frontLeftWheel = makeWheel(-0.92, 1.32);
-  const frontRightWheel = makeWheel(0.92, 1.32);
-  const rearLeftWheel = makeWheel(-0.92, -1.32);
-  const rearRightWheel = makeWheel(0.92, -1.32);
+  if (vehicleClass === 'MOTO') {
+    const frame = new THREE.Mesh(
+      new THREE.BoxGeometry(0.44, 0.42, 1.75),
+      bodyMat,
+    );
+    frame.position.set(0, 0.62, 0);
+    chassis.add(frame);
+
+    const tank = new THREE.Mesh(
+      new THREE.BoxGeometry(0.46, 0.24, 0.68),
+      accentMat,
+    );
+    tank.position.set(0, 0.88, 0.22);
+    chassis.add(tank);
+
+    const seat = new THREE.Mesh(
+      new THREE.BoxGeometry(0.36, 0.12, 0.68),
+      darkMetalMat,
+    );
+    seat.position.set(0, 0.82, -0.38);
+    chassis.add(seat);
+
+    const windshield = new THREE.Mesh(
+      new THREE.BoxGeometry(0.36, 0.32, 0.08),
+      glassMat,
+    );
+    windshield.position.set(0, 1.02, 0.68);
+    windshield.rotation.x = -0.35;
+    chassis.add(windshield);
+
+    const handleBar = new THREE.Mesh(
+      new THREE.BoxGeometry(0.76, 0.06, 0.08),
+      darkMetalMat,
+    );
+    handleBar.position.set(0, 1.02, 0.56);
+    chassis.add(handleBar);
+
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.14, 0.08),
+      headlightMat,
+    );
+    head.position.set(0, 0.78, 0.92);
+    chassis.add(head);
+
+    const tail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.1, 0.08),
+      brakeMat,
+    );
+    tail.position.set(0, 0.76, -0.92);
+    chassis.add(tail);
+
+    addGoldPlate(0.56, -0.94);
+    frontWheels.push(makeWheel(0, 0.33, 0.82, 0.33, 0.16));
+    rearWheels.push(makeWheel(0, 0.33, -0.82, 0.33, 0.2));
+  } else if (vehicleClass === 'QUAD') {
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(0.95, 0.42, 1.85),
+      bodyMat,
+    );
+    body.position.set(0, 0.62, 0);
+    chassis.add(body);
+
+    const rack = new THREE.Mesh(
+      new THREE.BoxGeometry(1.06, 0.08, 0.56),
+      accentMat,
+    );
+    rack.position.set(0, 0.86, -0.62);
+    chassis.add(rack);
+
+    const bars = new THREE.Mesh(
+      new THREE.BoxGeometry(0.86, 0.07, 0.08),
+      darkMetalMat,
+    );
+    bars.position.set(0, 1.06, 0.52);
+    chassis.add(bars);
+
+    const headL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.12, 0.08),
+      headlightMat,
+    );
+    headL.position.set(-0.3, 0.74, 0.96);
+    const headR = headL.clone();
+    headR.position.x = 0.3;
+    chassis.add(headL, headR);
+
+    const tail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.1, 0.08),
+      brakeMat,
+    );
+    tail.position.set(0, 0.7, -0.96);
+    chassis.add(tail);
+
+    addGoldPlate(0.5, -0.98);
+    frontWheels.push(makeWheel(-0.62, 0.34, 0.72, 0.34, 0.28));
+    frontWheels.push(makeWheel(0.62, 0.34, 0.72, 0.34, 0.28));
+    rearWheels.push(makeWheel(-0.62, 0.34, -0.72, 0.34, 0.3));
+    rearWheels.push(makeWheel(0.62, 0.34, -0.72, 0.34, 0.3));
+  } else if (vehicleClass === 'SUV' || vehicleClass === 'VAN') {
+    const isVan = vehicleClass === 'VAN';
+    const lower = new THREE.Mesh(
+      new THREE.BoxGeometry(1.96, 0.68, 4.35),
+      bodyMat,
+    );
+    lower.position.set(0, 0.68, 0);
+    chassis.add(lower);
+
+    const cab = new THREE.Mesh(
+      new THREE.BoxGeometry(1.82, 0.64, isVan ? 3.5 : 2.65),
+      glassMat,
+    );
+    cab.position.set(0, 1.32, isVan ? -0.1 : -0.35);
+    chassis.add(cab);
+
+    const roof = new THREE.Mesh(
+      new THREE.BoxGeometry(1.78, 0.1, isVan ? 3.55 : 2.6),
+      bodyMat,
+    );
+    roof.position.set(0, 1.68, isVan ? -0.1 : -0.35);
+    chassis.add(roof);
+
+    const roofRailL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.08, 2.2),
+      accentMat,
+    );
+    roofRailL.position.set(-0.72, 1.76, -0.3);
+    const roofRailR = roofRailL.clone();
+    roofRailR.position.x = 0.72;
+    chassis.add(roofRailL, roofRailR);
+
+    const bumper = new THREE.Mesh(
+      new THREE.BoxGeometry(2.02, 0.18, 0.18),
+      accentMat,
+    );
+    bumper.position.set(0, 0.42, 2.2);
+    chassis.add(bumper);
+
+    const headL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.38, 0.16, 0.08),
+      headlightMat,
+    );
+    headL.position.set(-0.64, 0.78, 2.19);
+    const headR = headL.clone();
+    headR.position.x = 0.64;
+    chassis.add(headL, headR);
+
+    const tailL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.28, 0.08),
+      brakeMat,
+    );
+    tailL.position.set(-0.78, 0.8, -2.19);
+    const tailR = tailL.clone();
+    tailR.position.x = 0.78;
+    chassis.add(tailL, tailR);
+
+    addGoldPlate(0.54, -2.21);
+    frontWheels.push(makeWheel(-0.98, 0.42, 1.38, 0.42, 0.3));
+    frontWheels.push(makeWheel(0.98, 0.42, 1.38, 0.42, 0.3));
+    rearWheels.push(makeWheel(-0.98, 0.42, -1.38, 0.42, 0.3));
+    rearWheels.push(makeWheel(0.98, 0.42, -1.38, 0.42, 0.3));
+  } else if (vehicleClass === 'TRUCK') {
+    const cab = new THREE.Mesh(
+      new THREE.BoxGeometry(2.15, 1.45, 1.65),
+      bodyMat,
+    );
+    cab.position.set(0, 1.15, 1.65);
+    chassis.add(cab);
+
+    const windshield = new THREE.Mesh(
+      new THREE.BoxGeometry(1.9, 0.56, 0.1),
+      glassMat,
+    );
+    windshield.position.set(0, 1.44, 2.46);
+    chassis.add(windshield);
+
+    const cargo = new THREE.Mesh(
+      new THREE.BoxGeometry(2.22, 1.62, 3.45),
+      darkMetalMat,
+    );
+    cargo.position.set(0, 1.32, -1.05);
+    chassis.add(cargo);
+
+    const cargoStripe = new THREE.Mesh(
+      new THREE.BoxGeometry(2.26, 0.16, 3.48),
+      accentMat,
+    );
+    cargoStripe.position.set(0, 1.15, -1.05);
+    chassis.add(cargoStripe);
+
+    const headL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.36, 0.18, 0.08),
+      headlightMat,
+    );
+    headL.position.set(-0.7, 0.68, 2.49);
+    const headR = headL.clone();
+    headR.position.x = 0.7;
+    chassis.add(headL, headR);
+
+    const tailL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.16, 0.08),
+      brakeMat,
+    );
+    tailL.position.set(-0.72, 0.62, -2.79);
+    const tailR = tailL.clone();
+    tailR.position.x = 0.72;
+    chassis.add(tailL, tailR);
+
+    addGoldPlate(0.42, -2.81);
+    frontWheels.push(makeWheel(-1.06, 0.46, 1.75, 0.46, 0.32));
+    frontWheels.push(makeWheel(1.06, 0.46, 1.75, 0.46, 0.32));
+    rearWheels.push(makeWheel(-1.06, 0.46, -0.75, 0.46, 0.32));
+    rearWheels.push(makeWheel(1.06, 0.46, -0.75, 0.46, 0.32));
+    rearWheels.push(makeWheel(-1.06, 0.46, -1.95, 0.46, 0.32));
+    rearWheels.push(makeWheel(1.06, 0.46, -1.95, 0.46, 0.32));
+  } else if (vehicleClass === 'BOAT') {
+    const hull = new THREE.Mesh(
+      new THREE.BoxGeometry(1.88, 0.56, 4.4),
+      bodyMat,
+    );
+    hull.position.set(0, 0.42, -0.1);
+    chassis.add(hull);
+
+    const bow = new THREE.Mesh(new THREE.ConeGeometry(0.95, 1.35, 4), bodyMat);
+    bow.rotation.y = Math.PI / 4;
+    bow.rotation.x = Math.PI / 2;
+    bow.scale.set(1.35, 1, 0.42);
+    bow.position.set(0, 0.46, 2.55);
+    chassis.add(bow);
+
+    const deckStripe = new THREE.Mesh(
+      new THREE.BoxGeometry(1.94, 0.1, 4.46),
+      accentMat,
+    );
+    deckStripe.position.set(0, 0.66, -0.1);
+    chassis.add(deckStripe);
+
+    const cockpit = new THREE.Mesh(
+      new THREE.BoxGeometry(1.36, 0.42, 1.55),
+      glassMat,
+    );
+    cockpit.position.set(0, 0.92, 0.25);
+    chassis.add(cockpit);
+
+    const engineL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 0.44, 0.42),
+      darkMetalMat,
+    );
+    engineL.position.set(-0.42, 0.66, -2.35);
+    const engineR = engineL.clone();
+    engineR.position.x = 0.42;
+    chassis.add(engineL, engineR);
+
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.12, 0.12),
+      headlightMat,
+    );
+    head.position.set(0, 0.78, 2.25);
+    chassis.add(head);
+
+    const tail = new THREE.Mesh(
+      new THREE.BoxGeometry(1.1, 0.1, 0.08),
+      brakeMat,
+    );
+    tail.position.set(0, 0.7, -2.32);
+    chassis.add(tail);
+
+    addGoldPlate(0.45, -2.34);
+  } else if (vehicleClass === 'HELI') {
+    const pod = new THREE.Mesh(new THREE.BoxGeometry(1.65, 1.15, 2.6), bodyMat);
+    pod.position.set(0, 1.05, 0.1);
+    chassis.add(pod);
+
+    const noseGlass = new THREE.Mesh(
+      new THREE.BoxGeometry(1.52, 0.85, 0.95),
+      glassMat,
+    );
+    noseGlass.position.set(0, 1.05, 1.42);
+    chassis.add(noseGlass);
+
+    const tailBoom = new THREE.Mesh(
+      new THREE.BoxGeometry(0.38, 0.4, 2.4),
+      bodyMat,
+    );
+    tailBoom.position.set(0, 1.25, -2.15);
+    chassis.add(tailBoom);
+
+    const tailFin = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.78, 0.55),
+      accentMat,
+    );
+    tailFin.position.set(0, 1.55, -3.2);
+    chassis.add(tailFin);
+
+    const skidL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.1, 2.8),
+      darkMetalMat,
+    );
+    skidL.position.set(-0.85, 0.14, 0.1);
+    const skidR = skidL.clone();
+    skidR.position.x = 0.85;
+    chassis.add(skidL, skidR);
+
+    const strutPos: [number, number][] = [
+      [-0.78, 0.85],
+      [0.78, 0.85],
+      [-0.78, -0.65],
+      [0.78, -0.65],
+    ];
+    for (const [sx, sz] of skidStrutsOrCoords(strutPos)) {
+      const s = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.5, 0.08),
+        darkMetalMat,
+      );
+      s.position.set(sx, 0.38, sz);
+      chassis.add(s);
+    }
+
+    const rotorHub = new THREE.Group();
+    rotorHub.position.set(0, 1.78, 0.1);
+    const mast = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.1, 0.12, 0.34, 10),
+      darkMetalMat,
+    );
+    const blade1 = new THREE.Mesh(
+      new THREE.BoxGeometry(4.8, 0.04, 0.22),
+      accentMat,
+    );
+    const blade2 = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.04, 4.8),
+      darkMetalMat,
+    );
+    blade1.position.y = 0.15;
+    blade2.position.y = 0.16;
+    rotorHub.add(mast, blade1, blade2);
+    chassis.add(rotorHub);
+    rotors.push({ obj: rotorHub, axis: 'y' });
+
+    const tailRotor = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.85, 0.12),
+      accentMat,
+    );
+    tailRotor.position.set(0.16, 1.58, -3.22);
+    chassis.add(tailRotor);
+    rotors.push({ obj: tailRotor, axis: 'x' });
+
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.14, 0.08),
+      headlightMat,
+    );
+    head.position.set(0, 0.72, 1.9);
+    chassis.add(head);
+
+    const tail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, 0.16, 0.08),
+      brakeMat,
+    );
+    tail.position.set(0, 1.25, -3.38);
+    chassis.add(tail);
+
+    addGoldPlate(0.62, -1.22);
+  } else if (vehicleClass === 'PLANE') {
+    const fuselage = new THREE.Mesh(
+      new THREE.BoxGeometry(1.15, 0.95, 4.6),
+      bodyMat,
+    );
+    fuselage.position.set(0, 0.96, 0);
+    chassis.add(fuselage);
+
+    const canopy = new THREE.Mesh(
+      new THREE.BoxGeometry(0.88, 0.45, 1.65),
+      glassMat,
+    );
+    canopy.position.set(0, 1.54, 0.45);
+    chassis.add(canopy);
+
+    const wings = new THREE.Mesh(
+      new THREE.BoxGeometry(5.6, 0.12, 1.25),
+      bodyMat,
+    );
+    wings.position.set(0, 0.98, 0.15);
+    chassis.add(wings);
+
+    const wingAccent = new THREE.Mesh(
+      new THREE.BoxGeometry(5.64, 0.06, 0.24),
+      accentMat,
+    );
+    wingAccent.position.set(0, 1.02, -0.35);
+    chassis.add(wingAccent);
+
+    const tailWing = new THREE.Mesh(
+      new THREE.BoxGeometry(2.1, 0.1, 0.65),
+      bodyMat,
+    );
+    tailWing.position.set(0, 1.18, -2.0);
+    chassis.add(tailWing);
+
+    const vFin = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.95, 0.75),
+      accentMat,
+    );
+    vFin.position.set(0, 1.65, -1.95);
+    chassis.add(vFin);
+
+    const prop = new THREE.Mesh(
+      new THREE.BoxGeometry(1.35, 0.14, 0.08),
+      accentMat,
+    );
+    prop.position.set(0, 0.96, 2.38);
+    chassis.add(prop);
+    rotors.push({ obj: prop, axis: 'z' });
+
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(0.38, 0.14, 0.08),
+      headlightMat,
+    );
+    head.position.set(0, 0.78, 2.31);
+    chassis.add(head);
+
+    const tail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.36, 0.12, 0.08),
+      brakeMat,
+    );
+    tail.position.set(0, 0.96, -2.31);
+    chassis.add(tail);
+
+    addGoldPlate(0.68, -2.32);
+    frontWheels.push(makeWheel(0, 0.26, 1.65, 0.26, 0.18));
+    rearWheels.push(makeWheel(-0.92, 0.26, -0.55, 0.26, 0.2));
+    rearWheels.push(makeWheel(0.92, 0.26, -0.55, 0.26, 0.2));
+  } else {
+    // SUPERCAR (default sleek sports coupe)
+    const lowerBody = new THREE.Mesh(
+      new THREE.BoxGeometry(1.88, 0.46, 4.15),
+      bodyMat,
+    );
+    lowerBody.position.set(0, 0.48, 0);
+    chassis.add(lowerBody);
+
+    const splitter = new THREE.Mesh(
+      new THREE.BoxGeometry(1.94, 0.1, 4.24),
+      accentMat,
+    );
+    splitter.position.set(0, 0.28, 0);
+    chassis.add(splitter);
+
+    const cabin = new THREE.Mesh(
+      new THREE.BoxGeometry(1.48, 0.42, 1.95),
+      glassMat,
+    );
+    cabin.position.set(0, 0.86, -0.15);
+    chassis.add(cabin);
+
+    const roof = new THREE.Mesh(
+      new THREE.BoxGeometry(1.36, 0.08, 1.45),
+      bodyMat,
+    );
+    roof.position.set(0, 1.08, -0.2);
+    chassis.add(roof);
+
+    const wing = new THREE.Mesh(
+      new THREE.BoxGeometry(1.84, 0.08, 0.34),
+      accentMat,
+    );
+    wing.position.set(0, 0.96, -1.92);
+    chassis.add(wing);
+
+    const strutL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.26, 0.16),
+      bodyMat,
+    );
+    strutL.position.set(-0.62, 0.8, -1.88);
+    const strutR = strutL.clone();
+    strutR.position.x = 0.62;
+    chassis.add(strutL, strutR);
+
+    const headL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.42, 0.12, 0.08),
+      headlightMat,
+    );
+    headL.position.set(-0.6, 0.5, 2.08);
+    const headR = headL.clone();
+    headR.position.x = 0.6;
+    chassis.add(headL, headR);
+
+    const tailL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.12, 0.08),
+      brakeMat,
+    );
+    tailL.position.set(-0.56, 0.54, -2.08);
+    const tailR = tailL.clone();
+    tailR.position.x = 0.56;
+    chassis.add(tailL, tailR);
+
+    addGoldPlate(0.36, -2.09);
+    frontWheels.push(makeWheel(-0.92, 0.34, 1.32));
+    frontWheels.push(makeWheel(0.92, 0.34, 1.32));
+    rearWheels.push(makeWheel(-0.92, 0.34, -1.32));
+    rearWheels.push(makeWheel(0.92, 0.34, -1.32));
+  }
 
   return {
     group,
     chassis,
-    frontLeftWheel,
-    frontRightWheel,
-    rearLeftWheel,
-    rearRightWheel,
+    frontWheels,
+    rearWheels,
     brakeMat,
     headlightGlow,
+    rotors,
+    vehicleClass,
   };
+}
+
+function skidStrutsOrCoords(coords: [number, number][]): [number, number][] {
+  return coords;
 }
 
 export default function District3D({
@@ -669,6 +1178,7 @@ export default function District3D({
 }: District3DProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const radarCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const stickBaseRef = useRef<HTMLDivElement | null>(null);
 
   const [webglError, setWebglError] = useState<string | null>(null);
   const [nearbyPoi, setNearbyPoi] = useState<DistrictPoi | null>(null);
@@ -679,20 +1189,45 @@ export default function District3D({
   const [speedKmh, setSpeedKmh] = useState(0);
   const [isDrifting, setIsDrifting] = useState(false);
   const [driftTouch, setDriftTouch] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [gamepadName, setGamepadName] = useState<string | null>(null);
+  const [stickOffset, setStickOffset] = useState<{ x: number; y: number }>({
+    x: 0,
+    y: 0,
+  });
 
   // Input refs (no React re-render per key press)
   const keysRef = useRef<Record<string, boolean>>({});
   const touchDirRef = useRef<{ x: number; z: number }>({ x: 0, z: 0 });
+  const touchThrottleRef = useRef(false);
+  const touchBrakeRef = useRef(false);
+  const stickPointerIdRef = useRef<number | null>(null);
   const sprintTouchRef = useRef(false);
   const driftTouchRef = useRef(false);
   const inVehicleRef = useRef(false);
   const toggleVehicleFnRef = useRef<(() => void) | null>(null);
   const triggerPulseFnRef = useRef<(() => void) | null>(null);
+  const rebuildLocalRigsFnRef = useRef<(() => void) | null>(null);
   const nearbyPoiRef = useRef<DistrictPoi | null>(null);
   const activePoiRef = useRef<DistrictPoi | null>(null);
   const emitMoveRef = useRef(emitMove);
   const locationIdRef = useRef(player.locationId);
   const localIdRef = useRef(localPlayerId || player.id || '');
+  const appearanceRef = useRef<PlayerAppearance3D | undefined>(
+    player.appearance,
+  );
+  const poseRef = useRef({
+    px: 0,
+    pz: 2,
+    pRotY: 0,
+    cx: 3.5,
+    cz: 4.5,
+    cHeading: 0,
+    inVehicle: false,
+  });
+  const camOrbitYawRef = useRef(0);
+  const camOrbitPitchRef = useRef(0.18);
+  const camZoomRef = useRef(1);
 
   useEffect(() => {
     emitMoveRef.current = emitMove;
@@ -709,6 +1244,58 @@ export default function District3D({
   useEffect(() => {
     activePoiRef.current = activePoi;
   }, [activePoi]);
+
+  const lastBuiltKeyRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    appearanceRef.current = player.appearance;
+    const nextKey = player.appearance?.appearanceKey;
+    if (
+      lastBuiltKeyRef.current !== undefined &&
+      lastBuiltKeyRef.current !== nextKey
+    ) {
+      rebuildLocalRigsFnRef.current?.();
+    }
+    lastBuiltKeyRef.current = nextKey;
+  }, [player.appearance]);
+
+  // Detect coarse pointer / touch capability (phones, tablets, iPad, Switch Touch)
+  useEffect(() => {
+    const detectTouch = () => {
+      const coarse =
+        typeof window !== 'undefined' &&
+        window.matchMedia?.('(pointer: coarse)')?.matches;
+      const touchPoints =
+        typeof navigator !== 'undefined' && (navigator.maxTouchPoints ?? 0) > 0;
+      const hasTouch =
+        Boolean(coarse) ||
+        Boolean(touchPoints) ||
+        (typeof window !== 'undefined' && 'ontouchstart' in window);
+      if (hasTouch) setIsTouchDevice(true);
+    };
+    detectTouch();
+    window.addEventListener('touchstart', detectTouch, {
+      once: true,
+      passive: true,
+    });
+    return () => window.removeEventListener('touchstart', detectTouch);
+  }, []);
+
+  // Detect connected gamepads (PS5 DualSense, Xbox, Switch Pro)
+  useEffect(() => {
+    const syncGamepads = () => {
+      const pads = navigator.getGamepads?.() ?? [];
+      const active = Array.from(pads).find((p) => p && p.connected);
+      setGamepadName(active ? detectGamepadBadge(active.id) : null);
+    };
+    syncGamepads();
+    window.addEventListener('gamepadconnected', syncGamepads);
+    window.addEventListener('gamepaddisconnected', syncGamepads);
+    return () => {
+      window.removeEventListener('gamepadconnected', syncGamepads);
+      window.removeEventListener('gamepaddisconnected', syncGamepads);
+    };
+  }, []);
 
   const toggleSprintTouch = useCallback(() => {
     setSprintTouch((prev) => {
@@ -738,6 +1325,33 @@ export default function District3D({
     if (nearbyPoiRef.current) {
       setActivePoi(nearbyPoiRef.current);
     }
+  }, []);
+
+  const updateStickFromClient = useCallback(
+    (clientX: number, clientY: number) => {
+      const el = stickBaseRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const maxR = Math.max(24, rect.width * 0.38);
+      let dx = clientX - cx;
+      let dy = clientY - cy;
+      const dist = Math.hypot(dx, dy);
+      if (dist > maxR) {
+        dx = (dx / dist) * maxR;
+        dy = (dy / dist) * maxR;
+      }
+      setStickOffset({ x: Math.round(dx), y: Math.round(dy) });
+      touchDirRef.current = { x: dx / maxR, z: dy / maxR };
+    },
+    [],
+  );
+
+  const resetStick = useCallback(() => {
+    stickPointerIdRef.current = null;
+    setStickOffset({ x: 0, y: 0 });
+    touchDirRef.current = { x: 0, z: 0 };
   }, []);
 
   useEffect(() => {
@@ -1000,34 +1614,74 @@ export default function District3D({
       poiMeshes.push({ poi, beacon, ring });
     }
 
-    // Local Player Avatar (reflects equipped Character, Clothing, Cosmetic & VIP Crown)
-    const app = player.appearance;
-    const localRig = createAvatarRig(
-      app?.avatarBodyColor ?? 0x27272a,
-      app?.avatarAccentColor ?? theme.accent,
-      Boolean(app?.hasVipCrown),
-    );
-    localRig.group.position.set(0, 0, 2);
+    // Local Player Avatar & Vehicle (supports in-place hot-swap without resetting WebGL)
+    const buildLocalAvatar = (nextApp?: PlayerAppearance3D) =>
+      createAvatarRig(
+        nextApp?.avatarBodyColor ?? 0x27272a,
+        nextApp?.avatarAccentColor ?? theme.accent,
+        Boolean(nextApp?.hasVipCrown),
+      );
+
+    const buildLocalVehicle = (nextApp?: PlayerAppearance3D) =>
+      createVehicleRig(nextApp?.carAccentColor ?? theme.accent, {
+        bodyColor: nextApp?.carBodyColor,
+        underglowColor: nextApp?.carUnderglowColor,
+        underglowOpacity: nextApp?.carUnderglowOpacity,
+        hasBlueNeon: nextApp?.hasBlueNeon,
+        hasGoldPlate: nextApp?.hasGoldPlate,
+        vehicleClass: nextApp?.vehicleClass ?? 'SUPERCAR',
+      });
+
+    const initialPose = poseRef.current;
+    const initialApp = appearanceRef.current;
+    lastBuiltKeyRef.current = initialApp?.appearanceKey;
+
+    let localRig = buildLocalAvatar(initialApp);
+    localRig.group.position.set(initialPose.px, 0, initialPose.pz);
+    localRig.group.rotation.y = initialPose.pRotY;
+    localRig.group.visible = !initialPose.inVehicle;
     scene.add(localRig.group);
 
-    // Local Supercar (reflects equipped Neon, Gold Plate & VIP Fleet)
-    const carRig = createSupercarRig(app?.carAccentColor ?? theme.accent, {
-      bodyColor: app?.carBodyColor,
-      underglowColor: app?.carUnderglowColor,
-      underglowOpacity: app?.carUnderglowOpacity,
-      hasBlueNeon: app?.hasBlueNeon,
-      hasGoldPlate: app?.hasGoldPlate,
-    });
-    carRig.group.position.set(3.5, 0, 4.5);
+    let carRig = buildLocalVehicle(initialApp);
+    carRig.group.position.set(initialPose.cx, 0, initialPose.cz);
+    carRig.group.rotation.y = initialPose.cHeading;
+    carRig.headlightGlow.intensity = initialPose.inVehicle ? 10 : 0;
     scene.add(carRig.group);
+
+    inVehicleRef.current = initialPose.inVehicle;
 
     // Driving & Drift State
     let carVx = 0;
     let carVz = 0;
-    let carHeading = 0;
+    let carHeading = initialPose.cHeading;
     let carRoll = 0;
     let carPitch = 0;
     let lastHudSync = 0;
+
+    rebuildLocalRigsFnRef.current = () => {
+      const nextApp = appearanceRef.current;
+      const pPos = localRig.group.position.clone();
+      const pRotY = localRig.group.rotation.y;
+      const cPos = carRig.group.position.clone();
+      const cRotY = carRig.group.rotation.y;
+      const wasInCar = inVehicleRef.current;
+
+      scene.remove(localRig.group);
+      disposeObject3D(localRig.group);
+      localRig = buildLocalAvatar(nextApp);
+      localRig.group.position.copy(pPos);
+      localRig.group.rotation.y = pRotY;
+      localRig.group.visible = !wasInCar;
+      scene.add(localRig.group);
+
+      scene.remove(carRig.group);
+      disposeObject3D(carRig.group);
+      carRig = buildLocalVehicle(nextApp);
+      carRig.group.position.copy(cPos);
+      carRig.group.rotation.y = cRotY;
+      carRig.headlightGlow.intensity = wasInCar ? 10 : 0;
+      scene.add(carRig.group);
+    };
 
     // Tire Smoke Pool
     const smokeGeo = new THREE.SphereGeometry(0.28, 6, 6);
@@ -1133,6 +1787,7 @@ export default function District3D({
         setSpeedKmh(0);
         setIsDrifting(false);
         carRig.headlightGlow.intensity = 0;
+        carRig.group.position.y = 0;
         const exitX = THREE.MathUtils.clamp(
           carRig.group.position.x - Math.cos(carHeading) * 1.9,
           -WORLD_LIMIT,
@@ -1187,7 +1842,13 @@ export default function District3D({
         return;
       }
       const k = e.key.toLowerCase();
-      if (k === ' ' && inVehicleRef.current) {
+      if (
+        k === 'arrowup' ||
+        k === 'arrowdown' ||
+        k === 'arrowleft' ||
+        k === 'arrowright' ||
+        k === ' '
+      ) {
         e.preventDefault();
       }
       keysRef.current[k] = true;
@@ -1210,8 +1871,67 @@ export default function District3D({
       keysRef.current[e.key.toLowerCase()] = false;
     };
 
+    const onWindowBlur = () => {
+      keysRef.current = {};
+      touchDirRef.current = { x: 0, z: 0 };
+      touchThrottleRef.current = false;
+      touchBrakeRef.current = false;
+      sprintTouchRef.current = false;
+      driftTouchRef.current = false;
+    };
+
+    // Mouse / Pointer camera orbit + wheel zoom on WebGL canvas
+    let isOrbitDragging = false;
+    let lastOrbitX = 0;
+    let lastOrbitY = 0;
+    const canvasEl = renderer.domElement;
+    canvasEl.style.touchAction = 'none';
+
+    const onCanvasPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
+      isOrbitDragging = true;
+      lastOrbitX = e.clientX;
+      lastOrbitY = e.clientY;
+    };
+    const onCanvasPointerMove = (e: PointerEvent) => {
+      if (!isOrbitDragging) return;
+      const dx = e.clientX - lastOrbitX;
+      const dy = e.clientY - lastOrbitY;
+      lastOrbitX = e.clientX;
+      lastOrbitY = e.clientY;
+      camOrbitYawRef.current -= dx * 0.0065;
+      camOrbitPitchRef.current = THREE.MathUtils.clamp(
+        camOrbitPitchRef.current + dy * 0.0045,
+        -0.3,
+        0.65,
+      );
+    };
+    const onCanvasPointerUp = () => {
+      isOrbitDragging = false;
+    };
+    const onCanvasWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      camZoomRef.current = THREE.MathUtils.clamp(
+        camZoomRef.current + e.deltaY * 0.0008,
+        0.65,
+        1.75,
+      );
+    };
+    const onCanvasDblClick = () => {
+      camOrbitYawRef.current = 0;
+      camOrbitPitchRef.current = 0.18;
+      camZoomRef.current = 1;
+    };
+
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onWindowBlur);
+    canvasEl.addEventListener('pointerdown', onCanvasPointerDown);
+    window.addEventListener('pointermove', onCanvasPointerMove);
+    window.addEventListener('pointerup', onCanvasPointerUp);
+    window.addEventListener('pointercancel', onCanvasPointerUp);
+    canvasEl.addEventListener('wheel', onCanvasWheel, { passive: false });
+    canvasEl.addEventListener('dblclick', onCanvasDblClick);
 
     // ResizeObserver
     const handleResize = () => {
@@ -1232,6 +1952,10 @@ export default function District3D({
     let wasMoving = false;
     let lastRadarDraw = 0;
     let lastCountSync = 0;
+    let prevGpVehicle = false;
+    let prevGpPulse = false;
+    let prevGpInteract = false;
+    let prevGpCancel = false;
 
     const camTarget = new THREE.Vector3();
     const desiredCamPos = new THREE.Vector3();
@@ -1329,28 +2053,123 @@ export default function District3D({
       const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
 
-      // 1. Local movement (On-foot OR Vehicle + Drift Physics)
+      // Poll active Gamepad (PS5 DualSense, Xbox, Switch Pro)
+      const pads = navigator.getGamepads?.() ?? [];
+      const gp = Array.from(pads).find((p) => p && p.connected) ?? null;
+      const deadzone = (val: number) =>
+        Math.abs(val) < 0.16 ? 0 : (val - Math.sign(val) * 0.16) / 0.84;
+
+      let gpMoveX = 0;
+      let gpMoveZ = 0;
+      let gpThrottle = 0;
+      let gpBoost = false;
+      let gpDrift = false;
+      if (gp) {
+        const lx = deadzone(gp.axes[0] ?? 0);
+        const ly = deadzone(gp.axes[1] ?? 0);
+        const rx = deadzone(gp.axes[2] ?? 0);
+        const ry = deadzone(gp.axes[3] ?? 0);
+        if (Math.abs(rx) > 0 || Math.abs(ry) > 0) {
+          camOrbitYawRef.current -= rx * dt * 2.4;
+          camOrbitPitchRef.current = THREE.MathUtils.clamp(
+            camOrbitPitchRef.current + ry * dt * 1.6,
+            -0.3,
+            0.65,
+          );
+        }
+
+        const dpadUp = gp.buttons[12]?.pressed ? 1 : 0;
+        const dpadDown = gp.buttons[13]?.pressed ? 1 : 0;
+        const dpadLeft = gp.buttons[14]?.pressed ? 1 : 0;
+        const dpadRight = gp.buttons[15]?.pressed ? 1 : 0;
+
+        gpMoveX = THREE.MathUtils.clamp(lx + dpadRight - dpadLeft, -1, 1);
+        gpMoveZ = THREE.MathUtils.clamp(ly + dpadDown - dpadUp, -1, 1);
+
+        const r2 = gp.buttons[7]?.value ?? 0;
+        const l2 = gp.buttons[6]?.value ?? 0;
+        gpThrottle = (r2 > 0.08 ? r2 : 0) - (l2 > 0.08 ? l2 : 0);
+        gpBoost = Boolean(gp.buttons[5]?.pressed);
+
+        const btnCross = Boolean(gp.buttons[0]?.pressed);
+        const btnCircle = Boolean(gp.buttons[1]?.pressed);
+        const btnSquare = Boolean(gp.buttons[2]?.pressed);
+        const btnTriangle = Boolean(gp.buttons[3]?.pressed);
+
+        if (btnTriangle && !prevGpVehicle) toggleVehicleMode();
+        if (btnSquare && !prevGpPulse) triggerCombatPulse();
+        if (btnCross && !prevGpInteract && nearbyPoiRef.current) {
+          if (activePoiRef.current?.id === nearbyPoiRef.current.id) {
+            setActivePoi(null);
+          } else {
+            setActivePoi(nearbyPoiRef.current);
+          }
+        }
+        if (btnCircle && !prevGpCancel && activePoiRef.current) {
+          setActivePoi(null);
+        }
+
+        gpDrift = btnCircle || (btnCross && !nearbyPoiRef.current);
+        prevGpVehicle = btnTriangle;
+        prevGpPulse = btnSquare;
+        prevGpInteract = btnCross;
+        prevGpCancel = btnCircle;
+      } else {
+        prevGpVehicle = false;
+        prevGpPulse = false;
+        prevGpInteract = false;
+        prevGpCancel = false;
+      }
+
+      // Spin rotors / propellers on HELI and PLANE rigs
+      for (const rotor of carRig.rotors) {
+        const spinRate = inVehicleRef.current ? 22 : 2.8;
+        rotor.obj.rotation[rotor.axis] += dt * spinRate;
+      }
+
+      // 1. Local movement (On-foot OR Vehicle + Drift Physics scaled by vehicle stats)
       const keys = keysRef.current;
       let isMoving = false;
       let currentSpeed = 0;
 
       if (inVehicleRef.current) {
-        const throttleInput =
-          (keys['w'] || keys['arrowup'] || touchDirRef.current.z < -0.2
-            ? 1
-            : 0) -
-          (keys['s'] || keys['arrowdown'] || touchDirRef.current.z > 0.2
-            ? 1
-            : 0);
-        const steerInput =
-          (keys['a'] || keys['arrowleft'] || touchDirRef.current.x < -0.2
-            ? 1
-            : 0) -
-          (keys['d'] || keys['arrowright'] || touchDirRef.current.x > 0.2
-            ? 1
-            : 0);
-        const handbrake = Boolean(keys[' '] || driftTouchRef.current);
-        const boost = Boolean(keys['shift'] || sprintTouchRef.current);
+        const appNow = appearanceRef.current;
+        const speedStat = appNow?.vehicleSpeed ?? 75;
+        const handlingStat = appNow?.vehicleHandling ?? 75;
+        const condStat = appNow?.vehicleCondition ?? 100;
+        const speedFactor = 0.72 + (speedStat / 100) * 0.58;
+        const handlingFactor = 0.75 + (handlingStat / 100) * 0.5;
+        const condFactor =
+          0.65 + (THREE.MathUtils.clamp(condStat, 10, 100) / 100) * 0.35;
+
+        const kbThrottle =
+          (keys['w'] || keys['arrowup'] || touchThrottleRef.current ? 1 : 0) -
+          (keys['s'] || keys['arrowdown'] || touchBrakeRef.current ? 1 : 0);
+        const stickThrottle =
+          Math.abs(touchDirRef.current.z) > 0.2 ? -touchDirRef.current.z : 0;
+        const throttleInput = THREE.MathUtils.clamp(
+          kbThrottle + stickThrottle + gpThrottle,
+          -1,
+          1,
+        );
+
+        const kbSteer =
+          (keys['a'] || keys['arrowleft'] ? 1 : 0) -
+          (keys['d'] || keys['arrowright'] ? 1 : 0);
+        const stickSteer =
+          Math.abs(touchDirRef.current.x) > 0.14 ? -touchDirRef.current.x : 0;
+        const steerInput = THREE.MathUtils.clamp(
+          kbSteer + stickSteer - gpMoveX,
+          -1,
+          1,
+        );
+
+        const handbrake = Boolean(
+          keys[' '] || driftTouchRef.current || gpDrift,
+        );
+        const boost = Boolean(
+          keys['shift'] || sprintTouchRef.current || gpBoost,
+        );
 
         const fx = Math.sin(carHeading);
         const fz = Math.cos(carHeading);
@@ -1360,13 +2179,13 @@ export default function District3D({
         let forwardSpeed = carVx * fx + carVz * fz;
         let lateralSpeed = carVx * rx + carVz * rz;
 
-        const maxForward = boost ? 38 : 31;
-        const accel = boost ? 34 : 25;
+        const maxForward = (boost ? 34 : 27) * speedFactor * condFactor;
+        const accel = (boost ? 30 : 22) * speedFactor * condFactor;
 
-        if (throttleInput > 0) {
-          forwardSpeed += accel * dt;
-        } else if (throttleInput < 0) {
-          forwardSpeed -= (forwardSpeed > 1 ? 36 : 16) * dt;
+        if (throttleInput > 0.05) {
+          forwardSpeed += accel * throttleInput * dt;
+        } else if (throttleInput < -0.05) {
+          forwardSpeed += (forwardSpeed > 1 ? 36 : 16) * throttleInput * dt;
         } else {
           forwardSpeed *= Math.max(0, 1 - 1.5 * dt);
         }
@@ -1375,18 +2194,21 @@ export default function District3D({
           forwardSpeed *= Math.max(0, 1 - 1.15 * dt);
         }
 
-        forwardSpeed = THREE.MathUtils.clamp(forwardSpeed, -12, maxForward);
+        forwardSpeed = THREE.MathUtils.clamp(forwardSpeed, -14, maxForward);
 
         // Steering depends on speed & increases responsiveness during drift
         const speedAbs = Math.abs(forwardSpeed);
-        const steerAuthority = THREE.MathUtils.clamp(speedAbs / 5.5, 0, 1);
+        const steerAuthority =
+          carRig.vehicleClass === 'HELI'
+            ? 1
+            : THREE.MathUtils.clamp(speedAbs / 5.5, 0, 1);
         const reverseSign = forwardSpeed >= -0.2 ? 1 : -1;
-        const steerRate = handbrake ? 3.25 : 2.35;
+        const steerRate = (handbrake ? 3.1 : 2.2) * handlingFactor;
         carHeading +=
           steerInput * steerRate * steerAuthority * reverseSign * dt;
 
         // Lateral grip: low grip when handbrake/drift is active => real oversteer slide
-        const lateralGrip = handbrake ? 1.75 : 8.5;
+        const lateralGrip = handbrake ? 1.75 : 6.5 + (handlingStat / 100) * 3.5;
         lateralSpeed *= Math.max(0, 1 - lateralGrip * dt);
 
         const nfx = Math.sin(carHeading);
@@ -1421,20 +2243,39 @@ export default function District3D({
           carVz *= -0.35;
         }
 
+        const targetAlt =
+          carRig.vehicleClass === 'HELI'
+            ? 2.4 + Math.sin(now * 0.004) * 0.14
+            : carRig.vehicleClass === 'PLANE'
+              ? Math.min(3.4, speedAbs * 0.11)
+              : 0;
+        carRig.group.position.y +=
+          (targetAlt - carRig.group.position.y) * Math.min(1, dt * 5);
+
         carRig.group.rotation.y = carHeading;
-        localRig.group.position.copy(carRig.group.position);
+        localRig.group.position.set(
+          carRig.group.position.x,
+          0,
+          carRig.group.position.z,
+        );
         localRig.group.rotation.y = carHeading;
 
-        // Chassis roll & pitch
+        // Chassis roll & pitch (extra lean for MOTO / HELI / PLANE)
+        const leanMult =
+          carRig.vehicleClass === 'MOTO' ||
+          carRig.vehicleClass === 'HELI' ||
+          carRig.vehicleClass === 'PLANE'
+            ? 2.1
+            : 1;
         const targetRoll = THREE.MathUtils.clamp(
-          -lateralSpeed * 0.018 + steerInput * 0.04,
-          -0.14,
-          0.14,
+          (-lateralSpeed * 0.018 + steerInput * 0.06) * leanMult,
+          -0.28,
+          0.28,
         );
         const targetPitch = THREE.MathUtils.clamp(
-          -throttleInput * 0.035 + (handbrake ? 0.03 : 0),
-          -0.06,
-          0.06,
+          -throttleInput * 0.04 + (handbrake ? 0.03 : 0),
+          -0.08,
+          0.08,
         );
         carRoll += (targetRoll - carRoll) * Math.min(1, dt * 10);
         carPitch += (targetPitch - carPitch) * Math.min(1, dt * 10);
@@ -1443,20 +2284,23 @@ export default function District3D({
 
         // Wheel spin & front wheel steering visual
         const wheelSpin = forwardSpeed * dt * 2.2;
-        carRig.frontLeftWheel.rotation.x += wheelSpin;
-        carRig.frontRightWheel.rotation.x += wheelSpin;
-        carRig.rearLeftWheel.rotation.x += wheelSpin;
-        carRig.rearRightWheel.rotation.x += wheelSpin;
-        carRig.frontLeftWheel.rotation.y = steerInput * 0.38;
-        carRig.frontRightWheel.rotation.y = steerInput * 0.38;
+        for (const fw of carRig.frontWheels) {
+          fw.rotation.x += wheelSpin;
+          fw.rotation.y = steerInput * 0.38;
+        }
+        for (const rw of carRig.rearWheels) {
+          rw.rotation.x += wheelSpin;
+        }
 
         // Brake / drift taillights
         const brakingOrDrifting =
-          throttleInput < 0 || handbrake || Math.abs(lateralSpeed) > 3.2;
+          throttleInput < -0.1 || handbrake || Math.abs(lateralSpeed) > 3.2;
         carRig.brakeMat.emissiveIntensity = brakingOrDrifting ? 4.0 : 0.9;
 
         const driftingNow =
-          (handbrake && speedAbs > 4.5) || Math.abs(lateralSpeed) > 3.8;
+          carRig.vehicleClass !== 'HELI' &&
+          carRig.vehicleClass !== 'PLANE' &&
+          ((handbrake && speedAbs > 4.5) || Math.abs(lateralSpeed) > 3.8);
 
         if (driftingNow && Math.random() < 0.75) {
           const rearCx = carRig.group.position.x - nfx * 1.35;
@@ -1474,8 +2318,11 @@ export default function District3D({
           setIsDrifting(driftingNow);
         }
       } else {
-        let moveX = touchDirRef.current.x;
-        let moveZ = touchDirRef.current.z;
+        if (carRig.group.position.y > 0.01) {
+          carRig.group.position.y *= Math.max(0, 1 - dt * 6);
+        }
+        let moveX = touchDirRef.current.x + gpMoveX;
+        let moveZ = touchDirRef.current.z + gpMoveZ;
 
         if (keys['w'] || keys['arrowup']) moveZ -= 1;
         if (keys['s'] || keys['arrowdown']) moveZ += 1;
@@ -1483,15 +2330,24 @@ export default function District3D({
         if (keys['d'] || keys['arrowright']) moveX += 1;
 
         const mag = Math.hypot(moveX, moveZ);
-        isMoving = mag > 0.05;
-        const isSprinting = Boolean(keys['shift'] || sprintTouchRef.current);
+        isMoving = mag > 0.08;
+        const isSprinting = Boolean(
+          keys['shift'] || sprintTouchRef.current || gpBoost,
+        );
         currentSpeed = isSprinting ? 12.5 : 7.2;
 
         if (isMoving) {
-          const nx = moveX / mag;
-          const nz = moveZ / mag;
-          const stepX = nx * currentSpeed * dt;
-          const stepZ = nz * currentSpeed * dt;
+          const inputMag = Math.min(1, mag);
+          const localNx = moveX / mag;
+          const localNz = moveZ / mag;
+          const camYaw = camOrbitYawRef.current;
+          const cosY = Math.cos(camYaw);
+          const sinY = Math.sin(camYaw);
+          const nx = localNx * cosY + localNz * sinY;
+          const nz = -localNx * sinY + localNz * cosY;
+
+          const stepX = nx * currentSpeed * inputMag * dt;
+          const stepZ = nz * currentSpeed * inputMag * dt;
 
           const curX = localRig.group.position.x;
           const curZ = localRig.group.position.z;
@@ -1549,6 +2405,8 @@ export default function District3D({
           scene.remove(fxItem.ring);
           scene.remove(fxItem.beam);
           scene.remove(fxItem.light);
+          fxItem.ring.geometry.dispose();
+          fxItem.beam.geometry.dispose();
           fxItem.ringMat.dispose();
           fxItem.beamMat.dispose();
           pulseEffects.splice(i, 1);
@@ -1565,7 +2423,9 @@ export default function District3D({
       // 2. Emit player:move throttled (~16 Hz)
       if ((isMoving && now - lastEmitTime > 60) || (!isMoving && wasMoving)) {
         lastEmitTime = now;
-        const sprinting = Boolean(keys['shift'] || sprintTouchRef.current);
+        const sprinting = Boolean(
+          keys['shift'] || sprintTouchRef.current || gpBoost,
+        );
         emitMoveRef.current({
           x: Number(localRig.group.position.x.toFixed(2)),
           y: 0,
@@ -1582,22 +2442,26 @@ export default function District3D({
       }
       wasMoving = isMoving;
 
-      // 3. Smooth Dynamic Camera (Chase Cam in vehicle with speed-reactive FOV)
+      // 3. Smooth Dynamic Camera (Orbit + Zoom + Speed-reactive Chase Cam)
       if (inVehicleRef.current) {
         const speedRatio = THREE.MathUtils.clamp(currentSpeed / 34, 0, 1);
         const fx = Math.sin(carHeading);
         const fz = Math.cos(carHeading);
-        const camDist = 9.2 + speedRatio * 2.4;
-        const camHeight = 4.2 + speedRatio * 0.8;
+        const orbitHeading = carHeading + camOrbitYawRef.current;
+        const camDist = (9.2 + speedRatio * 2.4) * camZoomRef.current;
+        const camHeight =
+          carRig.group.position.y +
+          (3.6 + camOrbitPitchRef.current * 4.5 + speedRatio * 0.7) *
+            camZoomRef.current;
         desiredCamPos.set(
-          carRig.group.position.x - fx * camDist,
+          carRig.group.position.x - Math.sin(orbitHeading) * camDist,
           camHeight,
-          carRig.group.position.z - fz * camDist,
+          carRig.group.position.z - Math.cos(orbitHeading) * camDist,
         );
         camera.position.lerp(desiredCamPos, Math.min(1, dt * 8));
         camTarget.set(
           carRig.group.position.x + fx * (2.5 + speedRatio * 2),
-          1.25,
+          carRig.group.position.y + 1.25,
           carRig.group.position.z + fz * (2.5 + speedRatio * 2),
         );
         lookAtPos.lerp(camTarget, Math.min(1, dt * 12));
@@ -1609,10 +2473,14 @@ export default function District3D({
           camera.updateProjectionMatrix();
         }
       } else {
+        const yaw = camOrbitYawRef.current;
+        const camDist = 10.5 * camZoomRef.current;
+        const camHeight =
+          (5.8 + camOrbitPitchRef.current * 5.0) * camZoomRef.current;
         desiredCamPos.set(
-          localRig.group.position.x,
-          localRig.group.position.y + 6.8,
-          localRig.group.position.z + 10.5,
+          localRig.group.position.x + Math.sin(yaw) * camDist,
+          localRig.group.position.y + camHeight,
+          localRig.group.position.z + Math.cos(yaw) * camDist,
         );
         camera.position.lerp(desiredCamPos, Math.min(1, dt * 6));
         camTarget.set(
@@ -1700,6 +2568,7 @@ export default function District3D({
           (snap.locationId && snap.locationId !== locationIdRef.current)
         ) {
           scene.remove(entry.rig.group);
+          disposeObject3D(entry.rig.group);
           remoteAvatars.delete(id);
           continue;
         }
@@ -1734,17 +2603,52 @@ export default function District3D({
       renderer.render(scene, camera);
     };
 
+    const onContextLost = (ev: Event) => {
+      ev.preventDefault();
+      cancelAnimationFrame(animId);
+      setWebglError(
+        'Se perdió el contexto gráfico 3D. Puedes recargar o usar Vista Clásica.',
+      );
+    };
+    const onContextRestored = () => {
+      setWebglError(null);
+      lastTime = performance.now();
+      animId = requestAnimationFrame(animate);
+    };
+    canvasEl.addEventListener('webglcontextlost', onContextLost);
+    canvasEl.addEventListener('webglcontextrestored', onContextRestored);
+
     animId = requestAnimationFrame(animate);
 
     return () => {
+      poseRef.current = {
+        px: localRig.group.position.x,
+        pz: localRig.group.position.z,
+        pRotY: localRig.group.rotation.y,
+        cx: carRig.group.position.x,
+        cz: carRig.group.position.z,
+        cHeading: carHeading,
+        inVehicle: inVehicleRef.current,
+      };
+      rebuildLocalRigsFnRef.current = null;
       cancelAnimationFrame(animId);
       resizeObserver.disconnect();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onWindowBlur);
+      canvasEl.removeEventListener('pointerdown', onCanvasPointerDown);
+      window.removeEventListener('pointermove', onCanvasPointerMove);
+      window.removeEventListener('pointerup', onCanvasPointerUp);
+      window.removeEventListener('pointercancel', onCanvasPointerUp);
+      canvasEl.removeEventListener('wheel', onCanvasWheel);
+      canvasEl.removeEventListener('dblclick', onCanvasDblClick);
+      canvasEl.removeEventListener('webglcontextlost', onContextLost);
+      canvasEl.removeEventListener('webglcontextrestored', onContextRestored);
+      disposeObject3D(scene);
       windowTex.dispose();
       renderer.dispose();
     };
-  }, [vibe, remotePlayersRef, player.appearance?.appearanceKey]);
+  }, [vibe, remotePlayersRef]);
 
   const heatStars = Math.min(5, Math.ceil((player.heat || 0) / 20));
   const app = player.appearance;
@@ -1779,15 +2683,22 @@ export default function District3D({
             <span className="text-[10px] uppercase tracking-widest text-amber-400 font-semibold">
               {zoneName}
             </span>
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded ${
-                connected
-                  ? 'bg-emerald-500/15 text-emerald-400'
-                  : 'bg-zinc-800 text-zinc-400'
-              }`}
-            >
-              {connected ? `En vivo · ${remoteCount + 1}` : 'Offline'}
-            </span>
+            <div className="flex items-center gap-1">
+              {gamepadName && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/20 border border-violet-400/40 text-violet-200 font-semibold">
+                  🎮 {gamepadName}
+                </span>
+              )}
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded ${
+                  connected
+                    ? 'bg-emerald-500/15 text-emerald-400'
+                    : 'bg-zinc-800 text-zinc-400'
+                }`}
+              >
+                {connected ? `En vivo · ${remoteCount + 1}` : 'Offline'}
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 mt-1 text-xs text-zinc-200">
@@ -1923,85 +2834,46 @@ export default function District3D({
         </div>
       )}
 
-      {/* Mobile Touch Controls (Bottom-Left D-Pad & Bottom-Right Sprint/Interact) */}
-      <div className="absolute bottom-3 left-3 z-10 md:hidden grid grid-cols-3 gap-1 w-28 h-28">
-        <div />
-        <button
-          type="button"
-          onTouchStart={() => {
-            touchDirRef.current.z = -1;
+      {/* Universal Virtual Analog Thumbstick (Mobile, Tablets, iPad, Switch Touch) */}
+      <div
+        className={`absolute bottom-3 left-3 z-10 ${
+          isTouchDevice ? 'flex' : 'flex md:hidden'
+        } items-center`}
+      >
+        <div
+          ref={stickBaseRef}
+          role="application"
+          aria-label="Joystick analógico virtual"
+          style={{ touchAction: 'none' }}
+          onPointerDown={(e) => {
+            stickPointerIdRef.current = e.pointerId;
+            e.currentTarget.setPointerCapture(e.pointerId);
+            updateStickFromClient(e.clientX, e.clientY);
           }}
-          onTouchEnd={() => {
-            touchDirRef.current.z = 0;
+          onPointerMove={(e) => {
+            if (stickPointerIdRef.current === e.pointerId) {
+              updateStickFromClient(e.clientX, e.clientY);
+            }
           }}
-          onMouseDown={() => {
-            touchDirRef.current.z = -1;
+          onPointerUp={(e) => {
+            if (stickPointerIdRef.current === e.pointerId) {
+              if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+                e.currentTarget.releasePointerCapture(e.pointerId);
+              }
+              resetStick();
+            }
           }}
-          onMouseUp={() => {
-            touchDirRef.current.z = 0;
-          }}
-          className="rounded-lg bg-zinc-900/80 border border-zinc-700 text-zinc-200 text-xs font-bold active:bg-amber-500/30"
+          onPointerCancel={resetStick}
+          className="relative w-28 h-28 rounded-full bg-zinc-950/70 border border-zinc-700/80 backdrop-blur-md flex items-center justify-center shadow-lg"
         >
-          ▲
-        </button>
-        <div />
-        <button
-          type="button"
-          onTouchStart={() => {
-            touchDirRef.current.x = -1;
-          }}
-          onTouchEnd={() => {
-            touchDirRef.current.x = 0;
-          }}
-          onMouseDown={() => {
-            touchDirRef.current.x = -1;
-          }}
-          onMouseUp={() => {
-            touchDirRef.current.x = 0;
-          }}
-          className="rounded-lg bg-zinc-900/80 border border-zinc-700 text-zinc-200 text-xs font-bold active:bg-amber-500/30"
-        >
-          ◀
-        </button>
-        <div />
-        <button
-          type="button"
-          onTouchStart={() => {
-            touchDirRef.current.x = 1;
-          }}
-          onTouchEnd={() => {
-            touchDirRef.current.x = 0;
-          }}
-          onMouseDown={() => {
-            touchDirRef.current.x = 1;
-          }}
-          onMouseUp={() => {
-            touchDirRef.current.x = 0;
-          }}
-          className="rounded-lg bg-zinc-900/80 border border-zinc-700 text-zinc-200 text-xs font-bold active:bg-amber-500/30"
-        >
-          ▶
-        </button>
-        <div />
-        <button
-          type="button"
-          onTouchStart={() => {
-            touchDirRef.current.z = 1;
-          }}
-          onTouchEnd={() => {
-            touchDirRef.current.z = 0;
-          }}
-          onMouseDown={() => {
-            touchDirRef.current.z = 1;
-          }}
-          onMouseUp={() => {
-            touchDirRef.current.z = 0;
-          }}
-          className="rounded-lg bg-zinc-900/80 border border-zinc-700 text-zinc-200 text-xs font-bold active:bg-amber-500/30"
-        >
-          ▼
-        </button>
-        <div />
+          <div className="w-16 h-16 rounded-full border border-zinc-800/90 pointer-events-none" />
+          <div
+            className="absolute w-11 h-11 rounded-full bg-amber-500/80 border-2 border-amber-200/80 shadow-md pointer-events-none transition-transform duration-75"
+            style={{
+              transform: `translate(${stickOffset.x}px, ${stickOffset.y}px)`,
+            }}
+          />
+        </div>
       </div>
 
       {/* Speedometer & Drift HUD when in Vehicle */}
@@ -2033,7 +2905,7 @@ export default function District3D({
         </div>
       )}
 
-      <div className="absolute bottom-3 right-3 z-10 flex flex-wrap items-center justify-end gap-2">
+      <div className="absolute bottom-3 right-3 z-10 flex flex-wrap items-center justify-end gap-2 max-w-[260px]">
         <button
           type="button"
           onClick={handleCombatPulse}
@@ -2053,22 +2925,64 @@ export default function District3D({
           {inVehicle ? '[F] Bajar' : '[F] Vehículo'}
         </button>
         {inVehicle && (
-          <button
-            type="button"
-            onClick={toggleDriftTouch}
-            className={`md:hidden px-3 py-2 rounded-xl text-xs font-bold border ${
-              driftTouch
-                ? 'bg-rose-500/30 border-rose-400 text-rose-200'
-                : 'bg-zinc-900/80 border-zinc-700 text-zinc-300'
-            }`}
-          >
-            Drift
-          </button>
+          <>
+            <button
+              type="button"
+              style={{ touchAction: 'none' }}
+              onPointerDown={() => {
+                touchBrakeRef.current = true;
+              }}
+              onPointerUp={() => {
+                touchBrakeRef.current = false;
+              }}
+              onPointerCancel={() => {
+                touchBrakeRef.current = false;
+              }}
+              className={`${
+                isTouchDevice ? 'inline-flex' : 'md:hidden inline-flex'
+              } px-3 py-2 rounded-xl text-xs font-bold border bg-zinc-900/85 border-zinc-700 text-zinc-200 active:bg-red-500/30`}
+            >
+              Freno
+            </button>
+            <button
+              type="button"
+              style={{ touchAction: 'none' }}
+              onPointerDown={() => {
+                touchThrottleRef.current = true;
+              }}
+              onPointerUp={() => {
+                touchThrottleRef.current = false;
+              }}
+              onPointerCancel={() => {
+                touchThrottleRef.current = false;
+              }}
+              className={`${
+                isTouchDevice ? 'inline-flex' : 'md:hidden inline-flex'
+              } px-3 py-2 rounded-xl text-xs font-bold border bg-emerald-500/20 border-emerald-500/60 text-emerald-200 active:bg-emerald-500/40`}
+            >
+              Acel
+            </button>
+            <button
+              type="button"
+              onClick={toggleDriftTouch}
+              className={`${
+                isTouchDevice ? 'inline-flex' : 'md:hidden inline-flex'
+              } px-3 py-2 rounded-xl text-xs font-bold border ${
+                driftTouch
+                  ? 'bg-rose-500/30 border-rose-400 text-rose-200'
+                  : 'bg-zinc-900/80 border-zinc-700 text-zinc-300'
+              }`}
+            >
+              Drift
+            </button>
+          </>
         )}
         <button
           type="button"
           onClick={toggleSprintTouch}
-          className={`md:hidden px-3 py-2 rounded-xl text-xs font-bold border ${
+          className={`${
+            isTouchDevice ? 'inline-flex' : 'md:hidden inline-flex'
+          } px-3 py-2 rounded-xl text-xs font-bold border ${
             sprintTouch
               ? 'bg-amber-500/25 border-amber-500 text-amber-300'
               : 'bg-zinc-900/80 border-zinc-700 text-zinc-300'
@@ -2080,25 +2994,31 @@ export default function District3D({
           <button
             type="button"
             onClick={handleInteract}
-            className="md:hidden px-3 py-2 rounded-xl text-xs font-bold bg-amber-500 text-zinc-950"
+            className={`${
+              isTouchDevice ? 'inline-flex' : 'md:hidden inline-flex'
+            } px-3 py-2 rounded-xl text-xs font-bold bg-amber-500 text-zinc-950`}
           >
             [E] Usar
           </button>
         )}
       </div>
 
-      {/* Desktop Controls Hint */}
-      <div className="hidden md:flex absolute bottom-3 left-3 z-10 items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950/75 border border-zinc-800 text-[11px] text-zinc-400 backdrop-blur-md">
-        <span>WASD: Mover/Conducir</span>
-        <span>·</span>
-        <span>F: Vehículo</span>
-        <span>·</span>
-        <span>Espacio: Drift</span>
-        <span>·</span>
-        <span>Q: Pulso</span>
-        <span>·</span>
-        <span>E: POI</span>
-      </div>
+      {/* Desktop / Controller Hint */}
+      {!isTouchDevice && (
+        <div className="hidden md:flex absolute bottom-3 left-3 z-10 items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950/75 border border-zinc-800 text-[11px] text-zinc-400 backdrop-blur-md">
+          <span>WASD / Stick: Mover</span>
+          <span>·</span>
+          <span>Arrastrar/Rueda: Cámara</span>
+          <span>·</span>
+          <span>F / △: Vehículo</span>
+          <span>·</span>
+          <span>Espacio: Drift</span>
+          <span>·</span>
+          <span>Q / □: Pulso</span>
+          <span>·</span>
+          <span>E / ✕: POI</span>
+        </div>
+      )}
 
       {/* Active POI Interaction Modal */}
       {activePoi && (

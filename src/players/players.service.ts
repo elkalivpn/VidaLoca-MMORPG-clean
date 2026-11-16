@@ -12,8 +12,14 @@ export class PlayersService {
       where: { userId },
       include: {
         user: { select: { username: true, isGuest: true } },
-        inventory: { include: { template: true } },
-        vehicles: { include: { template: true } },
+        inventory: {
+          include: { template: true },
+          orderBy: [{ equipped: 'desc' }, { acquiredAt: 'desc' }],
+        },
+        vehicles: {
+          include: { template: true },
+          orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }],
+        },
         properties: { include: { template: true } },
         weapons: true,
         clanMember: { include: { clan: true } },

@@ -413,6 +413,17 @@ export class WorldService {
             ) / 100
           : Math.max(1, Math.round(route.distanceKm * 0.4 * 100) / 100);
 
+        const wear = route.isIntercity
+          ? Math.min(6, Math.max(2, Math.round(route.distanceKm / 120)))
+          : 1;
+        const nextCondition = Math.max(10, Math.round(condition - wear));
+        if (nextCondition !== condition && tx.playerVehicle.update) {
+          await tx.playerVehicle.update({
+            where: { id: primaryVehicle.id },
+            data: { condition: nextCondition },
+          });
+        }
+
         vehicleUsed = {
           mode: 'VEHICLE',
           id: primaryVehicle.id,
@@ -420,7 +431,7 @@ export class WorldService {
           brand: primaryVehicle.template.brand,
           licensePlate: primaryVehicle.licensePlate,
           speed: primaryVehicle.template.speed,
-          condition,
+          condition: nextCondition,
         };
       } else {
         if (route.isIntercity) {

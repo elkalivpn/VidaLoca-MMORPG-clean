@@ -207,7 +207,9 @@ export class PropertiesService {
       if (!freshPlayer) throw new NotFoundException('Player not found');
 
       if (type === 'APARTMENT' || type === 'MANSION') {
-        const newHeat = Math.max(0, (freshPlayer.heat ?? 0) - 30);
+        const currentHeat = freshPlayer.heat ?? 0;
+        const newHeat = Math.max(0, currentHeat - 30);
+        const heatReduced = Math.max(0, currentHeat - newHeat);
         const newWantedLevel = Math.min(5, Math.floor(newHeat / 20));
         const updated = await tx.player.update({
           where: { id: freshPlayer.id },
@@ -218,6 +220,7 @@ export class PropertiesService {
           type,
           effect: 'COOL_HEAT',
           heat: updated.heat,
+          heatReduced,
           wantedLevel: updated.wantedLevel,
           message: `Te refugias en ${property.template.name}. Tu calor policial baja a ${updated.heat}.`,
         };
@@ -277,14 +280,16 @@ export class PropertiesService {
           costEuros: repairCost,
           vehicleId: updatedVehicle.id,
           condition: updatedVehicle.condition,
+          repairedCount: 1,
           newEuros: Math.round((freshPlayer.euros - repairCost) * 100) / 100,
           message: `Vehículo ${primaryVehicle.template.name} reparado al 100% por ${repairCost}€ (50% dto).`,
         };
       }
 
       if (type === 'CLUB') {
+        const rawDirty = Math.max(0, freshPlayer.dirtyEuros ?? 0);
         const dirtyAmount =
-          Math.round((freshPlayer.dirtyEuros ?? 0) * 100) / 100;
+          Math.floor(rawDirty * 100) / 100 || (rawDirty > 0 ? rawDirty : 0);
         if (dirtyAmount <= 0) {
           throw new BadRequestException(
             'No tienes dinero negro (dirtyEuros) para blanquear',
@@ -324,7 +329,9 @@ export class PropertiesService {
           type,
           effect: 'LAUNDER_MONEY',
           dirtyLaundered: dirtyAmount,
+          launderedEuros: dirtyAmount,
           cleanEuros,
+          earnedEuros: cleanEuros,
           newEuros: updated?.euros ?? freshPlayer.euros + cleanEuros,
           newDirtyEuros: updated?.dirtyEuros ?? 0,
           message: `Has blanqueado ${dirtyAmount}€ negros en ${property.template.name} y obtenido ${cleanEuros}€ limpios (85%).`,
@@ -354,6 +361,7 @@ export class PropertiesService {
           type,
           effect: 'LOGISTICS_BONUS',
           bonusEuros,
+          earnedEuros: bonusEuros,
           newEuros: updated.euros,
           message: `Operación logística en ${property.template.name} completada: +${bonusEuros}€.`,
         };

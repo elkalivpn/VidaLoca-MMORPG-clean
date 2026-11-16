@@ -241,6 +241,11 @@ export class MarketplaceService {
       if (!invItem) {
         throw new NotFoundException('Ítem no encontrado en tu inventario');
       }
+      if (invItem.equipped) {
+        throw new BadRequestException(
+          'Desequipa el objeto antes de ponerlo a la venta en el mercado P2P',
+        );
+      }
       if (invItem.quantity < dto.quantity) {
         throw new BadRequestException(
           `Cantidad insuficiente (tienes ${invItem.quantity})`,

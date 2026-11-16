@@ -289,16 +289,26 @@ export class FactionsService {
       const suspectSpeed = suspect.vehicles?.[0]?.template?.speed ?? 55;
       const speedAdvantage = (agentSpeed - suspectSpeed) * 0.005;
       const heatFactor = (suspect.heat - 40) * 0.002;
+      const factionCaptureBonus =
+        agent.faction === FactionType.GUARDIA_CIVIL
+          ? 0.15
+          : agent.faction === FactionType.ERTZAINTZA_MOSSOS
+            ? 0.1
+            : 0;
       const captureChance = Math.max(
         0.15,
-        Math.min(0.92, 0.55 + speedAdvantage + heatFactor),
+        Math.min(0.95, 0.55 + speedAdvantage + heatFactor + factionCaptureBonus),
       );
       const captured = Math.random() < captureChance;
 
       if (captured) {
         const jailUntil = new Date(now.getTime() + 90 * 1000);
         const fine = Math.round(100 + suspect.heat * 3);
-        const bountyEuros = Math.round(75 + suspect.heat * 2.5);
+        const baseBounty = Math.round(75 + suspect.heat * 2.5);
+        const bountyEuros =
+          agent.faction === FactionType.GUARDIA_CIVIL
+            ? Math.round(baseBounty * 1.2)
+            : baseBounty;
         const agentXpGain = 35 + Math.floor(suspect.heat * 0.5);
 
         const deductRes = await tx.player.updateMany({
@@ -367,7 +377,8 @@ export class FactionsService {
       } else {
         const newSuspectHeat = Math.min(100, suspect.heat + 10);
         const newSuspectWanted = Math.min(5, Math.floor(newSuspectHeat / 20));
-        const suspectRepGain = 5;
+        const suspectRepGain =
+          suspect.faction === FactionType.SYNDICATE ? 10 : 5;
         const agentXpGain = 12;
 
         await tx.player.update({
@@ -443,7 +454,11 @@ export class FactionsService {
     const remainingSec = Math.ceil(
       (new Date(player.jailUntil).getTime() - now.getTime()) / 1000,
     );
-    const bailCost = Math.max(50, remainingSec * 3);
+    const rawBailCost = Math.max(50, remainingSec * 3);
+    const syndicateDiscount = player.faction === FactionType.SYNDICATE;
+    const bailCost = syndicateDiscount
+      ? Math.max(35, Math.round(rawBailCost * 0.75))
+      : rawBailCost;
 
     const res = await this.prisma.player.updateMany({
       where: {
@@ -466,6 +481,7 @@ export class FactionsService {
     return {
       released: true,
       bailCost,
+      syndicateDiscount,
       eurosRemaining: Math.round((player.euros - bailCost) * 100) / 100,
       jailUntil: null,
     };

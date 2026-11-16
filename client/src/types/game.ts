@@ -66,6 +66,7 @@ export interface ItemTemplate {
   description: string;
   type: string;
   rarity: 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
+  stats?: Record<string, unknown>;
   priceEuros?: number;
   priceVida?: number;
 }
@@ -372,9 +373,13 @@ export interface PropertyUseResponse {
   ok?: boolean;
   message?: string;
   effect?: string;
+  heat?: number;
   heatReduced?: number;
   repairedCount?: number;
   launderedEuros?: number;
+  dirtyLaundered?: number;
+  cleanEuros?: number;
+  bonusEuros?: number;
   earnedEuros?: number;
   player?: Partial<Player>;
 }

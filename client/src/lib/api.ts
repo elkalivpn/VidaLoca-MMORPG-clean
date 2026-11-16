@@ -244,10 +244,34 @@ export const api = {
       { method: 'POST' },
     ),
 
-  // Inventory
+  // Inventory & Urban Shop
+  inventoryShop: () => request('/inventory/shop'),
+  buyInventoryItem: (
+    templateId: string,
+    quantity = 1,
+    currency?: 'EUR' | 'VIDACOIN',
+  ) =>
+    request<{
+      quantity: number;
+      totalCost: number;
+      currency: string;
+      message?: string;
+    }>('/inventory/buy', {
+      method: 'POST',
+      body: JSON.stringify({ templateId, quantity, currency }),
+    }),
   inventory: () => request('/inventory'),
   equipItem: (itemId: string) =>
     request(`/inventory/equip/${itemId}`, { method: 'POST' }),
+  unequipItem: (itemId: string) =>
+    request(`/inventory/unequip/${itemId}`, { method: 'POST' }),
+  useItem: (itemId: string) =>
+    request<{
+      used: boolean;
+      itemName: string;
+      remainingQuantity: number;
+      message?: string;
+    }>(`/inventory/use/${itemId}`, { method: 'POST' }),
   equipWeapon: (weaponId: string) =>
     request(`/inventory/weapons/equip/${weaponId}`, { method: 'POST' }),
 

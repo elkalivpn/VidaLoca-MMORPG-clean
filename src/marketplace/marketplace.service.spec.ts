@@ -212,4 +212,23 @@ describe('MarketplaceService', () => {
       }),
     );
   });
+
+  it('forbids listing an item that is currently equipped', async () => {
+    prisma.player.findUnique.mockResolvedValue({ id: 'seller-1' });
+    prisma.inventoryItem.findFirst.mockResolvedValue({
+      id: 'inv-eq',
+      playerId: 'seller-1',
+      quantity: 1,
+      equipped: true,
+      template: { name: 'La Jefa de Ibiza' },
+    });
+
+    await expect(
+      service.createListing('u-seller', {
+        inventoryItemId: 'inv-eq',
+        quantity: 1,
+        priceEuros: 500,
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
 });

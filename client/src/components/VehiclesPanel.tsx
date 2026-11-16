@@ -57,9 +57,11 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
 
   const setPrimary = async (id: string) => {
     setBusy(id);
+    setError('');
     try {
       await api.setPrimaryVehicle(id);
-      await load();
+      await Promise.all([load(), refreshPlayer()]);
+      onChange?.();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error');
     } finally {

@@ -182,4 +182,26 @@ describe('PropertiesService', () => {
       BadRequestException,
     );
   });
+
+  it('launders dirtyEuros safely in CLUB and returns aligned launderedEuros & earnedEuros', async () => {
+    (prisma.player as any).updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    prisma.player.findUnique
+      .mockResolvedValueOnce({ id: 'p1', faction: 'CIVILIAN' })
+      .mockResolvedValueOnce({ id: 'p1', dirtyEuros: 1000.004, euros: 200 })
+      .mockResolvedValueOnce({ id: 'p1', dirtyEuros: 0.004, euros: 1050 });
+    prisma.playerProperty.findFirst.mockResolvedValue({
+      id: 'prop-club',
+      playerId: 'p1',
+      template: { name: 'Club Opium', type: 'CLUB' },
+    });
+    prisma.playerProperty.updateMany.mockResolvedValue({ count: 1 });
+    prisma.transactionLog.create.mockResolvedValue({});
+
+    const res: any = await service.useProperty('u1', 'prop-club');
+
+    expect(res.launderedEuros).toBe(1000);
+    expect(res.dirtyLaundered).toBe(1000);
+    expect(res.earnedEuros).toBe(850);
+    expect(res.cleanEuros).toBe(850);
+  });
 });

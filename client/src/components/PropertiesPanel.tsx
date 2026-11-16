@@ -89,6 +89,14 @@ export default function PropertiesPanel() {
     void load();
   }, [load]);
 
+  const PROPERTY_TYPE_LABELS: Record<string, string> = {
+    APARTMENT: 'Piso Franco',
+    MANSION: 'Mansión',
+    GARAGE: 'Garaje',
+    CLUB: 'Club',
+    WAREHOUSE: 'Almacén',
+  };
+
   async function buy(templateId: string) {
     if (!token) return;
     setBusy(templateId);
@@ -112,8 +120,18 @@ export default function PropertiesPanel() {
     setBusy(`rent:${id}`);
     setMsg(null);
     try {
-      await api.collectRent(id);
-      setMsg({ text: 'Renta cobrada.', ok: true });
+      const res = (await api.collectRent(id)) as {
+        rent?: number;
+        vipBonusApplied?: boolean;
+      };
+      const rentLabel =
+        typeof res?.rent === 'number'
+          ? `+${res.rent.toLocaleString('es-ES')} €${res.vipBonusApplied ? ' (👑 VIP +15%)' : ''}`
+          : '';
+      setMsg({
+        text: rentLabel ? `Renta cobrada: ${rentLabel}.` : 'Renta cobrada.',
+        ok: true,
+      });
       await refreshPlayer();
     } catch (e: unknown) {
       setMsg({
@@ -139,13 +157,13 @@ export default function PropertiesPanel() {
       if (typeof res?.repairedCount === 'number' && res.repairedCount > 0) {
         details.push(`${res.repairedCount} vehículo(s) reparado(s)`);
       }
-      if (typeof res?.launderedEuros === 'number' && res.launderedEuros > 0) {
-        details.push(
-          `${res.launderedEuros.toLocaleString('es-ES')} € blanqueados`,
-        );
+      const laundered = res?.launderedEuros ?? res?.dirtyLaundered;
+      if (typeof laundered === 'number' && laundered > 0) {
+        details.push(`${laundered.toLocaleString('es-ES')} € blanqueados`);
       }
-      if (typeof res?.earnedEuros === 'number' && res.earnedEuros > 0) {
-        details.push(`+${res.earnedEuros.toLocaleString('es-ES')} €`);
+      const earned = res?.earnedEuros ?? res?.cleanEuros ?? res?.bonusEuros;
+      if (typeof earned === 'number' && earned > 0) {
+        details.push(`+${earned.toLocaleString('es-ES')} €`);
       }
       const baseText = res?.message || res?.effect || meta.fallbackResult;
       const fullText =
@@ -214,7 +232,8 @@ export default function PropertiesPanel() {
                       <span>{p.template.name}</span>
                     </div>
                     <div className="text-xs text-zinc-500">
-                      {p.template.location} · {p.template.type}
+                      {p.template.location} ·{' '}
+                      {PROPERTY_TYPE_LABELS[p.template.type] || p.template.type}
                     </div>
                     <div className="text-xs text-amber-300/80 mt-0.5">
                       {meta.actionHint}

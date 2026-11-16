@@ -1,6 +1,7 @@
 // Lightweight synthesized Web Audio API sound effects (zero external audio asset dependencies)
 
 const MUTE_KEY = 'vidaloca_sfx_muted';
+let sharedAudioCtx: AudioContext | null = null;
 
 export function isSfxMuted(): boolean {
   if (typeof window === 'undefined') return false;
@@ -20,7 +21,13 @@ function getAudioContext(): AudioContext | null {
       .webkitAudioContext;
   if (!Ctx) return null;
   try {
-    return new Ctx();
+    if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+      sharedAudioCtx = new Ctx();
+    }
+    if (sharedAudioCtx.state === 'suspended') {
+      void sharedAudioCtx.resume().catch(() => undefined);
+    }
+    return sharedAudioCtx;
   } catch {
     return null;
   }
@@ -53,7 +60,6 @@ export function playCoinSfx(): void {
   if (!ctx) return;
   playTone(ctx, 987.77, 0, 0.09, 'sine', 0.07);
   playTone(ctx, 1318.51, 0.07, 0.16, 'sine', 0.08);
-  setTimeout(() => void ctx.close().catch(() => undefined), 350);
 }
 
 export function playLevelUpSfx(): void {
@@ -63,7 +69,6 @@ export function playLevelUpSfx(): void {
   playTone(ctx, 659.25, 0.1, 0.12, 'triangle', 0.08);
   playTone(ctx, 783.99, 0.2, 0.14, 'triangle', 0.08);
   playTone(ctx, 1046.5, 0.31, 0.26, 'triangle', 0.1);
-  setTimeout(() => void ctx.close().catch(() => undefined), 750);
 }
 
 export function playAlertSfx(): void {
@@ -71,5 +76,4 @@ export function playAlertSfx(): void {
   if (!ctx) return;
   playTone(ctx, 440, 0, 0.11, 'sawtooth', 0.05);
   playTone(ctx, 349.23, 0.12, 0.16, 'sawtooth', 0.05);
-  setTimeout(() => void ctx.close().catch(() => undefined), 400);
 }

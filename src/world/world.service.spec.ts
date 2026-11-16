@@ -13,7 +13,7 @@ describe('WorldService', () => {
   let prisma: {
     territory: { findMany: jest.Mock };
     player: { findUnique: jest.Mock; update: jest.Mock };
-    playerVehicle: { findFirst: jest.Mock };
+    playerVehicle: { findFirst: jest.Mock; update: jest.Mock };
     $transaction: jest.Mock;
   };
 
@@ -28,6 +28,7 @@ describe('WorldService', () => {
       },
       playerVehicle: {
         findFirst: jest.fn(),
+        update: jest.fn(),
       },
       $transaction: jest.fn(),
     };
@@ -143,6 +144,7 @@ describe('WorldService', () => {
       expect(result.distanceKm).toBeGreaterThanOrEqual(1);
       expect(result.vehicleUsed.mode).toBe('VEHICLE');
       expect(result.vehicleUsed.name).toBe('Seat León FR');
+      expect(result.vehicleUsed.condition).toBe(99);
       expect(result.player.locationId).toBe('malasana');
       expect(result.player.euros).toBe(
         Math.round((500 - result.costEuros) * 100) / 100,

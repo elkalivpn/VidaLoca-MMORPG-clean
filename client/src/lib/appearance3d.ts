@@ -1,5 +1,16 @@
 import type { Player } from '@/types/game';
 
+export type VehicleClass3D =
+  | 'SUPERCAR'
+  | 'MOTO'
+  | 'QUAD'
+  | 'SUV'
+  | 'TRUCK'
+  | 'VAN'
+  | 'BOAT'
+  | 'HELI'
+  | 'PLANE';
+
 export interface PlayerAppearance3D {
   appearanceKey: string;
   isVip: boolean;
@@ -10,6 +21,10 @@ export interface PlayerAppearance3D {
   clothingName?: string;
   cosmeticName?: string;
   vehicleName?: string;
+  vehicleClass: VehicleClass3D;
+  vehicleSpeed: number;
+  vehicleHandling: number;
+  vehicleCondition: number;
   avatarBodyColor: number;
   avatarAccentColor: number;
   carBodyColor: number;
@@ -32,6 +47,114 @@ const CLOTHING_COLORS: Record<string, { body: number; accent?: number }> = {
   'Gafas Aviador Oro 24K': { body: 0x27272a, accent: 0xfbbf24 },
 };
 
+const VEHICLE_COLOR_MAP: Record<string, number> = {
+  white: 0xe4e4e7,
+  blanco: 0xe4e4e7,
+  black: 0x18181b,
+  negro: 0x18181b,
+  red: 0xb91c1c,
+  rojo: 0xb91c1c,
+  blue: 0x1d4ed8,
+  azul: 0x1d4ed8,
+  silver: 0x94a3b8,
+  plata: 0x94a3b8,
+  gold: 0xd97706,
+  oro: 0xd97706,
+  yellow: 0xeab308,
+  amarillo: 0xeab308,
+  green: 0x15803d,
+  verde: 0x15803d,
+  purple: 0x6d28d9,
+  morado: 0x6d28d9,
+};
+
+function parseVehiclePaint(raw?: string | null): number | null {
+  if (!raw) return null;
+  const trimmed = raw.trim().toLowerCase();
+  if (VEHICLE_COLOR_MAP[trimmed] !== undefined) {
+    return VEHICLE_COLOR_MAP[trimmed];
+  }
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) {
+    return Number.parseInt(trimmed.slice(1), 16);
+  }
+  return null;
+}
+
+export function inferVehicleClass3D(
+  name?: string,
+  brand?: string,
+): VehicleClass3D {
+  const key = `${brand ?? ''} ${name ?? ''}`.toUpperCase();
+  if (
+    key.includes('EC145') ||
+    key.includes('H125') ||
+    key.includes('AW139') ||
+    key.includes('HELO') ||
+    key.includes('AIRBUS') ||
+    key.includes('EUROCOPTER')
+  ) {
+    return 'HELI';
+  }
+  if (
+    key.includes('CESSNA') ||
+    key.includes('CITATION') ||
+    key.includes('JET')
+  ) {
+    return 'PLANE';
+  }
+  if (
+    key.includes('PERSHING') ||
+    key.includes('RIVA') ||
+    key.includes('AQUARAMA') ||
+    key.includes('PLANEADORA') ||
+    key.includes('ASTILLEROS')
+  ) {
+    return 'BOAT';
+  }
+  if (
+    key.includes('VESPA') ||
+    key.includes('PIAGGIO') ||
+    key.includes('MT-07') ||
+    key.includes('PANIGALE') ||
+    key.includes('DUCATI') ||
+    key.includes('NINJA') ||
+    key.includes('S 1000 RR') ||
+    key.includes('KAWASAKI')
+  ) {
+    return 'MOTO';
+  }
+  if (
+    key.includes('RAPTOR') ||
+    key.includes('OUTLANDER') ||
+    key.includes('CAN-AM')
+  ) {
+    return 'QUAD';
+  }
+  if (key.includes('ACTROS') || key.includes('FH16') || key.includes('VOLVO')) {
+    return 'TRUCK';
+  }
+  if (
+    key.includes('SPRINTER') ||
+    key.includes('CRAFTER') ||
+    key.includes('SAMUR') ||
+    key.includes('UVI')
+  ) {
+    return 'VAN';
+  }
+  if (
+    key.includes('DEFENDER') ||
+    key.includes('G 63') ||
+    key.includes('G63') ||
+    key.includes('BRABUS') ||
+    key.includes('CULLINAN') ||
+    key.includes('HILUX') ||
+    key.includes('HUMMER')
+  ) {
+    return 'SUV';
+  }
+  return 'SUPERCAR';
+}
+
 export function resolvePlayerAppearance3D(
   player?: Player | null,
   fallbackAccent = 0xf59e0b,
@@ -53,10 +176,19 @@ export function resolvePlayerAppearance3D(
   )?.template?.name;
 
   const ownedVehicles = Array.isArray(player?.vehicles) ? player.vehicles : [];
-  const vipVehicle = ownedVehicles.find((v) => v.template?.isVipOnly);
-  const activeVehicle = vipVehicle ?? ownedVehicles[0];
+  const activeVehicle =
+    ownedVehicles.find((v) => v.isPrimary) ??
+    ownedVehicles.find((v) => v.template?.isVipOnly) ??
+    ownedVehicles[0];
   const vehicleName = activeVehicle?.template?.name;
-  const hasVipVehicle = Boolean(vipVehicle);
+  const vehicleClass = inferVehicleClass3D(
+    activeVehicle?.template?.name,
+    activeVehicle?.template?.brand,
+  );
+  const vehicleSpeed = activeVehicle?.template?.speed ?? 75;
+  const vehicleHandling = activeVehicle?.template?.handling ?? 75;
+  const vehicleCondition = activeVehicle?.condition ?? 100;
+  const hasVipVehicle = Boolean(activeVehicle?.template?.isVipOnly);
 
   const hasBlueNeon = equippedCosmetic === 'Kit Neón Azul Nocturno';
   const hasGoldPlate = equippedCosmetic === 'Matrícula Dorada VIP';
@@ -80,11 +212,13 @@ export function resolvePlayerAppearance3D(
     avatarAccentColor = 0xfbbf24;
   }
 
-  let carBodyColor = 0x18181b;
-  if (hasVipVehicle) {
+  let carBodyColor = parseVehiclePaint(activeVehicle?.color) ?? 0x18181b;
+  if (hasVipVehicle && !activeVehicle?.color) {
     carBodyColor = 0x312e81; // Royal metallic indigo for VIP fleet
+  } else if (hasVipVehicle && activeVehicle?.color === 'white') {
+    carBodyColor = 0x312e81;
   }
-  if (hasGoldPlate || isVip) {
+  if ((hasGoldPlate || isVip) && !activeVehicle?.color) {
     carBodyColor = hasVipVehicle ? 0x1e1b4b : 0x27272a;
   }
 
@@ -107,7 +241,10 @@ export function resolvePlayerAppearance3D(
     equippedChar ?? '',
     equippedCloth ?? '',
     equippedCosmetic ?? '',
+    activeVehicle?.id ?? '',
+    activeVehicle?.color ?? '',
     vehicleName ?? '',
+    vehicleClass,
   ].join('|');
 
   return {
@@ -120,6 +257,10 @@ export function resolvePlayerAppearance3D(
     clothingName: equippedCloth,
     cosmeticName: equippedCosmetic,
     vehicleName,
+    vehicleClass,
+    vehicleSpeed,
+    vehicleHandling,
+    vehicleCondition,
     avatarBodyColor,
     avatarAccentColor,
     carBodyColor,

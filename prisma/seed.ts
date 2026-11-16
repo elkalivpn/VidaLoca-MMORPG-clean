@@ -184,7 +184,7 @@ async function main() {
     if (
       territories >= 32 &&
       missions >= 78 &&
-      vehicles >= 44 &&
+      vehicles >= 46 &&
       items >= 45 &&
       properties >= 26 &&
       skills >= 8 &&
@@ -266,6 +266,25 @@ async function main() {
   // 2. CATÁLOGO DE VEHÍCULOS (VehicleTemplate)
   // ============================================
   const vehiclesData: VehicleSeed[] = [
+    // Vehículos de inicio (accesibles desde el nivel 1)
+    {
+      name: 'Vespa Primavera Urbana',
+      brand: 'Piaggio',
+      speed: 52,
+      handling: 78,
+      durability: 58,
+      capacity: 2,
+      priceEuros: 650,
+    },
+    {
+      name: 'Ibiza 1.4 Clásico',
+      brand: 'SEAT',
+      speed: 60,
+      handling: 68,
+      durability: 72,
+      capacity: 4,
+      priceEuros: 950,
+    },
     // Deportivos
     {
       name: 'Ibiza Cupra R',
