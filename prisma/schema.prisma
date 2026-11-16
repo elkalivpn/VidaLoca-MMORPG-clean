@@ -8,7 +8,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["public", "vault"]
+  schemas  = ["public", "vidaloca_vault"]
 }
 
 // ============================================
@@ -609,7 +609,7 @@ enum VaultRecordType {
   IDENTITY_KYC
   RECOVERY_SECRET
 
-  @@schema("vault")
+  @@schema("vidaloca_vault")
 }
 
 model VaultRecord {
@@ -638,7 +638,7 @@ model VaultRecord {
   @@index([ownerUserIdHash, recordType])
   @@index([blindIndex])
   @@map("vault_records")
-  @@schema("vault")
+  @@schema("vidaloca_vault")
 }
 
 model VaultAccessLog {
@@ -656,6 +656,6 @@ model VaultAccessLog {
 
   @@index([actorIdHash, createdAt])
   @@map("vault_access_logs")
-  @@schema("vault")
+  @@schema("vidaloca_vault")
 }
 

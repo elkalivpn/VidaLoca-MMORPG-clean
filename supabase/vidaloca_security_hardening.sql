@@ -5,21 +5,21 @@
 -- ============================================================================
 
 CREATE SCHEMA IF NOT EXISTS "public";
-CREATE SCHEMA IF NOT EXISTS "vault";
+CREATE SCHEMA IF NOT EXISTS "vidaloca_vault";
 
 -- ----------------------------------------------------------------------------
--- 1. AISLAMIENTO ESTRICTO DEL ESQUEMA "vault" (CAJA MÁS BLINDADA - TARJETAS/KYC)
+-- 1. AISLAMIENTO ESTRICTO DEL ESQUEMA "vidaloca_vault" (CAJA MÁS BLINDADA - TARJETAS/KYC)
 -- ----------------------------------------------------------------------------
-REVOKE ALL ON SCHEMA "vault" FROM PUBLIC;
-REVOKE ALL ON ALL TABLES IN SCHEMA "vault" FROM PUBLIC;
-REVOKE ALL ON ALL SEQUENCES IN SCHEMA "vault" FROM PUBLIC;
-REVOKE ALL ON ALL FUNCTIONS IN SCHEMA "vault" FROM PUBLIC;
+REVOKE ALL ON SCHEMA "vidaloca_vault" FROM PUBLIC;
+REVOKE ALL ON ALL TABLES IN SCHEMA "vidaloca_vault" FROM PUBLIC;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA "vidaloca_vault" FROM PUBLIC;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA "vidaloca_vault" FROM PUBLIC;
 
-ALTER DEFAULT PRIVILEGES IN SCHEMA "vault"
+ALTER DEFAULT PRIVILEGES IN SCHEMA "vidaloca_vault"
   REVOKE ALL ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES IN SCHEMA "vault"
+ALTER DEFAULT PRIVILEGES IN SCHEMA "vidaloca_vault"
   REVOKE ALL ON SEQUENCES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES IN SCHEMA "vault"
+ALTER DEFAULT PRIVILEGES IN SCHEMA "vidaloca_vault"
   REVOKE ALL ON FUNCTIONS FROM PUBLIC;
 
 DO $$
@@ -28,10 +28,10 @@ DECLARE
 BEGIN
   FOREACH r IN ARRAY ARRAY['anon', 'authenticated'] LOOP
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
-      EXECUTE format('REVOKE ALL ON SCHEMA "vault" FROM %I', r);
-      EXECUTE format('REVOKE ALL ON ALL TABLES IN SCHEMA "vault" FROM %I', r);
-      EXECUTE format('REVOKE ALL ON ALL SEQUENCES IN SCHEMA "vault" FROM %I', r);
-      EXECUTE format('REVOKE ALL ON ALL FUNCTIONS IN SCHEMA "vault" FROM %I', r);
+      EXECUTE format('REVOKE ALL ON SCHEMA "vidaloca_vault" FROM %I', r);
+      EXECUTE format('REVOKE ALL ON ALL TABLES IN SCHEMA "vidaloca_vault" FROM %I', r);
+      EXECUTE format('REVOKE ALL ON ALL SEQUENCES IN SCHEMA "vidaloca_vault" FROM %I', r);
+      EXECUTE format('REVOKE ALL ON ALL FUNCTIONS IN SCHEMA "vidaloca_vault" FROM %I', r);
       EXECUTE format('REVOKE USAGE ON SCHEMA "public" FROM %I', r);
       EXECUTE format('REVOKE ALL ON ALL TABLES IN SCHEMA "public" FROM %I', r);
       EXECUTE format('REVOKE ALL ON ALL SEQUENCES IN SCHEMA "public" FROM %I', r);
@@ -41,7 +41,7 @@ END
 $$;
 
 -- ----------------------------------------------------------------------------
--- 2. ACTIVAR RLS Y FORCE RLS EN TODAS LAS TABLAS DE "public" Y "vault"
+-- 2. ACTIVAR RLS Y FORCE RLS EN TODAS LAS TABLAS DE "public" Y "vidaloca_vault"
 -- ----------------------------------------------------------------------------
 DO $$
 DECLARE
@@ -50,7 +50,7 @@ BEGIN
   FOR tbl IN
     SELECT schemaname, tablename
     FROM pg_tables
-    WHERE schemaname IN ('public', 'vault')
+    WHERE schemaname IN ('public', 'vidaloca_vault')
   LOOP
     EXECUTE format(
       'ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY',
@@ -79,7 +79,7 @@ BEGIN
   FOR tbl IN
     SELECT schemaname, tablename
     FROM pg_tables
-    WHERE schemaname IN ('public', 'vault')
+    WHERE schemaname IN ('public', 'vidaloca_vault')
   LOOP
     EXECUTE format(
       'DROP POLICY IF EXISTS "vidaloca_deny_api_roles" ON %I.%I',
@@ -121,9 +121,9 @@ $$;
 -- 4. POLÍTICAS EXPLÍCITAS DE CERO EXPOSICIÓN EN TABLAS ULTRA-SENSIBLES
 --    (Evita cualquier lectura o escritura accidental incluso con nuevas concesiones)
 -- ----------------------------------------------------------------------------
-DROP POLICY IF EXISTS "vault_records_never_delete" ON "vault"."vault_records";
+DROP POLICY IF EXISTS "vault_records_never_delete" ON "vidaloca_vault"."vault_records";
 CREATE POLICY "vault_records_never_delete"
-  ON "vault"."vault_records"
+  ON "vidaloca_vault"."vault_records"
   AS RESTRICTIVE
   FOR DELETE
   TO PUBLIC
@@ -154,8 +154,8 @@ CREATE TRIGGER "trg_immutable_anti_cheat_incidents"
   FOR EACH ROW
   EXECUTE FUNCTION "public"."vidaloca_prevent_audit_mutation"();
 
-DROP TRIGGER IF EXISTS "trg_immutable_vault_access_logs" ON "vault"."vault_access_logs";
+DROP TRIGGER IF EXISTS "trg_immutable_vault_access_logs" ON "vidaloca_vault"."vault_access_logs";
 CREATE TRIGGER "trg_immutable_vault_access_logs"
-  BEFORE UPDATE OR DELETE ON "vault"."vault_access_logs"
+  BEFORE UPDATE OR DELETE ON "vidaloca_vault"."vault_access_logs"
   FOR EACH ROW
   EXECUTE FUNCTION "public"."vidaloca_prevent_audit_mutation"();

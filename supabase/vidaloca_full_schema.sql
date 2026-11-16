@@ -6,7 +6,7 @@
 
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
-CREATE SCHEMA IF NOT EXISTS "vault";
+CREATE SCHEMA IF NOT EXISTS "vidaloca_vault";
 
 -- ----------------------------------------------------------------------------
 -- 1. ENUMS (seguros ante re-ejecución + nuevos valores)
@@ -23,7 +23,7 @@ DO $$ BEGIN CREATE TYPE "MissionStatus" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMP
 DO $$ BEGIN CREATE TYPE "TransactionType" AS ENUM ('EARN', 'SPEND', 'PURCHASE', 'GIFT', 'PENALTY'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE "Currency" AS ENUM ('EUR', 'VIDACOIN'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE "SkillCategory" AS ENUM ('COMBAT', 'DRIVING', 'STEALTH', 'BUSINESS', 'SOCIAL'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN CREATE TYPE "vault"."VaultRecordType" AS ENUM ('PAYMENT_CARD', 'IDENTITY_KYC', 'RECOVERY_SECRET'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "vidaloca_vault"."VaultRecordType" AS ENUM ('PAYMENT_CARD', 'IDENTITY_KYC', 'RECOVERY_SECRET'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 ALTER TYPE "MissionStatus" ADD VALUE IF NOT EXISTS 'ABANDONED';
 ALTER TYPE "MissionStatus" ADD VALUE IF NOT EXISTS 'SKIPPED';
@@ -383,11 +383,11 @@ CREATE TABLE IF NOT EXISTS "anti_cheat_incidents" (
     CONSTRAINT "anti_cheat_incidents_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "vault"."vault_records" (
+CREATE TABLE IF NOT EXISTS "vidaloca_vault"."vault_records" (
     "id" TEXT NOT NULL,
     "vaultToken" TEXT NOT NULL,
     "ownerUserIdHash" TEXT NOT NULL,
-    "recordType" "vault"."VaultRecordType" NOT NULL,
+    "recordType" "vidaloca_vault"."VaultRecordType" NOT NULL,
     "keyVersion" INTEGER NOT NULL DEFAULT 1,
     "algorithm" TEXT NOT NULL DEFAULT 'AES-256-GCM',
     "encryptedDek" TEXT NOT NULL,
@@ -407,7 +407,7 @@ CREATE TABLE IF NOT EXISTS "vault"."vault_records" (
     CONSTRAINT "vault_records_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "vault"."vault_access_logs" (
+CREATE TABLE IF NOT EXISTS "vidaloca_vault"."vault_access_logs" (
     "id" TEXT NOT NULL,
     "vaultRecordId" TEXT,
     "actorIdHash" TEXT NOT NULL,
@@ -493,11 +493,11 @@ CREATE INDEX IF NOT EXISTS "security_audit_logs_actorId_createdAt_idx" ON "secur
 CREATE INDEX IF NOT EXISTS "security_audit_logs_eventType_createdAt_idx" ON "security_audit_logs"("eventType", "createdAt");
 CREATE INDEX IF NOT EXISTS "anti_cheat_incidents_playerId_createdAt_idx" ON "anti_cheat_incidents"("playerId", "createdAt");
 CREATE INDEX IF NOT EXISTS "anti_cheat_incidents_userId_createdAt_idx" ON "anti_cheat_incidents"("userId", "createdAt");
-CREATE UNIQUE INDEX IF NOT EXISTS "vault_records_vaultToken_key" ON "vault"."vault_records"("vaultToken");
-CREATE INDEX IF NOT EXISTS "vault_records_ownerUserIdHash_recordType_idx" ON "vault"."vault_records"("ownerUserIdHash", "recordType");
-CREATE INDEX IF NOT EXISTS "vault_records_blindIndex_idx" ON "vault"."vault_records"("blindIndex");
-CREATE UNIQUE INDEX IF NOT EXISTS "vault_access_logs_entryHash_key" ON "vault"."vault_access_logs"("entryHash");
-CREATE INDEX IF NOT EXISTS "vault_access_logs_actorIdHash_createdAt_idx" ON "vault"."vault_access_logs"("actorIdHash", "createdAt");
+CREATE UNIQUE INDEX IF NOT EXISTS "vault_records_vaultToken_key" ON "vidaloca_vault"."vault_records"("vaultToken");
+CREATE INDEX IF NOT EXISTS "vault_records_ownerUserIdHash_recordType_idx" ON "vidaloca_vault"."vault_records"("ownerUserIdHash", "recordType");
+CREATE INDEX IF NOT EXISTS "vault_records_blindIndex_idx" ON "vidaloca_vault"."vault_records"("blindIndex");
+CREATE UNIQUE INDEX IF NOT EXISTS "vault_access_logs_entryHash_key" ON "vidaloca_vault"."vault_access_logs"("entryHash");
+CREATE INDEX IF NOT EXISTS "vault_access_logs_actorIdHash_createdAt_idx" ON "vidaloca_vault"."vault_access_logs"("actorIdHash", "createdAt");
 
 -- ----------------------------------------------------------------------------
 -- 5. FOREIGN KEYS (idempotentes)
@@ -528,4 +528,4 @@ DO $$ BEGIN ALTER TABLE "player_achievements" ADD CONSTRAINT "player_achievement
 DO $$ BEGIN ALTER TABLE "player_achievements" ADD CONSTRAINT "player_achievements_achievementId_fkey" FOREIGN KEY ("achievementId") REFERENCES "achievements"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER TABLE "player_weapons" ADD CONSTRAINT "player_weapons_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER TABLE "game_sessions" ADD CONSTRAINT "game_sessions_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN ALTER TABLE "vault"."vault_access_logs" ADD CONSTRAINT "vault_access_logs_vaultRecordId_fkey" FOREIGN KEY ("vaultRecordId") REFERENCES "vault"."vault_records"("id") ON DELETE SET NULL ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "vidaloca_vault"."vault_access_logs" ADD CONSTRAINT "vault_access_logs_vaultRecordId_fkey" FOREIGN KEY ("vaultRecordId") REFERENCES "vidaloca_vault"."vault_records"("id") ON DELETE SET NULL ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
