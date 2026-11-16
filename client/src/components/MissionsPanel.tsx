@@ -20,6 +20,13 @@ const DIFFICULTY_BADGE: Record<MissionTemplate['difficulty'], string> = {
   SUICIDE: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
 };
 
+const STEP_COOLDOWN_SEC: Record<MissionTemplate['difficulty'], number> = {
+  EASY: 8,
+  MEDIUM: 12,
+  HARD: 18,
+  SUICIDE: 25,
+};
+
 export default function MissionsPanel() {
   const { token, player, refreshPlayer } = useAuth();
   const [tab, setTab] = useState<MissionTab>('STORY');
@@ -28,6 +35,7 @@ export default function MissionsPanel() {
   const [myMissions, setMyMissions] = useState<PlayerMission[]>([]);
   const [openSquads, setOpenSquads] = useState<PlayerMission[]>([]);
   const [squadCodeInput, setSquadCodeInput] = useState('');
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [errMsg, setErrMsg] = useState('');
@@ -54,6 +62,22 @@ export default function MissionsPanel() {
     void load();
   }, [load]);
 
+  const hasActiveCooldown = useMemo(
+    () =>
+      myMissions.some(
+        (m) => m.status === 'IN_PROGRESS' && Boolean(m.lastStepAt),
+      ),
+    [myMissions],
+  );
+
+  useEffect(() => {
+    if (!hasActiveCooldown) return;
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [hasActiveCooldown]);
+
   async function runAction(
     busyKey: string,
     fn: () => Promise<unknown>,
@@ -66,6 +90,7 @@ export default function MissionsPanel() {
     setErrMsg('');
     try {
       await fn();
+      setNowMs(Date.now());
       setMsg(successMessage);
       if (refreshStats) {
         await Promise.all([load(), refreshPlayer()]);
@@ -244,6 +269,29 @@ export default function MissionsPanel() {
                   Math.round((m.progress / 100) * steps),
                 );
                 const isCoop = m.template.mode === 'ONLINE_COOP';
+                const rawMinStep = m.template.requirement?.minStepSeconds;
+                const stepSec =
+                  typeof rawMinStep === 'number' &&
+                  Number.isFinite(rawMinStep) &&
+                  rawMinStep > 0
+                    ? rawMinStep
+                    : STEP_COOLDOWN_SEC[m.template.difficulty];
+                const lastStepMs = m.lastStepAt
+                  ? new Date(m.lastStepAt).getTime()
+                  : 0;
+                const elapsedSec =
+                  lastStepMs > 0 ? (nowMs - lastStepMs) / 1000 : stepSec;
+                const remainingSec =
+                  m.status === 'IN_PROGRESS' && lastStepMs > 0
+                    ? Math.max(0, Math.ceil(stepSec - elapsedSec))
+                    : 0;
+                const isOwner = m.playerId
+                  ? m.playerId === player?.id
+                  : m.player?.id
+                    ? m.player.id === player?.id
+                    : m.coOpParticipants?.find((p) => p.playerId === player?.id)
+                        ?.role !== 'MEMBER';
+
                 return (
                   <li
                     key={m.id}
@@ -313,7 +361,9 @@ export default function MissionsPanel() {
                           <>
                             <button
                               type="button"
-                              disabled={busy === `adv-${m.id}`}
+                              disabled={
+                                busy === `adv-${m.id}` || remainingSec > 0
+                              }
                               onClick={() =>
                                 void runAction(
                                   `adv-${m.id}`,
@@ -321,24 +371,43 @@ export default function MissionsPanel() {
                                   'Fase táctica completada',
                                 )
                               }
-                              className="rounded-md bg-amber-500 px-2.5 py-1 text-xs font-semibold text-zinc-950 hover:bg-amber-400 disabled:opacity-50"
+                              className="rounded-md bg-amber-500 px-2.5 py-1 text-xs font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              Ejecutar fase
+                              {remainingSec > 0
+                                ? `Espera ${remainingSec}s`
+                                : 'Ejecutar fase'}
                             </button>
-                            <button
-                              type="button"
-                              disabled={busy === `abn-${m.id}`}
-                              onClick={() =>
-                                void runAction(
-                                  `abn-${m.id}`,
-                                  () => api.abandonMission(m.id),
-                                  'Misión abandonada (sin penalización)',
-                                )
-                              }
-                              className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-50"
-                            >
-                              Abandonar
-                            </button>
+                            {isCoop && !isOwner ? (
+                              <button
+                                type="button"
+                                disabled={busy === `leave-${m.id}`}
+                                onClick={() =>
+                                  void runAction(
+                                    `leave-${m.id}`,
+                                    () => api.leaveCoopMission(m.id),
+                                    'Has salido de la escuadra co-op',
+                                  )
+                                }
+                                className="rounded-md border border-purple-500/40 px-2 py-1 text-xs text-purple-300 hover:text-purple-100 disabled:opacity-50"
+                              >
+                                Salir de escuadra
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={busy === `abn-${m.id}`}
+                                onClick={() =>
+                                  void runAction(
+                                    `abn-${m.id}`,
+                                    () => api.abandonMission(m.id),
+                                    'Misión abandonada (sin penalización)',
+                                  )
+                                }
+                                className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-50"
+                              >
+                                Abandonar
+                              </button>
+                            )}
                           </>
                         )}
                         {m.status === 'COMPLETED' && (

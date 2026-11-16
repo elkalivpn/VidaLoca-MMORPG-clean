@@ -3,14 +3,19 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { isPlayerVipActive } from '../common/utils/vip.util';
 import { BuyPropertyDto } from './dto/properties.dto';
+import { AchievementsService } from '../achievements/achievements.service';
 
 @Injectable()
 export class PropertiesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private readonly achievementsService?: AchievementsService,
+  ) {}
 
   async getCatalog() {
     return this.prisma.propertyTemplate.findMany({
@@ -53,7 +58,7 @@ export class PropertiesService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const property = await this.prisma.$transaction(async (tx) => {
       const whereClause: any = { id: player.id };
       const updateData: any = {};
       if (template.priceEuros > 0) {
@@ -74,7 +79,7 @@ export class PropertiesService {
         throw new BadRequestException('Insufficient funds to buy this property');
       }
 
-      const property = await tx.playerProperty.create({
+      const created = await tx.playerProperty.create({
         data: {
           playerId: player.id,
           templateId: template.id,
@@ -89,12 +94,15 @@ export class PropertiesService {
           amount: template.priceEuros > 0 ? template.priceEuros : (template.priceVida ?? 0),
           currency: template.priceEuros > 0 ? 'EUR' : 'VIDACOIN',
           reason: `Bought property: ${template.name}`,
-          reference: property.id,
+          reference: created.id,
         },
       });
 
-      return property;
+      return created;
     });
+
+    await this.achievementsService?.checkAndUnlock(userId).catch(() => undefined);
+    return property;
   }
 
   async collectRent(userId: string, propertyId: string) {

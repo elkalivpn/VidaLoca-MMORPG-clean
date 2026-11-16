@@ -145,6 +145,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ squadCode }),
     }),
+  leaveCoopMission: (missionId: string) =>
+    request<{
+      left: boolean;
+      disbanded: boolean;
+      missionId: string;
+      message?: string;
+    }>(`/missions/coop/${missionId}/leave`, { method: 'POST' }),
   updateMissionProgress: (missionId: string, progress: number) =>
     request(`/missions/${missionId}/progress`, {
       method: 'POST',
@@ -229,6 +236,25 @@ export const api = {
   joinClan: (clanId: string) =>
     request(`/clans/join/${clanId}`, { method: 'POST' }),
   leaveClan: () => request('/clans/leave', { method: 'POST' }),
+  transferClanLeadership: (targetPlayerId: string) =>
+    request<{
+      transferred: boolean;
+      newLeaderPlayerId: string;
+      newLeaderName: string;
+    }>('/clans/transfer', {
+      method: 'POST',
+      body: JSON.stringify({ targetPlayerId }),
+    }),
+  kickClanMember: (targetPlayerId: string) =>
+    request<{
+      kicked: boolean;
+      targetPlayerId: string;
+      targetName: string;
+    }>(`/clans/kick/${targetPlayerId}`, { method: 'POST' }),
+  disbandClan: () =>
+    request<{ disbanded: boolean; clanId: string }>('/clans/disband', {
+      method: 'POST',
+    }),
   donateToClan: (amount: number) =>
     request<{ donated: number; clanFunds: number }>('/clans/donate', {
       method: 'POST',

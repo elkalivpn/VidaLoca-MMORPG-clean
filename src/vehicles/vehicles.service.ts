@@ -3,14 +3,19 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { isPlayerVipActive } from '../common/utils/vip.util';
 import { BuyVehicleDto } from './dto/vehicles.dto';
+import { AchievementsService } from '../achievements/achievements.service';
 
 @Injectable()
 export class VehiclesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private readonly achievementsService?: AchievementsService,
+  ) {}
 
   async getCatalog() {
     return this.prisma.vehicleTemplate.findMany({
@@ -79,7 +84,7 @@ export class VehiclesService {
 
     const licensePlate = this.generateLicensePlate();
 
-    return this.prisma.$transaction(async (tx) => {
+    const vehicle = await this.prisma.$transaction(async (tx) => {
       // Atomic deduct money
       if (useEuros) {
         const debit = await tx.player.updateMany({
@@ -100,7 +105,7 @@ export class VehiclesService {
       }
 
       // Create vehicle
-      const vehicle = await tx.playerVehicle.create({
+      const created = await tx.playerVehicle.create({
         data: {
           playerId: player.id,
           templateId: template.id,
@@ -120,12 +125,15 @@ export class VehiclesService {
           amount: useEuros ? priceEuros : priceVida,
           currency: useEuros ? 'EUR' : 'VIDACOIN',
           reason: `Bought vehicle: ${template.name}`,
-          reference: vehicle.id,
+          reference: created.id,
         },
       });
 
-      return vehicle;
+      return created;
     });
+
+    await this.achievementsService?.checkAndUnlock(userId).catch(() => undefined);
+    return vehicle;
   }
 
   async setPrimary(userId: string, vehicleId: string) {

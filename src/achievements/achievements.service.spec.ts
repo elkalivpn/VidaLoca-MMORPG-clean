@@ -137,4 +137,27 @@ describe('AchievementsService', () => {
     expect(prisma.playerVehicle.count).toHaveBeenCalledTimes(1);
     expect(prisma.playerProperty.count).toHaveBeenCalledTimes(1);
   });
+
+  it('ignores P2002 unique constraint races cleanly without throwing', async () => {
+    prisma.player.findUnique.mockResolvedValue({
+      id: 'p1',
+      level: 5,
+      euros: 0,
+      reputation: 0,
+    });
+    prisma.playerAchievement.findMany.mockResolvedValue([]);
+    prisma.achievement.findMany.mockResolvedValue([
+      {
+        id: 'ach-lvl',
+        name: 'Nivel 5',
+        condition: { type: 'reach_level', value: 5 },
+        rewardVida: 5,
+        rewardEuros: 500,
+      },
+    ]);
+    prisma.playerAchievement.create.mockRejectedValue({ code: 'P2002' });
+
+    const unlocked = await service.checkAndUnlock('u1');
+    expect(unlocked).toEqual([]);
+  });
 });

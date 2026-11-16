@@ -12,7 +12,7 @@ import { PlayersService } from './players.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { IsString, IsNotEmpty, IsNumber, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsOptional, Min } from 'class-validator';
 
 class UpdateLocationDto {
   @IsString()
@@ -24,11 +24,19 @@ class AddXpDto {
   @IsNumber()
   @Min(1)
   xp: number;
+
+  @IsOptional()
+  @IsString()
+  targetPlayerId?: string;
 }
 
 class AddReputationDto {
   @IsNumber()
   reputation: number;
+
+  @IsOptional()
+  @IsString()
+  targetPlayerId?: string;
 }
 
 @Controller('players')
@@ -66,7 +74,7 @@ export class PlayersController {
     @CurrentUser('id') userId: string,
     @Body() dto: AddXpDto,
   ) {
-    return this.playersService.addXp(userId, dto.xp);
+    return this.playersService.addXp(userId, dto.xp, dto.targetPlayerId);
   }
 
   @Post('reputation')
@@ -76,6 +84,10 @@ export class PlayersController {
     @CurrentUser('id') userId: string,
     @Body() dto: AddReputationDto,
   ) {
-    return this.playersService.addReputation(userId, dto.reputation);
+    return this.playersService.addReputation(
+      userId,
+      dto.reputation,
+      dto.targetPlayerId,
+    );
   }
 }

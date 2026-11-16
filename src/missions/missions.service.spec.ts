@@ -345,4 +345,37 @@ describe('MissionsService (Story, Online Solo, Online Co-op & Optional Choice)',
     expect(claimed.rewards.euros).toBe(1150); // 1000 * 1.15
     expect(claimed.rewards.xp).toBe(500); // 400 * 1.25
   });
+
+  it('allows Co-op teammates to leave an active squad cleanly without abandoning the leader run', async () => {
+    const activeCoop = {
+      id: 'pm-coop-leave',
+      playerId: playerOne.id,
+      status: MissionStatus.IN_PROGRESS,
+      squadCode: 'VL-112233',
+      coOpParticipants: [
+        { playerId: playerOne.id, userId: playerOne.userId, displayName: playerOne.displayName, role: 'LEADER' },
+        { playerId: playerTwo.id, userId: playerTwo.userId, displayName: playerTwo.displayName, role: 'MEMBER' },
+      ],
+      template: coopTemplate,
+    };
+
+    prisma.player.findUnique.mockResolvedValue(playerTwo);
+    prisma.playerMission.findUnique.mockResolvedValue(activeCoop);
+    prisma.playerMission.update.mockResolvedValue({});
+
+    const res = await service.leaveCoopSquad('user-2', 'pm-coop-leave');
+    expect(res).toEqual(
+      expect.objectContaining({ left: true, disbanded: false }),
+    );
+    expect(prisma.playerMission.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'pm-coop-leave' },
+        data: {
+          coOpParticipants: [
+            expect.objectContaining({ playerId: playerOne.id, role: 'LEADER' }),
+          ],
+        },
+      }),
+    );
+  });
 });

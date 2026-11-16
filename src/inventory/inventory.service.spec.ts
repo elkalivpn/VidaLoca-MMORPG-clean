@@ -156,4 +156,29 @@ describe('InventoryService', () => {
     expect(used.used).toBe(true);
     expect(used.heat).toBe(25);
   });
+
+  it('supports targetPlayerId for admin item grants', async () => {
+    prisma.player.findUnique.mockResolvedValue({ id: 'p-target' });
+    prisma.itemTemplate.findUnique.mockResolvedValue({
+      id: 'tpl-vip',
+      name: 'Traje',
+    });
+    prisma.inventoryItem.findFirst.mockResolvedValue(null);
+    prisma.inventoryItem.create.mockResolvedValue({
+      id: 'inv-target',
+      playerId: 'p-target',
+      quantity: 3,
+    });
+
+    const added = await service.addItemToInventory(
+      'u-admin',
+      'tpl-vip',
+      3,
+      'p-target',
+    );
+    expect(prisma.player.findUnique).toHaveBeenCalledWith({
+      where: { id: 'p-target' },
+    });
+    expect(added.playerId).toBe('p-target');
+  });
 });

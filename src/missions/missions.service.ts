@@ -15,6 +15,7 @@ import { grantBattlePassXpTx } from '../common/utils/battle-pass.util';
 import { ZONES_BY_ID } from '../common/constants/zones';
 import { AntiCheatService } from '../security/anti-cheat.service';
 import { EngagementService } from '../engagement/engagement.service';
+import { AchievementsService } from '../achievements/achievements.service';
 
 export interface CoopParticipant {
   playerId: string;
@@ -37,6 +38,7 @@ export class MissionsService {
     private prisma: PrismaService,
     @Optional() private readonly antiCheat?: AntiCheatService,
     @Optional() private readonly engagementService?: EngagementService,
+    @Optional() private readonly achievementsService?: AchievementsService,
   ) {}
 
   // ─── Templates (Catalog & Admin) ─────────────────────────────────────
@@ -310,6 +312,54 @@ export class MissionsService {
       data: { coOpParticipants: nextParticipants as any },
       include: { template: true },
     });
+  }
+
+  async leaveCoopSquad(userId: string, missionId: string) {
+    const player = await this.getPlayerOrThrow(userId);
+    const mission = await this.prisma.playerMission.findUnique({
+      where: { id: missionId },
+      include: { template: true },
+    });
+
+    if (!mission) {
+      throw new NotFoundException('Misión cooperativa no encontrada');
+    }
+    if (
+      mission.status !== MissionStatus.IN_PROGRESS &&
+      mission.status !== MissionStatus.PENDING
+    ) {
+      throw new BadRequestException(
+        'Solo puedes salir de una escuadra cooperativa activa',
+      );
+    }
+
+    if (mission.playerId === player.id) {
+      await this.abandonMission(userId, missionId);
+      return {
+        left: true,
+        disbanded: true,
+        missionId,
+        message: 'Has disuelto tu escuadra cooperativa',
+      };
+    }
+
+    const participants = this.parseCoopParticipants(mission.coOpParticipants);
+    if (!participants.some((p) => p.playerId === player.id)) {
+      throw new ForbiddenException('No formas parte de esta escuadra');
+    }
+
+    const remaining = participants.filter((p) => p.playerId !== player.id);
+    await this.prisma.playerMission.update({
+      where: { id: mission.id },
+      data: { coOpParticipants: remaining as any },
+    });
+
+    return {
+      left: true,
+      disbanded: false,
+      missionId,
+      message: 'Has salido de la escuadra cooperativa',
+    };
   }
 
   // ─── Multi-Step Progression (Anti-Speedrun) ──────────────────────────
@@ -696,6 +746,18 @@ export class MissionsService {
       await this.engagementService
         .recordProgress(player.id, 'mission')
         .catch(() => undefined);
+    }
+    if (this.achievementsService) {
+      await this.achievementsService.checkAndUnlock(userId).catch(() => undefined);
+      if (isTeamBonus) {
+        for (const p of participants) {
+          if (p.userId && p.userId !== userId) {
+            await this.achievementsService
+              .checkAndUnlock(p.userId)
+              .catch(() => undefined);
+          }
+        }
+      }
     }
     return claimResult;
   }

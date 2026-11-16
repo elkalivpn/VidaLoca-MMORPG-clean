@@ -17,8 +17,11 @@ export const metadata: Metadata = {
   ],
   manifest: '/manifest.json',
   icons: {
-    icon: '/icon.svg',
-    apple: '/icon.svg',
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: '/icons/icon-192.png',
   },
   openGraph: {
     title: 'VidaLoca MMORPG — España es tuya',

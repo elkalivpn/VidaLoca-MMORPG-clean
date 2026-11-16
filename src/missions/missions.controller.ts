@@ -113,6 +113,14 @@ export class MissionsController {
     return this.missionsService.joinCoopSquad(userId, dto.squadCode);
   }
 
+  @Post('coop/:missionId/leave')
+  async leaveCoopSquad(
+    @CurrentUser('id') userId: string,
+    @Param('missionId') missionId: string,
+  ) {
+    return this.missionsService.leaveCoopSquad(userId, missionId);
+  }
+
   // ─── Admin Progress & Rewards Claim ──────────────────────────────────
 
   @Post(':missionId/progress')

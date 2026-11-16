@@ -153,6 +153,19 @@ export default function PlayPage() {
         </div>
       )}
 
+      {convertMsg && (!isGuest || !showConvertModal) && (
+        <div className="border-b border-emerald-500/40 bg-emerald-950/40 px-4 py-2 text-xs flex items-center justify-between gap-2 text-emerald-200">
+          <span>{convertMsg}</span>
+          <button
+            type="button"
+            onClick={() => setConvertMsg('')}
+            className="text-emerald-300 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {isGuest && showConvertModal && (
         <form
           onSubmit={(e) => {

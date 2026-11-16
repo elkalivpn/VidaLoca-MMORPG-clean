@@ -170,12 +170,19 @@ export class InventoryService {
     });
   }
 
-  async addItemToInventory(userId: string, templateId: string, quantity: number = 1) {
+  async addItemToInventory(
+    userId: string,
+    templateId: string,
+    quantity: number = 1,
+    targetPlayerId?: string,
+  ) {
     if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 1000) {
       throw new BadRequestException('Quantity must be a positive integer (1..1000)');
     }
 
-    const player = await this.prisma.player.findUnique({ where: { userId } });
+    const player = targetPlayerId
+      ? await this.prisma.player.findUnique({ where: { id: targetPlayerId } })
+      : await this.prisma.player.findUnique({ where: { userId } });
 
     if (!player) {
       throw new NotFoundException('Player not found');
@@ -453,8 +460,17 @@ export class InventoryService {
     });
   }
 
-  async addWeapon(userId: string, name: string, damage: number, range: number, accuracy: number) {
-    const player = await this.prisma.player.findUnique({ where: { userId } });
+  async addWeapon(
+    userId: string,
+    name: string,
+    damage: number,
+    range: number,
+    accuracy: number,
+    targetPlayerId?: string,
+  ) {
+    const player = targetPlayerId
+      ? await this.prisma.player.findUnique({ where: { id: targetPlayerId } })
+      : await this.prisma.player.findUnique({ where: { userId } });
 
     if (!player) {
       throw new NotFoundException('Player not found');

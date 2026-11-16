@@ -141,6 +141,7 @@ export interface Clan {
   id: string;
   name: string;
   tag: string;
+  leaderId?: string;
   level: number;
   funds: number;
 }
@@ -169,6 +170,7 @@ export interface MissionTemplate {
   rewardReputation?: number;
   rewardItemName?: string | null;
   unlockBenefit?: string | null;
+  requirement?: Record<string, unknown> | null;
 }
 
 export interface CoopParticipant {
@@ -181,6 +183,7 @@ export interface CoopParticipant {
 
 export interface PlayerMission {
   id: string;
+  playerId?: string;
   status:
     | 'PENDING'
     | 'IN_PROGRESS'

@@ -39,6 +39,12 @@ class DonateClanDto {
   amount: number;
 }
 
+class TransferLeadershipDto {
+  @IsString()
+  @MinLength(1)
+  targetPlayerId: string;
+}
+
 @Controller('clans')
 @UseGuards(AuthGuard('jwt'))
 export class ClansController {
@@ -67,6 +73,30 @@ export class ClansController {
   @Post('leave')
   async leaveClan(@Req() req: any) {
     return this.clansService.leaveClan(req.user.id);
+  }
+
+  @Post('transfer')
+  async transferLeadership(
+    @Req() req: any,
+    @Body() dto: TransferLeadershipDto,
+  ) {
+    return this.clansService.transferLeadership(
+      req.user.id,
+      dto.targetPlayerId,
+    );
+  }
+
+  @Post('kick/:targetPlayerId')
+  async kickMember(
+    @Req() req: any,
+    @Param('targetPlayerId') targetPlayerId: string,
+  ) {
+    return this.clansService.kickMember(req.user.id, targetPlayerId);
+  }
+
+  @Post('disband')
+  async disbandClan(@Req() req: any) {
+    return this.clansService.disbandClan(req.user.id);
   }
 
   @Post('donate')

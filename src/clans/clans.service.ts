@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -96,6 +97,115 @@ export class ClansService {
     }
 
     return this.prisma.clanMember.delete({ where: { id: member.id } });
+  }
+
+  async transferLeadership(userId: string, targetPlayerId: string) {
+    const player = await this.getPlayerOrThrow(userId);
+    if (player.id === targetPlayerId) {
+      throw new BadRequestException('Ya eres el líder del clan');
+    }
+
+    const leaderMember = await this.prisma.clanMember.findUnique({
+      where: { playerId: player.id },
+    });
+    if (!leaderMember || leaderMember.role !== 'LEADER') {
+      throw new ForbiddenException('Solo el líder puede transferir el liderazgo');
+    }
+
+    const targetMember = await this.prisma.clanMember.findUnique({
+      where: { playerId: targetPlayerId },
+      include: { player: { select: { displayName: true } } },
+    });
+    if (!targetMember || targetMember.clanId !== leaderMember.clanId) {
+      throw new NotFoundException('Ese jugador no pertenece a tu clan');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.clanMember.update({
+        where: { id: leaderMember.id },
+        data: { role: 'OFFICER' },
+      });
+      await tx.clanMember.update({
+        where: { id: targetMember.id },
+        data: { role: 'LEADER' },
+      });
+      await tx.clan.update({
+        where: { id: leaderMember.clanId },
+        data: { leaderId: targetPlayerId },
+      });
+    });
+
+    return {
+      transferred: true,
+      newLeaderPlayerId: targetPlayerId,
+      newLeaderName: targetMember.player?.displayName ?? 'Miembro',
+    };
+  }
+
+  async kickMember(userId: string, targetPlayerId: string) {
+    const player = await this.getPlayerOrThrow(userId);
+    if (player.id === targetPlayerId) {
+      throw new BadRequestException('No puedes expulsarte a ti mismo');
+    }
+
+    const actorMember = await this.prisma.clanMember.findUnique({
+      where: { playerId: player.id },
+    });
+    if (
+      !actorMember ||
+      (actorMember.role !== 'LEADER' && actorMember.role !== 'OFFICER')
+    ) {
+      throw new ForbiddenException(
+        'Solo el líder u oficiales pueden expulsar miembros',
+      );
+    }
+
+    const targetMember = await this.prisma.clanMember.findUnique({
+      where: { playerId: targetPlayerId },
+      include: { player: { select: { displayName: true } } },
+    });
+    if (!targetMember || targetMember.clanId !== actorMember.clanId) {
+      throw new NotFoundException('Ese jugador no pertenece a tu clan');
+    }
+    if (targetMember.role === 'LEADER') {
+      throw new ForbiddenException('No puedes expulsar al líder del clan');
+    }
+    if (actorMember.role === 'OFFICER' && targetMember.role === 'OFFICER') {
+      throw new ForbiddenException(
+        'Un oficial no puede expulsar a otro oficial',
+      );
+    }
+
+    await this.prisma.clanMember.delete({ where: { id: targetMember.id } });
+    return {
+      kicked: true,
+      targetPlayerId,
+      targetName: targetMember.player?.displayName ?? 'Miembro',
+    };
+  }
+
+  async disbandClan(userId: string) {
+    const player = await this.getPlayerOrThrow(userId);
+    const member = await this.prisma.clanMember.findUnique({
+      where: { playerId: player.id },
+    });
+    if (!member) throw new NotFoundException('Not in a clan');
+    if (member.role !== 'LEADER') {
+      throw new ForbiddenException('Solo el líder puede disolver el clan');
+    }
+
+    const clanId = member.clanId;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.territory.updateMany({
+        where: { controllerId: clanId },
+        data: { controllerId: null },
+      });
+      await tx.clanTerritory.deleteMany({ where: { clanId } });
+      await tx.clanMember.deleteMany({ where: { clanId } });
+      await tx.clan.delete({ where: { id: clanId } });
+    });
+
+    return { disbanded: true, clanId };
   }
 
   async getClanLeaderboard(page = 1, limit = 20) {

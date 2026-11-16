@@ -88,40 +88,46 @@ export class AchievementsService {
       }
 
       if (met) {
-        const result = await this.prisma.$transaction(async (tx) => {
-          const pa = await tx.playerAchievement.create({
-            data: {
-              playerId: player.id,
-              achievementId: ach.id,
-            },
-            include: { achievement: true },
-          });
-
-          await tx.player.update({
-            where: { id: player.id },
-            data: {
-              vidaCoins: { increment: ach.rewardVida },
-              euros: { increment: ach.rewardEuros },
-            },
-          });
-
-          if (ach.rewardVida > 0) {
-            await tx.transactionLog.create({
+        try {
+          const result = await this.prisma.$transaction(async (tx) => {
+            const pa = await tx.playerAchievement.create({
               data: {
                 playerId: player.id,
-                type: 'EARN',
-                amount: ach.rewardVida,
-                currency: 'VIDACOIN',
-                reason: `Achievement: ${ach.name}`,
-                reference: ach.id,
+                achievementId: ach.id,
+              },
+              include: { achievement: true },
+            });
+
+            await tx.player.update({
+              where: { id: player.id },
+              data: {
+                vidaCoins: { increment: ach.rewardVida },
+                euros: { increment: ach.rewardEuros },
               },
             });
+
+            if (ach.rewardVida > 0) {
+              await tx.transactionLog.create({
+                data: {
+                  playerId: player.id,
+                  type: 'EARN',
+                  amount: ach.rewardVida,
+                  currency: 'VIDACOIN',
+                  reason: `Achievement: ${ach.name}`,
+                  reference: ach.id,
+                },
+              });
+            }
+
+            return pa;
+          });
+
+          newlyUnlocked.push(result);
+        } catch (err: any) {
+          if (err?.code !== 'P2002') {
+            throw err;
           }
-
-          return pa;
-        });
-
-        newlyUnlocked.push(result);
+        }
       }
     }
 

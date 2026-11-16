@@ -6,8 +6,20 @@ import { useAuth } from '@/store/auth';
 import { playCoinSfx } from '@/lib/sfx';
 import type { Clan } from '@/types/game';
 
+interface ClanMemberItem {
+  id: string;
+  playerId: string;
+  role: 'LEADER' | 'OFFICER' | 'MEMBER' | 'RECRUIT';
+  player?: {
+    id?: string;
+    displayName?: string;
+    level?: number;
+    user?: { username?: string };
+  };
+}
+
 interface ClanLeaderboardItem extends Clan {
-  members?: Array<{ id: string }>;
+  members?: ClanMemberItem[];
 }
 
 interface TerritoryItem {
@@ -19,14 +31,23 @@ interface TerritoryItem {
   controller?: { id: string; name: string; tag: string } | null;
 }
 
+const ROLE_LABELS: Record<ClanMemberItem['role'], string> = {
+  LEADER: 'LÍDER',
+  OFFICER: 'OFICIAL',
+  MEMBER: 'MIEMBRO',
+  RECRUIT: 'RECLUTA',
+};
+
 export default function ClansPanel() {
-  const { token, refreshPlayer } = useAuth();
+  const { token, player, refreshPlayer } = useAuth();
   const [myClan, setMyClan] = useState<ClanLeaderboardItem | null>(null);
   const [clans, setClans] = useState<ClanLeaderboardItem[]>([]);
   const [territories, setTerritories] = useState<TerritoryItem[]>([]);
   const [name, setName] = useState('');
   const [tag, setTag] = useState('');
   const [donateAmount, setDonateAmount] = useState('500');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [confirmDisband, setConfirmDisband] = useState(false);
   const [msg, setMsg] = useState('');
 
   const load = useCallback(async () => {
@@ -51,6 +72,7 @@ export default function ClansPanel() {
 
   async function create() {
     if (!token || !name.trim() || !tag.trim()) return;
+    setBusy('create');
     try {
       await api.createClan(name.trim(), tag.trim().toUpperCase());
       setMsg('Clan creado');
@@ -59,28 +81,81 @@ export default function ClansPanel() {
       await Promise.all([load(), refreshPlayer()]);
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setBusy(null);
     }
   }
 
   async function join(clanId: string) {
     if (!token) return;
+    setBusy(`join-${clanId}`);
     try {
       await api.joinClan(clanId);
       setMsg('Te uniste al clan');
       await Promise.all([load(), refreshPlayer()]);
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setBusy(null);
     }
   }
 
   async function leave() {
     if (!token) return;
+    setBusy('leave');
     try {
       await api.leaveClan();
       setMsg('Saliste del clan');
+      setConfirmDisband(false);
       await Promise.all([load(), refreshPlayer()]);
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function transferLeadership(targetPlayerId: string) {
+    if (!token) return;
+    setBusy(`transfer-${targetPlayerId}`);
+    try {
+      const res = await api.transferClanLeadership(targetPlayerId);
+      setMsg(`Liderazgo transferido a ${res.newLeaderName}`);
+      setConfirmDisband(false);
+      await Promise.all([load(), refreshPlayer()]);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function kickMember(targetPlayerId: string) {
+    if (!token) return;
+    setBusy(`kick-${targetPlayerId}`);
+    try {
+      const res = await api.kickClanMember(targetPlayerId);
+      setMsg(`${res.targetName} ha sido expulsado del clan`);
+      await Promise.all([load(), refreshPlayer()]);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function disband() {
+    if (!token) return;
+    setBusy('disband');
+    try {
+      await api.disbandClan();
+      setMsg('Clan disuelto correctamente');
+      setConfirmDisband(false);
+      await Promise.all([load(), refreshPlayer()]);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -91,6 +166,7 @@ export default function ClansPanel() {
       setMsg('Introduce un aporte mínimo de 50 €');
       return;
     }
+    setBusy('donate');
     try {
       const res = await api.donateToClan(amount);
       playCoinSfx();
@@ -100,11 +176,14 @@ export default function ClansPanel() {
       await Promise.all([load(), refreshPlayer()]);
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setBusy(null);
     }
   }
 
   async function claim(territoryId: string) {
     if (!token) return;
+    setBusy(`claim-${territoryId}`);
     try {
       await api.claimTerritory(territoryId);
       playCoinSfx();
@@ -112,11 +191,14 @@ export default function ClansPanel() {
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setBusy(null);
     }
   }
 
   async function collectTax(territoryId: string) {
     if (!token) return;
+    setBusy(`collect-${territoryId}`);
     try {
       const res = await api.collectClanTerritoryTax(territoryId);
       playCoinSfx();
@@ -126,8 +208,17 @@ export default function ClansPanel() {
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setBusy(null);
     }
   }
+
+  const myMember = myClan?.members?.find(
+    (m) => m.playerId === player?.id || m.player?.id === player?.id,
+  );
+  const myRole =
+    myMember?.role ??
+    (myClan?.leaderId && myClan.leaderId === player?.id ? 'LEADER' : undefined);
 
   return (
     <div className="space-y-6">
@@ -142,7 +233,7 @@ export default function ClansPanel() {
 
       {myClan ? (
         <div className="rounded-lg border border-amber-500/30 bg-zinc-900/60 p-4 text-sm space-y-3">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="font-semibold text-amber-300">
                 [{myClan.tag}] {myClan.name}
@@ -153,15 +244,49 @@ export default function ClansPanel() {
                 {myClan.members?.length ?? 0}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                void leave();
-              }}
-              className="text-xs text-red-400 underline hover:text-red-300"
-            >
-              Salir
-            </button>
+            {myRole === 'LEADER' ? (
+              confirmDisband ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={busy === 'disband'}
+                    onClick={() => {
+                      void disband();
+                    }}
+                    className="rounded bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+                  >
+                    Confirmar disolver
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy === 'disband'}
+                    onClick={() => setConfirmDisband(false)}
+                    className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:text-white"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDisband(true)}
+                  className="text-xs text-red-400 underline hover:text-red-300"
+                >
+                  Disolver Clan
+                </button>
+              )
+            ) : (
+              <button
+                type="button"
+                disabled={busy === 'leave'}
+                onClick={() => {
+                  void leave();
+                }}
+                className="text-xs text-red-400 underline hover:text-red-300 disabled:opacity-50"
+              >
+                Salir
+              </button>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
             <input
@@ -175,10 +300,11 @@ export default function ClansPanel() {
             />
             <button
               type="button"
+              disabled={busy === 'donate'}
               onClick={() => {
                 void donate();
               }}
-              className="rounded bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/30"
+              className="rounded bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 disabled:opacity-50"
             >
               Donar € al Clan
             </button>
@@ -186,6 +312,82 @@ export default function ClansPanel() {
               Conquistar un territorio cuesta 2.500 € de fondos del clan.
             </span>
           </div>
+
+          {myClan.members && myClan.members.length > 0 && (
+            <div className="border-t border-zinc-800 pt-3 space-y-2">
+              <div className="text-xs font-semibold text-zinc-300">
+                Miembros ({myClan.members.length})
+              </div>
+              <ul className="space-y-1.5">
+                {myClan.members.map((m) => {
+                  const memberPlayerId = m.playerId || m.player?.id || '';
+                  const isSelf =
+                    Boolean(player?.id) && memberPlayerId === player?.id;
+                  const memberName =
+                    m.player?.displayName ||
+                    m.player?.user?.username ||
+                    'Miembro';
+                  const canTransfer =
+                    myRole === 'LEADER' && !isSelf && Boolean(memberPlayerId);
+                  const canKick =
+                    !isSelf &&
+                    Boolean(memberPlayerId) &&
+                    (myRole === 'LEADER' ||
+                      (myRole === 'OFFICER' &&
+                        m.role !== 'LEADER' &&
+                        m.role !== 'OFFICER'));
+
+                  return (
+                    <li
+                      key={m.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded border border-zinc-800/80 bg-zinc-950/60 px-2.5 py-1.5 text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                          {ROLE_LABELS[m.role] ?? m.role}
+                        </span>
+                        <span className="font-medium text-zinc-200">
+                          {memberName}
+                          {isSelf ? ' (Tú)' : ''}
+                        </span>
+                        <span className="text-[11px] text-zinc-500">
+                          Nv. {m.player?.level ?? 1}
+                        </span>
+                      </div>
+                      {(canTransfer || canKick) && (
+                        <div className="flex items-center gap-1.5">
+                          {canTransfer && (
+                            <button
+                              type="button"
+                              disabled={busy === `transfer-${memberPlayerId}`}
+                              onClick={() => {
+                                void transferLeadership(memberPlayerId);
+                              }}
+                              className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+                            >
+                              Hacer Líder
+                            </button>
+                          )}
+                          {canKick && (
+                            <button
+                              type="button"
+                              disabled={busy === `kick-${memberPlayerId}`}
+                              onClick={() => {
+                                void kickMember(memberPlayerId);
+                              }}
+                              className="rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+                            >
+                              Expulsar
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">
@@ -204,10 +406,11 @@ export default function ClansPanel() {
           />
           <button
             type="button"
+            disabled={busy === 'create'}
             onClick={() => {
               void create();
             }}
-            className="rounded bg-amber-500/20 px-3 py-1 text-sm text-amber-300"
+            className="rounded bg-amber-500/20 px-3 py-1 text-sm text-amber-300 disabled:opacity-50"
           >
             Crear
           </button>

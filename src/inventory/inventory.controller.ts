@@ -32,6 +32,10 @@ class AddInventoryItemDto {
   @Min(1)
   @Max(1000)
   quantity?: number;
+
+  @IsOptional()
+  @IsString()
+  targetPlayerId?: string;
 }
 
 class RemoveInventoryItemDto {
@@ -62,6 +66,10 @@ class AddWeaponDto {
   @Min(1)
   @Max(100)
   accuracy: number;
+
+  @IsOptional()
+  @IsString()
+  targetPlayerId?: string;
 }
 
 @Controller('inventory')
@@ -103,6 +111,7 @@ export class InventoryController {
       req.user.id,
       dto.templateId,
       dto.quantity ?? 1,
+      dto.targetPlayerId,
     );
   }
 
@@ -147,6 +156,7 @@ export class InventoryController {
       dto.damage,
       dto.range,
       dto.accuracy,
+      dto.targetPlayerId,
     );
   }
 

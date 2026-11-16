@@ -18,7 +18,7 @@ import {
   PlayerAnim,
   PlayerMoveDto,
 } from './dto/realtime.dto';
-import { isValidZoneId } from '../common/constants/zones';
+import { isValidZoneId, ZONES_BY_ID } from '../common/constants/zones';
 import { AntiCheatService } from '../security/anti-cheat.service';
 import { AntiPromptInjectionService } from '../security/anti-prompt-injection.service';
 
@@ -316,9 +316,47 @@ export class RealtimeGateway
     }
 
     const prevZone = client.locationId;
-
     if (prevZone === nextZone) {
       return { ok: true, locationId: nextZone };
+    }
+
+    const dbPlayer = this.prisma.player.findUnique
+      ? await this.prisma.player.findUnique({
+          where: { id: client.playerId },
+          select: { locationId: true, jailUntil: true },
+        })
+      : null;
+
+    if (
+      dbPlayer?.jailUntil &&
+      new Date(dbPlayer.jailUntil).getTime() > Date.now()
+    ) {
+      return { error: 'No puedes viajar mientras estás en el calabozo' };
+    }
+
+    const authoritativeZone = dbPlayer?.locationId || prevZone || 'madrid_centro';
+    const prevCity = ZONES_BY_ID[authoritativeZone]?.city;
+    const nextCity = ZONES_BY_ID[nextZone]?.city;
+    const sameCityMove = Boolean(prevCity && nextCity && prevCity === nextCity);
+
+    // Block free cross-city teleportation over WebSocket unless DB locationId already moved via /world/travel
+    if (
+      dbPlayer?.locationId &&
+      dbPlayer.locationId !== nextZone &&
+      !sameCityMove
+    ) {
+      void this.antiCheat?.recordViolation({
+        userId: client.userId,
+        playerId: client.playerId,
+        rule: 'TELEPORT',
+        severity: 'HIGH',
+        evidence: {
+          channel: 'zone:join',
+          from: dbPlayer.locationId,
+          attemptedTo: nextZone,
+        },
+      });
+      return { error: 'Intercity travel requires /world/travel' };
     }
 
     // Leave old zone room
@@ -348,11 +386,13 @@ export class RealtimeGateway
     }
     this.dirtyZones.add(nextZone);
 
-    // Persist location
-    await this.prisma.player.update({
-      where: { id: client.playerId },
-      data: { locationId: nextZone },
-    });
+    // Persist location only for same-city district switches (intercity already persisted via /world/travel)
+    if (!dbPlayer || dbPlayer.locationId !== nextZone) {
+      await this.prisma.player.update({
+        where: { id: client.playerId },
+        data: { locationId: nextZone },
+      });
+    }
 
     client.to(`zone:${nextZone}`).emit('player:joined', {
       playerId: client.playerId,

@@ -3,9 +3,10 @@ import { WorldService } from './world.service';
 import { WorldController } from './world.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { EngagementModule } from '../engagement/engagement.module';
+import { AchievementsModule } from '../achievements/achievements.module';
 
 @Module({
-  imports: [PrismaModule, EngagementModule],
+  imports: [PrismaModule, EngagementModule, AchievementsModule],
   controllers: [WorldController],
   providers: [WorldService],
   exports: [WorldService],

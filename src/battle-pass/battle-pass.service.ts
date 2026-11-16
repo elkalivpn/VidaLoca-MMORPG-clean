@@ -45,6 +45,18 @@ export class BattlePassService {
         },
         include: { season: true },
       });
+    } else if (progress.seasonId !== season.id) {
+      progress = await this.prisma.battlePassProgress.update({
+        where: { id: progress.id },
+        data: {
+          seasonId: season.id,
+          level: 1,
+          xp: 0,
+          isPremium: false,
+          rewardsClaimed: [],
+        },
+        include: { season: true },
+      });
     }
 
     const hasClubVip = isPlayerVipActive(player);
@@ -61,6 +73,12 @@ export class BattlePassService {
     const player = await this.getPlayerOrThrow(userId);
     const season = await this.getActiveSeason();
 
+    if (isPlayerVipActive(player)) {
+      throw new BadRequestException(
+        'Ya disfrutas del Pase Premium gratis gracias a tu membresía Club VIP activa',
+      );
+    }
+
     return this.prisma.$transaction(async (tx) => {
       let progress = await tx.battlePassProgress.findUnique({
         where: { playerId: player.id },
@@ -70,6 +88,17 @@ export class BattlePassService {
         progress = await tx.battlePassProgress.create({
           data: {
             playerId: player.id,
+            seasonId: season.id,
+            level: 1,
+            xp: 0,
+            isPremium: false,
+            rewardsClaimed: [],
+          },
+        });
+      } else if (progress.seasonId !== season.id) {
+        progress = await tx.battlePassProgress.update({
+          where: { id: progress.id },
+          data: {
             seasonId: season.id,
             level: 1,
             xp: 0,

@@ -137,7 +137,7 @@ export default function SkillsBattlePass() {
       <section>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-amber-400">Battle Pass</h2>
-          {bp && !bp.isPremium && (
+          {bp && !effectivePremium && (
             <button
               type="button"
               disabled={busy === 'bp-premium'}

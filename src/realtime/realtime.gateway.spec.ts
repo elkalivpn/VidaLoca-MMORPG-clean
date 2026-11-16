@@ -8,7 +8,7 @@ describe('RealtimeGateway', () => {
   let gateway: RealtimeGateway;
   let prisma: {
     user: { findUnique: jest.Mock };
-    player: { update: jest.Mock };
+    player: { findUnique: jest.Mock; update: jest.Mock };
   };
   let jwtService: { verify: jest.Mock };
   let configService: { getOrThrow: jest.Mock };
@@ -18,7 +18,13 @@ describe('RealtimeGateway', () => {
   beforeEach(async () => {
     prisma = {
       user: { findUnique: jest.fn() },
-      player: { update: jest.fn().mockResolvedValue({}) },
+      player: {
+        findUnique: jest.fn().mockResolvedValue({
+          locationId: 'madrid_centro',
+          jailUntil: null,
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
     };
     jwtService = { verify: jest.fn() };
     configService = { getOrThrow: jest.fn().mockReturnValue('test-secret') };
@@ -256,6 +262,31 @@ describe('RealtimeGateway', () => {
             }),
           ],
         }),
+      );
+    });
+
+    it('blocks free cross-city teleportation unless DB locationId already matches /world/travel', async () => {
+      const client = await connectPlayer();
+      prisma.player.findUnique.mockResolvedValue({
+        locationId: 'madrid_centro',
+        jailUntil: null,
+      });
+
+      const blocked = await gateway.handleJoinZone(client, {
+        locationId: 'barcelona_ramblas',
+      });
+      expect(blocked).toEqual({ error: 'Intercity travel requires /world/travel' });
+
+      // When /world/travel already updated DB locationId, zone:join succeeds
+      prisma.player.findUnique.mockResolvedValue({
+        locationId: 'barcelona_ramblas',
+        jailUntil: null,
+      });
+      const allowed = await gateway.handleJoinZone(client, {
+        locationId: 'barcelona_ramblas',
+      });
+      expect(allowed).toEqual(
+        expect.objectContaining({ ok: true, locationId: 'barcelona_ramblas' }),
       );
     });
   });

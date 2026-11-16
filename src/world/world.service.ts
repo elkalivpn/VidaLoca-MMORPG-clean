@@ -18,6 +18,7 @@ import { calculateLevelFromXp } from '../common/utils/level.util';
 import { MarketGoodId, MarketTradeDto } from './dto/market-trade.dto';
 import { AntiCheatService } from '../security/anti-cheat.service';
 import { EngagementService } from '../engagement/engagement.service';
+import { AchievementsService } from '../achievements/achievements.service';
 
 interface MarketGoodDef {
   id: MarketGoodId;
@@ -271,6 +272,7 @@ export class WorldService {
     private prisma: PrismaService,
     @Optional() private readonly antiCheat?: AntiCheatService,
     @Optional() private readonly engagementService?: EngagementService,
+    @Optional() private readonly achievementsService?: AchievementsService,
   ) {}
 
   private async player(userId: string) {
@@ -551,7 +553,7 @@ export class WorldService {
     const action = ACTIONS.find((a) => a.id === actionId);
     if (!action) throw new NotFoundException('Acción desconocida');
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const p = await tx.player.findUnique({ where: { userId } });
       if (!p) throw new NotFoundException('Player not found');
       this.assertNotJailed(p.jailUntil);
@@ -687,6 +689,9 @@ export class WorldService {
         },
       };
     });
+
+    await this.achievementsService?.checkAndUnlock(userId).catch(() => undefined);
+    return result;
   }
 
   private getHourWindowBucket(now = Date.now()): number {

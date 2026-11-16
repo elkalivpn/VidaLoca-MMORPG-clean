@@ -190,4 +190,18 @@ describe('BattlePassService', () => {
     expect(res.effectivePremium).toBe(false);
     expect(res.reward).toEqual({ euros: 500, vida: 5 });
   });
+
+  it('prevents active Club VIP players from redundantly paying VidaCoins to unlock Battle Pass Premium', async () => {
+    prisma.player.findUnique.mockResolvedValue({
+      ...basePlayer,
+      isVip: true,
+      vipExpiresAt: new Date(Date.now() + 86_400_000),
+    });
+    prisma.battlePassSeason.findFirst.mockResolvedValue(activeSeason);
+
+    await expect(service.unlockPremium('user-1')).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(prisma.player.updateMany).not.toHaveBeenCalled();
+  });
 });
