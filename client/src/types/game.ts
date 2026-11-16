@@ -572,3 +572,42 @@ export interface WorldEventStatus {
   isVip: boolean;
   recentActivity: PlayerActivityItem[];
 }
+
+export interface AdminOverviewResponse {
+  metrics: {
+    totalUsers: number;
+    guestUsers: number;
+    totalPlayers: number;
+    activeVipPlayers: number;
+    activeListings: number;
+    totalClans: number;
+    totalEurosInEconomy: number;
+    totalVidaCoinsInEconomy: number;
+  };
+  recentPlayers: Array<{
+    id: string;
+    userId: string;
+    displayName: string;
+    level: number;
+    euros: number;
+    vidaCoins: number;
+    isVip: boolean;
+    vipExpiresAt: string | null;
+    user: {
+      username: string;
+      email: string;
+      role: string;
+      isGuest: boolean;
+      isBanned: boolean;
+      banReason: string | null;
+    };
+  }>;
+  recentAuditLogs: Array<{
+    id: string;
+    actorId: string | null;
+    eventType: string;
+    severity: string;
+    target: string | null;
+    createdAt: string;
+  }>;
+}

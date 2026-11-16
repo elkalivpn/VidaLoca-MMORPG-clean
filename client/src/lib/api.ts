@@ -20,6 +20,7 @@ import type {
   WorldMarketResponse,
   WorldTravelResponse,
   WorldEventStatus,
+  AdminOverviewResponse,
 } from '@/types/game';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
@@ -394,5 +395,21 @@ export const api = {
     }>('/marketplace/vip-shop/buy', {
       method: 'POST',
       body: JSON.stringify({ offerId }),
+    }),
+
+  // Admin & Moderation
+  adminOverview: () => request<AdminOverviewResponse>('/admin/overview'),
+  adminBanPlayer: (playerId: string, isBanned: boolean, reason?: string) =>
+    request(`/admin/players/${playerId}/ban`, {
+      method: 'POST',
+      body: JSON.stringify({ isBanned, reason }),
+    }),
+  adminGrantVip: (
+    playerId: string,
+    data: { days?: number; vidaCoins?: number; reason?: string },
+  ) =>
+    request(`/admin/players/${playerId}/grant-vip`, {
+      method: 'POST',
+      body: JSON.stringify(data),
     }),
 };

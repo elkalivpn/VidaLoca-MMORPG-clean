@@ -9,9 +9,10 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "/images/madrid-hero.jpg",
-      "sizes": "512x512",
-      "type": "image/jpeg"
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }

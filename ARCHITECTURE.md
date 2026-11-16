@@ -9,7 +9,7 @@ Este documento sirve como referencia principal para nuevos desarrolladores que s
 | Carpeta | Tecnología | Responsabilidad |
 |---|---|---|
 | `src/` | **NestJS 11 + TypeScript** | API REST (`/api/*`), WebSockets (`/game`), lógica de negocio, economía atómica y seguridad. |
-| `client/` | **Next.js 15 + Tailwind + MapLibre GL** | Interfaz web jugable (3D StreetPlay, Mapa interactivo de España, Mercado P2P, Clanes, Chat). |
+| `client/` | **Next.js 15 + Tailwind + MapLibre GL + Three.js** | Interfaz web jugable (`/play` 3D StreetPlay con barra rápida móvil, Mapa de España, Mercado P2P, Clanes, Chat), landing SEO/PWA y consola operativa (`/admin`). |
 | `prisma/` | **Prisma 7 + tsx** | Esquema de datos (`schema.prisma`), cliente generado y seed idempotente (`seed.ts`). |
 | `supabase/` | **PostgreSQL DDL** | Script SQL completo (`vidaloca_full_schema.sql`) alineado 1:1 con `prisma/schema.prisma`. |
 | `game-client/` | **Godot 4** | Cliente nativo multiplataforma (Offline, LAN, Online MMO). |
@@ -25,7 +25,8 @@ Cada dominio de juego vive en su propio módulo NestJS aislado con `module.ts`, 
   - `prisma/` — `PrismaService` conectado al pooler PostgreSQL de Supabase.
   - `health/` — `GET /api/health` verificado por Railway/load balancers.
   - `security/` — `AntiCheatService`, `AntiPromptInjectionService`, `SecurityAuditService`.
-  - `common/` — Decoradores (`@CurrentUser`), utilidades compartidas (`level.util.ts`, `vip.util.ts`), filtros e interceptores de respuesta estándar (`{ success: true, data, timestamp }`).
+  - `admin/` — **Consola de Operaciones y Moderación** (`GET /api/admin/overview`, `POST /api/admin/players/:playerId/ban`, `POST /api/admin/players/:playerId/grant-vip`), protegida por `AuthGuard('jwt')` + `RolesGuard` (`ADMIN` / `MODERATOR`) y conectada a `/admin` en Next.js.
+  - `common/` — Decoradores (`@CurrentUser`, `@Roles`), guards (`RolesGuard`), utilidades compartidas (`level.util.ts`, `vip.util.ts`, `battle-pass.util.ts`), filtros e interceptores de respuesta estándar (`{ success: true, data, timestamp }`).
 - **Identidad y Jugador:**
   - `auth/` — Registro, login JWT + refresh tokens con rotación, **Invitado 1-Clic** (`POST /auth/guest`), conversión de invitado (`POST /auth/convert-guest`) y **referidos**.
   - `players/` — Perfil, inventario equipado, localización actual y flags (`isGuest`, `isVip`, `referralCode`).
@@ -33,13 +34,14 @@ Cada dominio de juego vive en su propio módulo NestJS aislado con `module.ts`, 
   - `world/` — 32 zonas de España, 17 rutas entre ciudades, acciones de calle, controles de Guardia Civil y mercado regional dinámico.
   - `realtime/` — `RealtimeGateway` (Socket.IO `/game`) con adaptador **Redis Pub/Sub** (Upstash) para sincronizar chat, movimiento y alertas de persecución entre múltiples instancias.
 - **Sistemas de Progresión y Economía:**
-  - `missions/` — Misiones de historia, online solo, co-op en escuadrón y **10 misiones exclusivas Club VIP** (`isVipOnly`, +25% XP y +15% €).
-  - `heists/` — Golpes cooperativos por roles (`Conductor`, `Hacker`, `Asalto`).
+  - `missions/` — Misiones de historia, online solo, co-op en escuadrón y **10 misiones exclusivas Club VIP** (`isVipOnly`, +25% XP y +15% €). Otorga XP al Battle Pass mediante `grantBattlePassXpTx`.
+  - `heists/` — Golpes cooperativos por roles (`Conductor`, `Hacker`, `Asalto`) conectados también a `grantBattlePassXpTx`.
   - `factions/` — 9 facciones activas, lista de más buscados, intercepción y fianzas.
   - `clans/` — Clanes, donaciones a fondos (`POST /clans/donate`), conquista de territorios con escudo de 2h y recaudación de impuestos cada 4h (`POST /clans/territories/:id/collect`).
-  - `vehicles/`, `properties/`, `inventory/`, `skills/`, `achievements/`, `battle-pass/`, `transactions/` — Incluye **8 vehículos VIP**, **4 propiedades VIP** (+15% renta VIP) e inventario multi-ranura (`CHARACTER`, `CLOTHING`, `WEAPON`, `COSMETIC`, `CONSUMABLE`, `SKILL_CARD`).
-- **Retención y Economía Avanzada (Nuevos Módulos):**
-  - `engagement/` — Racha diaria de 7 días, 3 retos diarios deterministas por día UTC, códigos de referido y **Leaderboards cacheados 30s en memoria** (`GET /engagement/leaderboards`).
+  - `battle-pass/` — Progreso conectado a misiones, golpes, racha y retos (`200 XP/nivel` hasta nivel 100), desbloqueo atómico de pista Premium por `200 VC` (`POST /api/battle-pass/unlock-premium`) o acceso automático con **Club VIP** activo (`effectivePremium`), y reclamo protegido contra carreras (`compare-and-swap`).
+  - `vehicles/`, `properties/`, `inventory/`, `skills/`, `achievements/`, `transactions/` — Incluye **8 vehículos VIP**, **4 propiedades VIP** (+15% renta VIP) e inventario multi-ranura (`CHARACTER`, `CLOTHING`, `WEAPON`, `COSMETIC`, `CONSUMABLE`, `SKILL_CARD`) reflejado visualmente en el mundo 3D (`client/src/lib/appearance3d.ts` + `District3D.tsx`: corona dorada VIP, personajes/vestimenta, neón azul y matrícula dorada).
+- **Retención y Economía Avanzada:**
+  - `engagement/` — Racha diaria de 7 días, 3 retos diarios deterministas por día UTC, códigos de referido, **Eventos Dinámicos de Ciudad por hora UTC** (`GET /api/engagement/world-event`, `POST /api/engagement/world-event/participate` idempotente + buzón de movimientos recientes `TransactionLog`) y **Leaderboards cacheados 30s en memoria** (`GET /engagement/leaderboards`).
   - `marketplace/` — Mercado Negro P2P jugador-a-jugador (tasa del **5% estándar / 2% Club VIP**) y **Tienda Club VIP / VidaCoins** (`vip_7d`, `vip_30d`, `vip_90d`, personajes `CHARACTER`, vestimenta `CLOTHING`, armas `WEAPON`, utilidades y cosméticos).
 
 ---

@@ -24,6 +24,7 @@ import { FactionsModule } from './factions/factions.module';
 import { HeistsModule } from './heists/heists.module';
 import { EngagementModule } from './engagement/engagement.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { MarketplaceModule } from './marketplace/marketplace.module';
     HeistsModule,
     EngagementModule,
     MarketplaceModule,
+    AdminModule,
   ],
   providers: [
     {

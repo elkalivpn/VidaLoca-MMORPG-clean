@@ -254,13 +254,13 @@ export default function PlayPage() {
         </div>
       )}
 
-      <nav className="flex flex-wrap gap-1 border-b border-zinc-800 px-2 py-1 bg-zinc-900/80">
+      <nav className="flex flex-nowrap md:flex-wrap gap-1 overflow-x-auto whitespace-nowrap border-b border-zinc-800 px-2 py-1 bg-zinc-900/80">
         {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium ${
+            className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium ${
               tab === t.id
                 ? 'bg-amber-500/20 text-amber-300'
                 : 'text-zinc-400 hover:text-zinc-200'
@@ -270,7 +270,7 @@ export default function PlayPage() {
           </button>
         ))}
       </nav>
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_320px] min-h-0">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_320px] min-h-0 pb-14 md:pb-0">
         <div className="overflow-auto p-3">
           {tab === 'calle' && (
             <StreetPlay
@@ -310,6 +310,31 @@ export default function PlayPage() {
           />
         </aside>
       </div>
+
+      {/* Mobile Bottom Quick-Navigation Bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 grid grid-cols-5 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md">
+        {(
+          [
+            { id: 'calle', label: 'Calle', icon: '🏙️' },
+            { id: 'mapa', label: 'Mapa', icon: '🗺️' },
+            { id: 'diario', label: 'Eventos', icon: '🔥' },
+            { id: 'misiones', label: 'Misiones', icon: '🎯' },
+            { id: 'mercado', label: 'VIP/P2P', icon: '👑' },
+          ] as const
+        ).map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setTab(item.id)}
+            className={`flex flex-col items-center justify-center py-1.5 text-[10px] font-semibold ${
+              tab === item.id ? 'text-amber-300' : 'text-zinc-400'
+            }`}
+          >
+            <span className="text-sm leading-none">{item.icon}</span>
+            <span className="mt-0.5">{item.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
