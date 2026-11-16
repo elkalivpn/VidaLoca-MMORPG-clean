@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PropertiesService } from './properties.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -9,6 +13,9 @@ describe('PropertiesService', () => {
     player: {
       findUnique: jest.Mock;
       update: jest.Mock;
+    };
+    propertyTemplate: {
+      findUnique: jest.Mock;
     };
     playerProperty: {
       findFirst: jest.Mock;
@@ -25,6 +32,9 @@ describe('PropertiesService', () => {
       player: {
         findUnique: jest.fn(),
         update: jest.fn(),
+      },
+      propertyTemplate: {
+        findUnique: jest.fn(),
       },
       playerProperty: {
         findFirst: jest.fn(),
@@ -107,6 +117,49 @@ describe('PropertiesService', () => {
     const res = await service.collectRent('u1', 'prop-2');
 
     expect(res.rent).toBe(2300);
+  });
+
+  it('grants +15% rent bonus to active VIP players and blocks non-VIP from buying VIP properties', async () => {
+    prisma.player.findUnique.mockResolvedValue({
+      id: 'p-vip',
+      faction: 'CIVILIAN',
+      isVip: true,
+      vipExpiresAt: new Date(Date.now() + 86_400_000),
+    });
+    prisma.playerProperty.findFirst.mockResolvedValue({
+      id: 'prop-vip',
+      playerId: 'p-vip',
+      template: {
+        name: 'Villa Acantilado Es Vedrà VIP',
+        priceEuros: 780000,
+        rentYield: 1000,
+      },
+    });
+    prisma.playerProperty.updateMany.mockResolvedValue({ count: 1 });
+    prisma.player.update.mockResolvedValue({ euros: 1150 });
+    prisma.transactionLog.create.mockResolvedValue({});
+
+    const vipRent = await service.collectRent('u-vip', 'prop-vip');
+    expect(vipRent.rent).toBe(1150);
+    expect(vipRent.vipBonusApplied).toBe(true);
+
+    prisma.player.findUnique.mockResolvedValue({
+      id: 'p-std',
+      euros: 1000000,
+      vidaCoins: 500,
+      isVip: false,
+    });
+    prisma.propertyTemplate.findUnique.mockResolvedValue({
+      id: 'tpl-vip',
+      name: 'Villa Acantilado Es Vedrà VIP',
+      priceEuros: 780000,
+      priceVida: 180,
+      isVipOnly: true,
+    });
+
+    await expect(
+      service.buyProperty('u-std', { templateId: 'tpl-vip' }),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it('rejects rent collection during 1-hour cooldown', async () => {

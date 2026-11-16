@@ -88,6 +88,12 @@ export default function StatsBar({
       new Date(player.vipExpiresAt).getTime() > Date.now()),
   );
   const isGuest = Boolean(player?.user?.isGuest);
+  const equippedChar = player?.inventory?.find(
+    (i) => i.equipped && i.template?.type === 'CHARACTER',
+  );
+  const equippedOutfit = player?.inventory?.find(
+    (i) => i.equipped && i.template?.type === 'CLOTHING',
+  );
 
   return (
     <header className="flex flex-wrap items-center gap-3 border-b border-zinc-800 bg-zinc-900/90 px-3 py-2 text-sm">
@@ -97,9 +103,25 @@ export default function StatsBar({
       {isVipActive && (
         <span
           className="inline-flex items-center gap-1 rounded border border-amber-400/60 bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-bold text-amber-200"
-          title="Club VIP activo (+25% XP global)"
+          title="Club VIP activo (+25% XP, +15% €/rentas, 2% tasa P2P)"
         >
           👑 VIP
+        </span>
+      )}
+      {equippedChar && (
+        <span
+          className="inline-flex items-center gap-1 rounded border border-fuchsia-500/40 bg-fuchsia-500/15 px-1.5 py-0.5 text-[11px] font-medium text-fuchsia-200"
+          title={`Personaje equipado: ${equippedChar.template.name}`}
+        >
+          🎭 {equippedChar.template.name}
+        </span>
+      )}
+      {equippedOutfit && (
+        <span
+          className="inline-flex items-center gap-1 rounded border border-cyan-500/40 bg-cyan-500/15 px-1.5 py-0.5 text-[11px] font-medium text-cyan-200"
+          title={`Vestimenta equipada: ${equippedOutfit.template.name}`}
+        >
+          👔 {equippedOutfit.template.name}
         </span>
       )}
       {isGuest && (

@@ -39,6 +39,7 @@ interface VehicleSeed {
   capacity: number;
   priceEuros?: number;
   priceVida?: number;
+  isVipOnly?: boolean;
 }
 
 interface ItemSeed {
@@ -51,6 +52,18 @@ interface ItemSeed {
   priceVida?: number;
 }
 
+interface PropertySeed {
+  name: string;
+  location: string;
+  type: PropertyType;
+  capacity: number;
+  security: number;
+  priceEuros: number;
+  priceVida?: number;
+  rentYield?: number;
+  isVipOnly?: boolean;
+}
+
 async function ensureSchemaUpToDate() {
   const newFactionValues = [
     'ERTZAINTZA_MOSSOS',
@@ -60,6 +73,10 @@ async function ensureSchemaUpToDate() {
   ];
   for (const val of newFactionValues) {
     await pool.query(`ALTER TYPE "FactionType" ADD VALUE IF NOT EXISTS '${val}'`);
+  }
+
+  for (const itemVal of ['CLOTHING', 'CHARACTER']) {
+    await pool.query(`ALTER TYPE "ItemType" ADD VALUE IF NOT EXISTS '${itemVal}'`);
   }
 
   await pool.query(`
@@ -88,6 +105,15 @@ async function ensureSchemaUpToDate() {
   await pool.query(`
     ALTER TABLE "territories"
       ADD COLUMN IF NOT EXISTS "lastTaxCollectedAt" TIMESTAMP(3);
+  `);
+
+  await pool.query(`
+    ALTER TABLE "vehicle_templates"
+      ADD COLUMN IF NOT EXISTS "isVipOnly" BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE "property_templates"
+      ADD COLUMN IF NOT EXISTS "isVipOnly" BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE "mission_templates"
+      ADD COLUMN IF NOT EXISTS "isVipOnly" BOOLEAN NOT NULL DEFAULT false;
   `);
 
   await pool.query(`
@@ -156,10 +182,10 @@ async function main() {
     ]);
     if (
       territories >= 32 &&
-      missions >= 68 &&
-      vehicles >= 36 &&
-      items >= 33 &&
-      properties >= 22 &&
+      missions >= 78 &&
+      vehicles >= 44 &&
+      items >= 45 &&
+      properties >= 26 &&
       skills >= 8 &&
       achievements >= 12
     ) {
@@ -612,6 +638,92 @@ async function main() {
       capacity: 7,
       priceEuros: 980000,
       priceVida: 3100,
+    },
+    // Colección Exclusiva Club VIP (8 vehículos)
+    {
+      name: 'Bolide Track Edition VIP',
+      brand: 'Bugatti',
+      speed: 100,
+      handling: 95,
+      durability: 86,
+      capacity: 2,
+      priceVida: 480,
+      isVipOnly: true,
+    },
+    {
+      name: 'SF90 XX Stradale VIP',
+      brand: 'Ferrari',
+      speed: 98,
+      handling: 97,
+      durability: 84,
+      capacity: 2,
+      priceEuros: 540000,
+      priceVida: 420,
+      isVipOnly: true,
+    },
+    {
+      name: 'Revuelto V12 Hybrid VIP',
+      brand: 'Lamborghini',
+      speed: 98,
+      handling: 94,
+      durability: 85,
+      capacity: 2,
+      priceEuros: 510000,
+      priceVida: 390,
+      isVipOnly: true,
+    },
+    {
+      name: 'Cullinan Black Badge VIP',
+      brand: 'Rolls-Royce',
+      speed: 88,
+      handling: 85,
+      durability: 98,
+      capacity: 5,
+      priceEuros: 420000,
+      priceVida: 340,
+      isVipOnly: true,
+    },
+    {
+      name: 'Panigale V4 Superleggera VIP',
+      brand: 'Ducati',
+      speed: 97,
+      handling: 98,
+      durability: 65,
+      capacity: 2,
+      priceVida: 220,
+      isVipOnly: true,
+    },
+    {
+      name: 'G63 Brabus Blindado VIP',
+      brand: 'Brabus',
+      speed: 86,
+      handling: 83,
+      durability: 100,
+      capacity: 5,
+      priceEuros: 390000,
+      priceVida: 310,
+      isVipOnly: true,
+    },
+    {
+      name: '911 GT3 RS Manthey VIP',
+      brand: 'Porsche',
+      speed: 96,
+      handling: 99,
+      durability: 85,
+      capacity: 2,
+      priceEuros: 360000,
+      priceVida: 280,
+      isVipOnly: true,
+    },
+    {
+      name: 'Pershing 8X Costa del Sol VIP',
+      brand: 'Pershing',
+      speed: 92,
+      handling: 84,
+      durability: 90,
+      capacity: 12,
+      priceVida: 650,
+      isVipOnly: true,
     },
   ];
 
@@ -1112,6 +1224,153 @@ async function main() {
       },
       priceVida: 180,
     },
+    // Personajes VIP jugables (4)
+    {
+      name: 'La Jefa de Ibiza',
+      description: 'Personaje jugable VIP con presencia nocturna balear y +10% reputación en operaciones.',
+      type: ItemType.CHARACTER,
+      rarity: Rarity.EPIC,
+      stats: {
+        category: 'CHARACTER_AVATAR',
+        reputationBonusPct: 10,
+        origin: 'Ibiza',
+      },
+      priceVida: 140,
+    },
+    {
+      name: 'Agente Sombra CNI',
+      description: 'Operador encubierto de élite especializado en sigilo urbano e infiltración.',
+      type: ItemType.CHARACTER,
+      rarity: Rarity.EPIC,
+      stats: {
+        category: 'CHARACTER_AVATAR',
+        stealthBonus: 15,
+        origin: 'Madrid',
+      },
+      priceVida: 110,
+    },
+    {
+      name: 'Piloto Nocturno Apex',
+      description: 'As del volante underground experto en persecuciones de autopista y drifting.',
+      type: ItemType.CHARACTER,
+      rarity: Rarity.RARE,
+      stats: {
+        category: 'CHARACTER_AVATAR',
+        drivingBonus: 14,
+        origin: 'Valencia',
+      },
+      priceVida: 95,
+    },
+    {
+      name: 'Magnate de Puerto Banús',
+      description: 'Perfil legendario de alto standing con influencia financiera en Marbella.',
+      type: ItemType.CHARACTER,
+      rarity: Rarity.LEGENDARY,
+      stats: {
+        category: 'CHARACTER_AVATAR',
+        businessBonus: 18,
+        origin: 'Marbella',
+      },
+      priceVida: 160,
+    },
+    // Vestimenta VIP (4)
+    {
+      name: 'Esmoquin Blanco Puerto Banús',
+      description: 'Traje de gala blanco impecable ideal para subastas, clubes VIP y recepciones.',
+      type: ItemType.CLOTHING,
+      rarity: Rarity.EPIC,
+      stats: {
+        category: 'OUTFIT_FORMAL',
+        reputationBonus: 12,
+      },
+      priceVida: 55,
+    },
+    {
+      name: 'Chaqueta Cuero Apex Drift',
+      description: 'Chaqueta racing ignífuga con refuerzos de carbono en hombros y codos.',
+      type: ItemType.CLOTHING,
+      rarity: Rarity.RARE,
+      stats: {
+        category: 'OUTFIT_RACING',
+        drivingBonus: 8,
+        armor: 10,
+      },
+      priceVida: 40,
+    },
+    {
+      name: 'Gabardina Táctica Kevlar',
+      description: 'Prenda ejecutiva con placas balísticas ocultas (+22 blindaje en golpes).',
+      type: ItemType.CLOTHING,
+      rarity: Rarity.EPIC,
+      stats: {
+        category: 'OUTFIT_TACTICAL',
+        armor: 22,
+        stealthBonus: 8,
+      },
+      priceVida: 85,
+    },
+    {
+      name: 'Gafas Aviador Oro 24K',
+      description: 'Gafas polarizadas con montura de oro macizo y visión nocturna discreta.',
+      type: ItemType.CLOTHING,
+      rarity: Rarity.RARE,
+      stats: {
+        category: 'OUTFIT_ACCESSORY',
+        charismaBonus: 10,
+      },
+      priceVida: 35,
+    },
+    // Armamento VIP (2)
+    {
+      name: 'Desert Eagle Baño Oro',
+      description: 'Pistola pesada calibre .50 chapada en oro 24K con grabado artesanal.',
+      type: ItemType.WEAPON,
+      rarity: Rarity.LEGENDARY,
+      stats: {
+        category: 'PISTOL_VIP',
+        damage: 58,
+        range: 42,
+        accuracy: 88,
+      },
+      priceVida: 125,
+    },
+    {
+      name: 'Katana Fibra Carbono Neo',
+      description: 'Hoja táctica silenciosa ultraligera ideal para asaltos nocturnos sin alerta.',
+      type: ItemType.WEAPON,
+      rarity: Rarity.EPIC,
+      stats: {
+        category: 'MELEE_VIP',
+        damage: 52,
+        range: 14,
+        accuracy: 96,
+      },
+      priceVida: 90,
+    },
+    // Gadgets y Cartas Maestras VIP (2)
+    {
+      name: 'Caja Negra Anti-Radar Pro',
+      description: 'Contramedida electrónica portátil que anula rastreos policiales y radares de tramo.',
+      type: ItemType.CONSUMABLE,
+      rarity: Rarity.EPIC,
+      stats: {
+        category: 'GADGET_STEALTH',
+        heatReduction: 40,
+      },
+      priceVida: 50,
+    },
+    {
+      name: 'Carta Maestra: Imperio VIP',
+      description: 'Manual cifrado de alta estrategia empresarial y optimización fiscal de propiedades.',
+      type: ItemType.SKILL_CARD,
+      rarity: Rarity.LEGENDARY,
+      stats: {
+        category: 'SKILL_BOOST',
+        skillCategory: 'BUSINESS',
+        xpGrant: 1500,
+      },
+      priceVida: 70,
+    },
   ];
 
   let itemsCreated = 0;
@@ -1136,7 +1395,7 @@ async function main() {
   // ============================================
   // 4. PROPIEDADES REGIONALES (PropertyTemplate)
   // ============================================
-  const propertiesData = [
+  const propertiesData: PropertySeed[] = [
     {
       name: 'Ático Gran Vía 42',
       location: 'Madrid',
@@ -1343,6 +1602,51 @@ async function main() {
       priceVida: 680,
       rentYield: 4900,
     },
+    // Propiedades Exclusivas Club VIP (4)
+    {
+      name: 'Villa Acantilado Es Vedrà VIP',
+      location: 'Ibiza',
+      type: PropertyType.MANSION,
+      capacity: 26,
+      security: 98,
+      priceEuros: 780000,
+      priceVida: 180,
+      rentYield: 6800,
+      isVipOnly: true,
+    },
+    {
+      name: 'Búnker Subterráneo Serrano VIP',
+      location: 'Madrid',
+      type: PropertyType.GARAGE,
+      capacity: 24,
+      security: 99,
+      priceEuros: 640000,
+      priceVida: 150,
+      rentYield: 5400,
+      isVipOnly: true,
+    },
+    {
+      name: 'Ático Casino La Concha VIP',
+      location: 'San Sebastián',
+      type: PropertyType.APARTMENT,
+      capacity: 18,
+      security: 96,
+      priceEuros: 560000,
+      priceVida: 120,
+      rentYield: 4900,
+      isVipOnly: true,
+    },
+    {
+      name: 'Club Privado Puerto Deportivo VIP',
+      location: 'Barcelona',
+      type: PropertyType.CLUB,
+      capacity: 28,
+      security: 97,
+      priceEuros: 890000,
+      priceVida: 220,
+      rentYield: 7800,
+      isVipOnly: true,
+    },
   ];
 
   let propertiesCreated = 0;
@@ -1350,7 +1654,12 @@ async function main() {
     const existing = await prisma.propertyTemplate.findFirst({
       where: { name: prop.name },
     });
-    if (!existing) {
+    if (existing) {
+      await prisma.propertyTemplate.update({
+        where: { id: existing.id },
+        data: prop,
+      });
+    } else {
       await prisma.propertyTemplate.create({ data: prop });
       propertiesCreated++;
     }
@@ -3047,6 +3356,237 @@ async function main() {
       rewardItemName: 'AWM .338 Lapua Francotirador',
       unlockBenefit: 'Máxima recompensa Co-op: AWM .338 Lapua + 340 VC + 38.000 XP',
       requirement: { minStepSeconds: 30 },
+    },
+    // ── MISIONES EXCLUSIVAS CLUB VIP (10 contratos de alto standing) ──
+    {
+      title: 'VIP · Gala Privada en Puerto Banús',
+      description: 'Infíltrate en la subasta privada de yates de Marbella y cierra un trato millonario bajo etiqueta de gala.',
+      difficulty: Difficulty.EASY,
+      mode: MissionMode.ONLINE_SOLO,
+      category: 'CLUB VIP · ALTO STANDING',
+      city: 'Marbella',
+      minLevel: 1,
+      minPlayers: 1,
+      maxPlayers: 1,
+      isOptional: true,
+      isRepeatable: true,
+      cooldownHours: 12,
+      requiredSteps: 3,
+      isVipOnly: true,
+      rewardEuros: 6500,
+      rewardXp: 1800,
+      rewardVidaCoins: 20,
+      rewardReputation: 60,
+      rewardItemName: 'Gafas Aviador Oro 24K',
+      unlockBenefit: 'Exclusiva VIP (+25% XP / +15% €) · Gafas Aviador Oro 24K + 20 VC',
+      requirement: { minStepSeconds: 10 },
+    },
+    {
+      title: 'VIP · Alfombra Blanca Casino Gran Madrid',
+      description: 'Custodia una partida de póker VIP de siete cifras y desarticula un intento de robo desde dentro.',
+      difficulty: Difficulty.MEDIUM,
+      mode: MissionMode.ONLINE_SOLO,
+      category: 'CLUB VIP · ALTO STANDING',
+      city: 'Madrid',
+      minLevel: 4,
+      minPlayers: 1,
+      maxPlayers: 1,
+      isOptional: true,
+      isRepeatable: true,
+      cooldownHours: 16,
+      requiredSteps: 4,
+      isVipOnly: true,
+      rewardEuros: 11000,
+      rewardXp: 3200,
+      rewardVidaCoins: 30,
+      rewardReputation: 95,
+      rewardItemName: 'Esmoquin Blanco Puerto Banús',
+      unlockBenefit: 'Exclusiva VIP · Desbloquea Esmoquin Blanco Puerto Banús + 30 VC',
+      requirement: { minStepSeconds: 12 },
+    },
+    {
+      title: 'VIP · Circuito Nocturno Ricardo Tormo',
+      description: 'Desafío cronometrado a puerta cerrada para miembros VIP entre Valencia y Cheste con apuestas privadas.',
+      difficulty: Difficulty.MEDIUM,
+      mode: MissionMode.ONLINE_SOLO,
+      category: 'CLUB VIP · MOTORSPORT',
+      city: 'Valencia',
+      minLevel: 6,
+      minPlayers: 1,
+      maxPlayers: 1,
+      isOptional: true,
+      isRepeatable: true,
+      cooldownHours: 18,
+      requiredSteps: 4,
+      isVipOnly: true,
+      rewardEuros: 14500,
+      rewardXp: 4100,
+      rewardVidaCoins: 35,
+      rewardReputation: 115,
+      rewardItemName: 'Chaqueta Cuero Apex Drift',
+      unlockBenefit: 'Exclusiva VIP · Chaqueta Cuero Apex Drift + 35 VC',
+      requirement: { minStepSeconds: 12 },
+    },
+    {
+      title: 'VIP · Convoy Fantasma M-30',
+      description: 'Escolta un furgón diplomático sin activar radares de tráfico usando tecnología anti-detección VIP.',
+      difficulty: Difficulty.MEDIUM,
+      mode: MissionMode.STORY,
+      category: 'CLUB VIP · OPERACIONES ENCUBIERTAS',
+      city: 'Madrid',
+      minLevel: 8,
+      minPlayers: 1,
+      maxPlayers: 1,
+      isOptional: true,
+      isRepeatable: false,
+      cooldownHours: 0,
+      requiredSteps: 5,
+      isVipOnly: true,
+      rewardEuros: 18500,
+      rewardXp: 5400,
+      rewardVidaCoins: 45,
+      rewardReputation: 150,
+      rewardItemName: 'Caja Negra Anti-Radar Pro',
+      unlockBenefit: 'Exclusiva VIP · Caja Negra Anti-Radar Pro + 45 VC',
+      requirement: { minStepSeconds: 15 },
+    },
+    {
+      title: 'VIP · Bóveda del Guggenheim Bilbao',
+      description: 'Recupera una colección privada asegurada en la ría de Bilbao sin alertar a los drones perimetrales.',
+      difficulty: Difficulty.HARD,
+      mode: MissionMode.ONLINE_SOLO,
+      category: 'CLUB VIP · ARTE Y SUBASTAS',
+      city: 'Bilbao',
+      minLevel: 12,
+      minPlayers: 1,
+      maxPlayers: 1,
+      isOptional: true,
+      isRepeatable: true,
+      cooldownHours: 24,
+      requiredSteps: 6,
+      isVipOnly: true,
+      rewardEuros: 26000,
+      rewardXp: 7800,
+      rewardVidaCoins: 55,
+      rewardReputation: 210,
+      rewardItemName: 'Gabardina Táctica Kevlar',
+      unlockBenefit: 'Exclusiva VIP · Gabardina Táctica Kevlar + 55 VC',
+      requirement: { minStepSeconds: 15 },
+    },
+    {
+      title: 'VIP · Cumbre Silenciosa en Pedralbes',
+      description: 'Neutraliza una célula rival infiltrada en una mansión de Barcelona sin efectuar un solo disparo.',
+      difficulty: Difficulty.HARD,
+      mode: MissionMode.ONLINE_SOLO,
+      category: 'CLUB VIP · SIGILO ÉLITE',
+      city: 'Barcelona',
+      minLevel: 16,
+      minPlayers: 1,
+      maxPlayers: 1,
+      isOptional: true,
+      isRepeatable: true,
+      cooldownHours: 24,
+      requiredSteps: 6,
+      isVipOnly: true,
+      rewardEuros: 34000,
+      rewardXp: 10500,
+      rewardVidaCoins: 70,
+      rewardReputation: 270,
+      rewardItemName: 'Katana Fibra Carbono Neo',
+      unlockBenefit: 'Exclusiva VIP · Katana Fibra Carbono Neo + 70 VC',
+      requirement: { minStepSeconds: 18 },
+    },
+    {
+      title: 'VIP · Rally Costa del Sol Nocturno',
+      description: 'Compite junto a un copiloto VIP de Málaga a Marbella sorteando controles y helicópteros nocturnos.',
+      difficulty: Difficulty.HARD,
+      mode: MissionMode.ONLINE_COOP,
+      category: 'CLUB VIP · CO-OP ÉLITE',
+      city: 'Málaga',
+      minLevel: 18,
+      minPlayers: 2,
+      maxPlayers: 4,
+      isOptional: true,
+      isRepeatable: true,
+      cooldownHours: 24,
+      requiredSteps: 6,
+      isVipOnly: true,
+      rewardEuros: 42000,
+      rewardXp: 13500,
+      rewardVidaCoins: 85,
+      rewardReputation: 320,
+      rewardItemName: 'Piloto Nocturno Apex',
+      unlockBenefit: 'Exclusiva VIP Co-op · Personaje Piloto Nocturno Apex + 85 VC',
+      requirement: { minStepSeconds: 18 },
+    },
+    {
+      title: 'VIP · Cumbre Financiera La Concha',
+      description: 'Negocia y blanquea activos internacionales en San Sebastián para consolidar tu imperio inmobiliario.',
+      difficulty: Difficulty.HARD,
+      mode: MissionMode.STORY,
+      category: 'CLUB VIP · IMPERIO',
+      city: 'San Sebastián',
+      minLevel: 22,
+      minPlayers: 1,
+      maxPlayers: 1,
+      isOptional: true,
+      isRepeatable: false,
+      cooldownHours: 0,
+      requiredSteps: 7,
+      isVipOnly: true,
+      rewardEuros: 52000,
+      rewardXp: 17000,
+      rewardVidaCoins: 110,
+      rewardReputation: 390,
+      rewardItemName: 'Carta Maestra: Imperio VIP',
+      unlockBenefit: 'Exclusiva VIP · Carta Maestra: Imperio VIP + 110 VC',
+      requirement: { minStepSeconds: 20 },
+    },
+    {
+      title: 'VIP · Palco Real de Sevilla',
+      description: 'Operación de alto riesgo en la capital andaluza contra un cártel blindado con escuadra VIP.',
+      difficulty: Difficulty.SUICIDE,
+      mode: MissionMode.ONLINE_COOP,
+      category: 'CLUB VIP · CO-OP ÉLITE',
+      city: 'Sevilla',
+      minLevel: 28,
+      minPlayers: 2,
+      maxPlayers: 4,
+      isOptional: true,
+      isRepeatable: true,
+      cooldownHours: 36,
+      requiredSteps: 8,
+      isVipOnly: true,
+      rewardEuros: 74000,
+      rewardXp: 24000,
+      rewardVidaCoins: 160,
+      rewardReputation: 480,
+      rewardItemName: 'Desert Eagle Baño Oro',
+      unlockBenefit: 'Exclusiva VIP Co-op · Desert Eagle Baño Oro + 160 VC',
+      requirement: { minStepSeconds: 22 },
+    },
+    {
+      title: 'VIP · Trono Nocturno de Es Vedrà',
+      description: 'Asalto legendario en yate y helicóptero frente a Ibiza. El contrato más lucrativo del Club VIP.',
+      difficulty: Difficulty.SUICIDE,
+      mode: MissionMode.ONLINE_COOP,
+      category: 'CLUB VIP · LEYENDA',
+      city: 'Ibiza',
+      minLevel: 35,
+      minPlayers: 2,
+      maxPlayers: 4,
+      isOptional: true,
+      isRepeatable: true,
+      cooldownHours: 48,
+      requiredSteps: 10,
+      isVipOnly: true,
+      rewardEuros: 110000,
+      rewardXp: 36000,
+      rewardVidaCoins: 250,
+      rewardReputation: 700,
+      rewardItemName: 'La Jefa de Ibiza',
+      unlockBenefit: 'Exclusiva VIP · Personaje La Jefa de Ibiza + 250 VC + 110.000€',
+      requirement: { minStepSeconds: 25 },
     },
   ];
 

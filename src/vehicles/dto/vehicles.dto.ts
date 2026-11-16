@@ -2,10 +2,7 @@ import {
   IsString,
   IsNotEmpty,
   IsOptional,
-  IsNumber,
-  IsPositive,
-  Min,
-  Max,
+  IsIn,
   IsBoolean,
 } from 'class-validator';
 
@@ -17,6 +14,10 @@ export class BuyVehicleDto {
   @IsOptional()
   @IsString()
   color?: string;
+
+  @IsOptional()
+  @IsIn(['EUR', 'VIDACOIN'])
+  currency?: 'EUR' | 'VIDACOIN';
 }
 
 export class UpdateVehicleDto {

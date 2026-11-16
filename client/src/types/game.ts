@@ -89,6 +89,7 @@ export interface VehicleTemplate {
   capacity: number;
   priceEuros?: number;
   priceVida?: number;
+  isVipOnly?: boolean;
 }
 
 export interface PlayerProperty {
@@ -108,6 +109,7 @@ export interface PropertyTemplate {
   priceEuros: number;
   priceVida?: number;
   rentYield?: number;
+  isVipOnly?: boolean;
 }
 
 export interface PlayerWeapon {
@@ -159,6 +161,7 @@ export interface MissionTemplate {
   isRepeatable?: boolean;
   cooldownHours?: number;
   requiredSteps?: number;
+  isVipOnly?: boolean;
   rewardEuros: number;
   rewardXp: number;
   rewardVidaCoins?: number;
@@ -531,6 +534,7 @@ export interface VipShopOffer {
   name: string;
   description: string;
   priceVida: number;
-  category: 'VIP' | 'UTILITY' | 'COSMETIC';
+  category:
+    'VIP' | 'UTILITY' | 'CHARACTER' | 'CLOTHING' | 'WEAPON' | 'COSMETIC';
   templateName?: string;
 }

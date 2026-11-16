@@ -2,15 +2,23 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/store/auth';
 import type { PlayerVehicle, VehicleTemplate } from '@/types/game';
 
 export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
+  const { player, refreshPlayer } = useAuth();
   const [catalog, setCatalog] = useState<VehicleTemplate[]>([]);
   const [mine, setMine] = useState<PlayerVehicle[]>([]);
   const [tab, setTab] = useState<'garage' | 'shop'>('garage');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
+
+  const isVipActive = Boolean(
+    player?.isVip &&
+    (!player.vipExpiresAt ||
+      new Date(player.vipExpiresAt).getTime() > Date.now()),
+  );
 
   const load = async () => {
     setLoading(true);
@@ -32,12 +40,12 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
     void load();
   }, []);
 
-  const buy = async (id: string) => {
-    setBusy(id);
+  const buy = async (id: string, currency?: 'EUR' | 'VIDACOIN') => {
+    setBusy(`${id}:${currency ?? 'default'}`);
     setError('');
     try {
-      await api.buyVehicle(id);
-      await load();
+      await api.buyVehicle(id, undefined, currency);
+      await Promise.all([load(), refreshPlayer()]);
       onChange?.();
       setTab('garage');
     } catch (e: unknown) {
@@ -63,7 +71,7 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
     setBusy(id);
     try {
       await api.repairVehicle(id);
-      await load();
+      await Promise.all([load(), refreshPlayer()]);
       onChange?.();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error');
@@ -99,7 +107,7 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
               tab === 'shop' ? 'bg-amber-600 text-black' : 'text-zinc-400'
             }`}
           >
-            Concesionario
+            Concesionario ({catalog.length})
           </button>
         </div>
       </div>
@@ -127,6 +135,11 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
                   <h3 className="font-semibold">
                     {v.template.brand} {v.template.name}
                   </h3>
+                  {v.template.isVipOnly && (
+                    <span className="text-[10px] bg-amber-500/20 border border-amber-400/50 text-amber-200 px-1.5 py-0.5 rounded font-bold">
+                      👑 VIP
+                    </span>
+                  )}
                   {v.isPrimary && (
                     <span className="text-[10px] bg-amber-600/20 text-amber-400 px-1.5 py-0.5 rounded">
                       PRINCIPAL
@@ -174,43 +187,85 @@ export function VehiclesPanel({ onChange }: { onChange?: () => void }) {
 
       {tab === 'shop' && (
         <div className="space-y-3 max-h-[420px] overflow-y-auto">
-          {catalog.map((v) => (
-            <div
-              key={v.id}
-              className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 flex items-center justify-between gap-3"
-            >
-              <div>
-                <h3 className="font-semibold">
-                  {v.brand} {v.name}
-                </h3>
-                <p className="text-xs text-zinc-500">
-                  Vel {v.speed} · Manejo {v.handling} · Cap {v.capacity}
-                </p>
-                <p className="text-sm mt-1">
-                  {v.priceEuros != null && (
-                    <span className="text-emerald-400">
-                      {v.priceEuros.toLocaleString('es-ES')} €
-                    </span>
-                  )}
-                  {v.priceVida != null && (
-                    <span className="text-amber-400 ml-2">
-                      {v.priceVida} VC
-                    </span>
-                  )}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  void buy(v.id);
-                }}
-                disabled={busy === v.id}
-                className="btn-primary text-sm shrink-0"
+          {catalog.map((v) => {
+            const vipLocked = Boolean(v.isVipOnly && !isVipActive);
+            return (
+              <div
+                key={v.id}
+                className={`p-3 rounded-lg border flex flex-wrap items-center justify-between gap-3 ${
+                  v.isVipOnly
+                    ? 'border-amber-500/40 bg-amber-950/10'
+                    : 'border-zinc-800 bg-zinc-900/60'
+                }`}
               >
-                {busy === v.id ? '...' : 'Comprar'}
-              </button>
-            </div>
-          ))}
+                <div>
+                  <div className="flex items-center gap-2">
+                    {v.isVipOnly && (
+                      <span className="text-[10px] bg-amber-500/20 border border-amber-400/50 text-amber-200 px-1.5 py-0.5 rounded font-bold">
+                        👑 SOLO VIP
+                      </span>
+                    )}
+                    <h3 className="font-semibold">
+                      {v.brand} {v.name}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-zinc-500">
+                    Vel {v.speed} · Manejo {v.handling} · Dur {v.durability} ·
+                    Cap {v.capacity}
+                  </p>
+                  <p className="text-sm mt-1">
+                    {v.priceEuros != null && (
+                      <span className="text-emerald-400 mr-2">
+                        {v.priceEuros.toLocaleString('es-ES')} €
+                      </span>
+                    )}
+                    {v.priceVida != null && (
+                      <span className="text-amber-400 font-semibold">
+                        {v.priceVida} VC
+                      </span>
+                    )}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  {vipLocked ? (
+                    <span className="rounded-md border border-amber-500/40 bg-zinc-900 px-3 py-1.5 text-xs text-amber-300">
+                      Requiere Club VIP
+                    </span>
+                  ) : (
+                    <>
+                      {v.priceEuros != null && v.priceEuros > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void buy(v.id, 'EUR');
+                          }}
+                          disabled={!!busy}
+                          className="btn-primary text-xs shrink-0"
+                        >
+                          {busy === `${v.id}:EUR` ? '...' : 'Comprar €'}
+                        </button>
+                      )}
+                      {v.priceVida != null && v.priceVida > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void buy(v.id, 'VIDACOIN');
+                          }}
+                          disabled={!!busy}
+                          className="rounded-md border border-amber-400/60 bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
+                        >
+                          {busy === `${v.id}:VIDACOIN`
+                            ? '...'
+                            : `${v.priceVida} VC`}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

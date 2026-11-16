@@ -25,7 +25,7 @@ Cada dominio de juego vive en su propio módulo NestJS aislado con `module.ts`, 
   - `prisma/` — `PrismaService` conectado al pooler PostgreSQL de Supabase.
   - `health/` — `GET /api/health` verificado por Railway/load balancers.
   - `security/` — `AntiCheatService`, `AntiPromptInjectionService`, `SecurityAuditService`.
-  - `common/` — Decoradores (`@CurrentUser`), utilidades compartidas (`level.util.ts`), filtros e interceptores de respuesta estándar (`{ success: true, data, timestamp }`).
+  - `common/` — Decoradores (`@CurrentUser`), utilidades compartidas (`level.util.ts`, `vip.util.ts`), filtros e interceptores de respuesta estándar (`{ success: true, data, timestamp }`).
 - **Identidad y Jugador:**
   - `auth/` — Registro, login JWT + refresh tokens con rotación, **Invitado 1-Clic** (`POST /auth/guest`), conversión de invitado (`POST /auth/convert-guest`) y **referidos**.
   - `players/` — Perfil, inventario equipado, localización actual y flags (`isGuest`, `isVip`, `referralCode`).
@@ -33,14 +33,14 @@ Cada dominio de juego vive en su propio módulo NestJS aislado con `module.ts`, 
   - `world/` — 32 zonas de España, 17 rutas entre ciudades, acciones de calle, controles de Guardia Civil y mercado regional dinámico.
   - `realtime/` — `RealtimeGateway` (Socket.IO `/game`) con adaptador **Redis Pub/Sub** (Upstash) para sincronizar chat, movimiento y alertas de persecución entre múltiples instancias.
 - **Sistemas de Progresión y Economía:**
-  - `missions/` — Misiones de historia, online solo y co-op en escuadrón.
+  - `missions/` — Misiones de historia, online solo, co-op en escuadrón y **10 misiones exclusivas Club VIP** (`isVipOnly`, +25% XP y +15% €).
   - `heists/` — Golpes cooperativos por roles (`Conductor`, `Hacker`, `Asalto`).
   - `factions/` — 9 facciones activas, lista de más buscados, intercepción y fianzas.
   - `clans/` — Clanes, donaciones a fondos (`POST /clans/donate`), conquista de territorios con escudo de 2h y recaudación de impuestos cada 4h (`POST /clans/territories/:id/collect`).
-  - `vehicles/`, `properties/`, `inventory/`, `skills/`, `achievements/`, `battle-pass/`, `transactions/`.
+  - `vehicles/`, `properties/`, `inventory/`, `skills/`, `achievements/`, `battle-pass/`, `transactions/` — Incluye **8 vehículos VIP**, **4 propiedades VIP** (+15% renta VIP) e inventario multi-ranura (`CHARACTER`, `CLOTHING`, `WEAPON`, `COSMETIC`, `CONSUMABLE`, `SKILL_CARD`).
 - **Retención y Economía Avanzada (Nuevos Módulos):**
   - `engagement/` — Racha diaria de 7 días, 3 retos diarios deterministas por día UTC, códigos de referido y **Leaderboards cacheados 30s en memoria** (`GET /engagement/leaderboards`).
-  - `marketplace/` — Mercado Negro P2P jugador-a-jugador con tasa anti-inflación del **5%** y **Tienda Club VIP / VidaCoins** (`vip_7d`, `vip_30d`, `clear_heat`, cosméticos).
+  - `marketplace/` — Mercado Negro P2P jugador-a-jugador (tasa del **5% estándar / 2% Club VIP**) y **Tienda Club VIP / VidaCoins** (`vip_7d`, `vip_30d`, `vip_90d`, personajes `CHARACTER`, vestimenta `CLOTHING`, armas `WEAPON`, utilidades y cosméticos).
 
 ---
 
@@ -81,7 +81,7 @@ Si añades o modificas una tabla, enum, columna o índice:
 3. **Anti-granja en Invitados y Referidos:**
    Las recompensas de referido (`+2.500 €` y `+25 VC`) solo se otorgan en registros reales (`register`) o cuando un invitado convierte su cuenta (`convertGuest`), nunca al pulsar `guestLogin`.
 4. **Sinks contra inflación:**
-   El Mercado Negro P2P retiene un 5% (`MARKETPLACE_FEE_RATE = 0.05`) de cada venta; las conquistas de clan consumen `2.500 €` de las arcas del clan.
+   El Mercado Negro P2P retiene un 5% estándar (`MARKETPLACE_FEE_RATE = 0.05`) o un 2% para vendedores Club VIP (`MARKETPLACE_VIP_FEE_RATE = 0.02`); las conquistas de clan consumen `2.500 €` de las arcas del clan.
 
 ---
 

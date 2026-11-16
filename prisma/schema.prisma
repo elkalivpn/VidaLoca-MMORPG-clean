@@ -144,6 +144,8 @@ enum ItemType {
   CONSUMABLE
   SKILL_CARD
   COSMETIC
+  CLOTHING
+  CHARACTER
 
   @@schema("public")
 }
@@ -182,6 +184,7 @@ model VehicleTemplate {
   capacity    Int
   priceEuros  Float?
   priceVida   Int?
+  isVipOnly   Boolean  @default(false)
   
   vehicles    PlayerVehicle[]
   
@@ -215,6 +218,7 @@ model PropertyTemplate {
   priceEuros  Float
   priceVida   Int?
   rentYield   Float?
+  isVipOnly   Boolean  @default(false)
   
   properties  PlayerProperty[]
   
@@ -343,6 +347,7 @@ model MissionTemplate {
   isRepeatable    Boolean     @default(false)
   cooldownHours   Int         @default(0)
   requiredSteps   Int         @default(3)
+  isVipOnly       Boolean     @default(false)
   rewardEuros     Float
   rewardXp        Int
   rewardVidaCoins Int         @default(0)

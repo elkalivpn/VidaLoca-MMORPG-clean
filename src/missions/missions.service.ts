@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MissionStatus, Difficulty, MissionMode } from '@prisma/client';
 import { CreateMissionTemplateDto } from './dto/missions.dto';
 import { calculateLevelFromXp } from '../common/utils/level.util';
+import { isPlayerVipActive } from '../common/utils/vip.util';
 import { ZONES_BY_ID } from '../common/constants/zones';
 import { AntiCheatService } from '../security/anti-cheat.service';
 import { EngagementService } from '../engagement/engagement.service';
@@ -55,6 +56,7 @@ export class MissionsService {
         isRepeatable: dto.isRepeatable ?? false,
         cooldownHours: dto.cooldownHours ?? 0,
         requiredSteps: dto.requiredSteps ?? 3,
+        isVipOnly: dto.isVipOnly ?? false,
         rewardEuros: dto.rewardEuros,
         rewardXp: dto.rewardXp,
         rewardVidaCoins: dto.rewardVidaCoins ?? 0,
@@ -125,6 +127,12 @@ export class MissionsService {
     const player = await this.getPlayerOrThrow(userId);
     this.assertNotJailed(player.jailUntil);
     const template = await this.getTemplateById(templateId);
+
+    if (template.isVipOnly && !isPlayerVipActive(player)) {
+      throw new ForbiddenException(
+        'Misión exclusiva del Club VIP. Activa tu membresía VIP en Mercado / Club VIP.',
+      );
+    }
 
     const active = await this.prisma.playerMission.findFirst({
       where: {
@@ -260,6 +268,12 @@ export class MissionsService {
     if (!mission) {
       throw new NotFoundException(
         `No existe ninguna misión cooperativa activa con código ${squadCode}`,
+      );
+    }
+
+    if (mission.template.isVipOnly && !isPlayerVipActive(player)) {
+      throw new ForbiddenException(
+        'Misión cooperativa exclusiva del Club VIP. Activa tu membresía VIP en Mercado / Club VIP.',
       );
     }
 
@@ -534,13 +548,11 @@ export class MissionsService {
       tpl.mode === MissionMode.ONLINE_COOP && participants.length > 1;
     const bonusMultiplier = isTeamBonus ? 1.2 : 1.0;
 
-    const isVipActive =
-      Boolean((player as { isVip?: boolean; vipExpiresAt?: Date | null }).isVip) &&
-      (!(player as { vipExpiresAt?: Date | null }).vipExpiresAt ||
-        new Date((player as { vipExpiresAt: Date }).vipExpiresAt) > new Date());
+    const isVipActive = isPlayerVipActive(player as { isVip?: boolean; vipExpiresAt?: Date | null });
+    const eurosMultiplier = bonusMultiplier * (isVipActive ? 1.15 : 1.0);
     const xpMultiplier = bonusMultiplier * (isVipActive ? 1.25 : 1.0);
 
-    const grantedEuros = Math.round(tpl.rewardEuros * bonusMultiplier);
+    const grantedEuros = Math.round(tpl.rewardEuros * eurosMultiplier);
     const grantedXp = Math.round(tpl.rewardXp * xpMultiplier);
     const grantedVidaCoins = tpl.rewardVidaCoins ?? 0;
     const grantedReputation = tpl.rewardReputation ?? 0;
@@ -616,7 +628,7 @@ export class MissionsService {
             type: 'EARN',
             amount: grantedEuros,
             currency: 'EUR',
-            reason: `Mission reward: ${tpl.title}${isTeamBonus ? ' (Co-op +20%)' : ''}`,
+            reason: `Mission reward: ${tpl.title}${isTeamBonus ? ' (Co-op +20%)' : ''}${isVipActive ? ' (VIP +15%)' : ''}`,
             reference: missionId,
           },
         });
@@ -683,6 +695,7 @@ export class MissionsService {
           reputation: grantedReputation,
           battlePassXp: battlePassXpGain,
           coopBonusApplied: isTeamBonus,
+          vipBonusApplied: isVipActive,
           unlockedItem,
         },
         player: {

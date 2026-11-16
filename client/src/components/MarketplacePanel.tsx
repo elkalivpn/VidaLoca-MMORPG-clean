@@ -13,9 +13,22 @@ const RARITY_STYLES: Record<string, string> = {
   LEGENDARY: 'border-amber-400/60 text-amber-200 bg-amber-500/20',
 };
 
+const VIP_CATEGORY_LABELS: Record<'ALL' | VipShopOffer['category'], string> = {
+  ALL: 'Todos',
+  VIP: '👑 Club VIP',
+  CHARACTER: '🎭 Personajes',
+  CLOTHING: '👔 Vestimenta',
+  WEAPON: '🔫 Armas',
+  UTILITY: '⚡ Utilidades',
+  COSMETIC: '✨ Cosméticos',
+};
+
 export default function MarketplacePanel() {
   const { token, player, refreshPlayer } = useAuth();
   const [subtab, setSubtab] = useState<'p2p' | 'vip'>('p2p');
+  const [vipFilter, setVipFilter] = useState<'ALL' | VipShopOffer['category']>(
+    'ALL',
+  );
   const [listings, setListings] = useState<MarketListing[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [vipOffers, setVipOffers] = useState<VipShopOffer[]>([]);
@@ -30,11 +43,14 @@ export default function MarketplacePanel() {
     try {
       const [l, inv, vip] = await Promise.all([
         api.marketListings(),
-        api.inventory() as Promise<InventoryItem[]>,
+        api.inventory() as Promise<
+          InventoryItem[] | { inventory?: InventoryItem[] }
+        >,
         api.vipShop(),
       ]);
       const list = Array.isArray(l) ? l : [];
-      const invArr = Array.isArray(inv) ? inv.filter((i) => !i.equipped) : [];
+      const rawInv = Array.isArray(inv) ? inv : (inv?.inventory ?? []);
+      const invArr = rawInv.filter((i) => !i.equipped);
       setListings(list);
       setInventory(invArr);
       setVipOffers(Array.isArray(vip) ? vip : []);
@@ -136,6 +152,11 @@ export default function MarketplacePanel() {
       new Date(player.vipExpiresAt).getTime() > Date.now()),
   );
 
+  const visibleVipOffers =
+    vipFilter === 'ALL'
+      ? vipOffers
+      : vipOffers.filter((o) => o.category === vipFilter);
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -144,8 +165,8 @@ export default function MarketplacePanel() {
             Mercado Negro P2P &amp; Club VIP
           </h2>
           <p className="text-xs text-zinc-400">
-            Comercia ítems directamente con otros jugadores (5% tasa
-            anti-inflación) o canjea tus VidaCoins.
+            Comercia ítems entre jugadores (5% tasa estándar · 2% tasa Club VIP)
+            o desbloquea contenido exclusivo con VidaCoins.
           </p>
         </div>
 
@@ -170,7 +191,7 @@ export default function MarketplacePanel() {
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            👑 Club VIP &amp; Tienda VC
+            👑 Club VIP &amp; Tienda VC ({vipOffers.length})
           </button>
         </div>
       </div>
@@ -190,12 +211,14 @@ export default function MarketplacePanel() {
             }}
             className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3"
           >
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-zinc-100">
                 Vender Ítem de tu Inventario
               </h3>
-              <span className="text-[11px] text-zinc-400">
-                Tasa de mercado: 5% · Recibes 95%
+              <span className="text-[11px] text-amber-300">
+                {isVipActive
+                  ? '👑 Tasa Club VIP: 2% · Recibes 98%'
+                  : 'Tasa estándar: 5% (2% con Club VIP)'}
               </span>
             </div>
 
@@ -336,25 +359,75 @@ export default function MarketplacePanel() {
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-950/15 p-3 text-xs">
-            <div>
-              <span className="font-semibold text-amber-200">
-                {isVipActive
-                  ? `👑 Club VIP Activo${player?.vipExpiresAt ? ` hasta ${new Date(player.vipExpiresAt).toLocaleDateString('es-ES')}` : ''}`
-                  : 'Estado actual: Jugador Estándar'}
+          <div className="rounded-xl border border-amber-500/30 bg-amber-950/15 p-4 text-xs space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span className="text-sm font-bold text-amber-200">
+                  {isVipActive
+                    ? `👑 Club VIP Activo${player?.vipExpiresAt ? ` hasta ${new Date(player.vipExpiresAt).toLocaleDateString('es-ES')}` : ''}`
+                    : '👑 Ventajas del Club VIP VidaLoca'}
+                </span>
+                <p className="text-zinc-400 mt-0.5">
+                  Consigue VidaCoins jugando (retos diarios, rachas, misiones y
+                  logros) y desbloquea contenido exclusivo sin PayPal.
+                </p>
+              </div>
+              <span className="rounded-lg border border-amber-400/40 bg-zinc-900 px-3 py-1.5 text-sm font-black text-amber-300">
+                Saldo: {player?.vidaCoins ?? 0} VC
               </span>
-              <p className="text-zinc-400">
-                Gana VidaCoins gratis en retos diarios, racha de conexión y
-                logros, y canjéalos aquí sin PayPal.
-              </p>
             </div>
-            <span className="rounded-lg border border-amber-400/40 bg-zinc-900 px-3 py-1.5 text-sm font-black text-amber-300">
-              Saldo: {player?.vidaCoins ?? 0} VC
-            </span>
+            <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 text-[11px] text-amber-100/90">
+              <div className="rounded bg-zinc-900/70 px-2.5 py-1.5 border border-amber-500/20">
+                ⚡ +25% XP en misiones y progreso
+              </div>
+              <div className="rounded bg-zinc-900/70 px-2.5 py-1.5 border border-amber-500/20">
+                💶 +15% € extra en misiones y rentas
+              </div>
+              <div className="rounded bg-zinc-900/70 px-2.5 py-1.5 border border-amber-500/20">
+                🏷️ Tasa Mercado P2P al 2% (vs 5%)
+              </div>
+              <div className="rounded bg-zinc-900/70 px-2.5 py-1.5 border border-amber-500/20">
+                🎯 Acceso a 10 Misiones Exclusivas VIP
+              </div>
+              <div className="rounded bg-zinc-900/70 px-2.5 py-1.5 border border-amber-500/20">
+                🏎️ Acceso a 8 Hiperdeportivos y Yates VIP
+              </div>
+              <div className="rounded bg-zinc-900/70 px-2.5 py-1.5 border border-amber-500/20">
+                🏰 Acceso a 4 Mansiones y Clubes VIP
+              </div>
+            </div>
+          </div>
+
+          {/* Category Filter Pills */}
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              Object.keys(VIP_CATEGORY_LABELS) as Array<
+                'ALL' | VipShopOffer['category']
+              >
+            ).map((cat) => {
+              const count =
+                cat === 'ALL'
+                  ? vipOffers.length
+                  : vipOffers.filter((o) => o.category === cat).length;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setVipFilter(cat)}
+                  className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
+                    vipFilter === cat
+                      ? 'border-amber-500 bg-amber-500/20 text-amber-200'
+                      : 'border-zinc-800 bg-zinc-900/70 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                  }`}
+                >
+                  {VIP_CATEGORY_LABELS[cat]} ({count})
+                </button>
+              );
+            })}
           </div>
 
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {vipOffers.map((offer) => {
+            {visibleVipOffers.map((offer) => {
               const affordable = (player?.vidaCoins ?? 0) >= offer.priceVida;
               return (
                 <div
@@ -364,7 +437,7 @@ export default function MarketplacePanel() {
                   <div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-                        {offer.category}
+                        {VIP_CATEGORY_LABELS[offer.category]}
                       </span>
                       <span className="text-sm font-black text-amber-300">
                         {offer.priceVida} VC

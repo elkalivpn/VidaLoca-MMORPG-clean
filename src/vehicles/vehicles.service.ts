@@ -2,8 +2,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { isPlayerVipActive } from '../common/utils/vip.util';
 import { BuyVehicleDto } from './dto/vehicles.dto';
 
 @Injectable()
@@ -12,7 +14,7 @@ export class VehiclesService {
 
   async getCatalog() {
     return this.prisma.vehicleTemplate.findMany({
-      orderBy: { priceEuros: 'asc' },
+      orderBy: [{ isVipOnly: 'asc' }, { priceEuros: 'asc' }, { priceVida: 'asc' }],
     });
   }
 
@@ -33,8 +35,30 @@ export class VehiclesService {
 
     if (!template) throw new NotFoundException('Vehicle not found in catalog');
 
-    // Prefer Euros, fallback to VidaCoins if priced that way (never charge both)
-    const useEuros = (template.priceEuros ?? 0) > 0;
+    if (template.isVipOnly && !isPlayerVipActive(player)) {
+      throw new ForbiddenException(
+        'Vehículo exclusivo del Club VIP. Activa tu membresía VIP en Mercado / Club VIP.',
+      );
+    }
+
+    const hasEurosPrice = (template.priceEuros ?? 0) > 0;
+    const hasVidaPrice = (template.priceVida ?? 0) > 0;
+
+    let useEuros: boolean;
+    if (dto.currency === 'VIDACOIN') {
+      if (!hasVidaPrice) {
+        throw new BadRequestException('Este vehículo no se vende en VidaCoins');
+      }
+      useEuros = false;
+    } else if (dto.currency === 'EUR') {
+      if (!hasEurosPrice) {
+        throw new BadRequestException('Este vehículo es exclusivo por VidaCoins');
+      }
+      useEuros = true;
+    } else {
+      useEuros = hasEurosPrice;
+    }
+
     const priceEuros = useEuros ? template.priceEuros! : 0;
     const priceVida = !useEuros ? (template.priceVida ?? 0) : 0;
 

@@ -99,21 +99,29 @@ export class InventoryService {
 
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id: itemId, playerId: player.id },
+      include: { template: true },
     });
 
     if (!item) {
       throw new NotFoundException('Item not found in inventory');
     }
 
-    // Unequip all items of the same type
-    await this.prisma.inventoryItem.updateMany({
-      where: { playerId: player.id, equipped: true },
-      data: { equipped: false },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      // Unequip only items of the same category (CHARACTER, CLOTHING, COSMETIC, WEAPON, etc.)
+      await tx.inventoryItem.updateMany({
+        where: {
+          playerId: player.id,
+          equipped: true,
+          template: { type: item.template.type },
+        },
+        data: { equipped: false },
+      });
 
-    return this.prisma.inventoryItem.update({
-      where: { id: itemId },
-      data: { equipped: true },
+      return tx.inventoryItem.update({
+        where: { id: itemId },
+        data: { equipped: true },
+        include: { template: true },
+      });
     });
   }
 

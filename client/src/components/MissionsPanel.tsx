@@ -451,19 +451,36 @@ export default function MissionsPanel() {
               const lockedByLevel =
                 Boolean(player?.level) &&
                 (t.minLevel ?? 1) > (player?.level ?? 1);
+              const isVipActive = Boolean(
+                player?.isVip &&
+                (!player.vipExpiresAt ||
+                  new Date(player.vipExpiresAt).getTime() > Date.now()),
+              );
+              const lockedByVip = Boolean(t.isVipOnly && !isVipActive);
               const isCoop = (t.mode ?? 'ONLINE_SOLO') === 'ONLINE_COOP';
 
               return (
                 <li
                   key={t.id}
-                  className="flex flex-col justify-between rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5 text-sm"
+                  className={`flex flex-col justify-between rounded-xl border p-3.5 text-sm ${
+                    t.isVipOnly
+                      ? 'border-amber-500/40 bg-amber-950/10'
+                      : 'border-zinc-800 bg-zinc-900/50'
+                  }`}
                 >
                   <div className="space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <span className="font-semibold text-zinc-100">
-                          {t.title}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {t.isVipOnly && (
+                            <span className="rounded border border-amber-400/50 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+                              👑 SOLO VIP
+                            </span>
+                          )}
+                          <span className="font-semibold text-zinc-100">
+                            {t.title}
+                          </span>
+                        </div>
                         <div className="mt-1 flex flex-wrap gap-1.5 text-[10px]">
                           {t.city && (
                             <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-sky-300">
@@ -529,7 +546,12 @@ export default function MissionsPanel() {
                       )}
                       <button
                         type="button"
-                        disabled={isActive || lockedByLevel || busy === t.id}
+                        disabled={
+                          isActive ||
+                          lockedByLevel ||
+                          lockedByVip ||
+                          busy === t.id
+                        }
                         onClick={() =>
                           void runAction(
                             t.id,
@@ -546,11 +568,13 @@ export default function MissionsPanel() {
                       >
                         {isActive
                           ? 'En curso'
-                          : lockedByLevel
-                            ? `Req. Nv ${t.minLevel}`
-                            : isCoop
-                              ? 'Crear Escuadra'
-                              : 'Aceptar'}
+                          : lockedByVip
+                            ? 'Solo Club VIP'
+                            : lockedByLevel
+                              ? `Req. Nv ${t.minLevel}`
+                              : isCoop
+                                ? 'Crear Escuadra'
+                                : 'Aceptar'}
                       </button>
                     </div>
                   </div>

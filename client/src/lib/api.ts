@@ -156,10 +156,14 @@ export const api = {
 
   vehicleCatalog: () => request('/vehicles/catalog'),
   myVehicles: () => request('/vehicles/my'),
-  buyVehicle: (templateId: string, color?: string) =>
+  buyVehicle: (
+    templateId: string,
+    color?: string,
+    currency?: 'EUR' | 'VIDACOIN',
+  ) =>
     request('/vehicles/buy', {
       method: 'POST',
-      body: JSON.stringify({ templateId, color }),
+      body: JSON.stringify({ templateId, color, currency }),
     }),
   setPrimaryVehicle: (id: string) =>
     request(`/vehicles/${id}/primary`, { method: 'POST' }),

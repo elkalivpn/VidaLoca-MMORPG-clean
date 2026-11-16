@@ -2,8 +2,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { isPlayerVipActive } from '../common/utils/vip.util';
 import { BuyPropertyDto } from './dto/properties.dto';
 
 @Injectable()
@@ -12,7 +14,7 @@ export class PropertiesService {
 
   async getCatalog() {
     return this.prisma.propertyTemplate.findMany({
-      orderBy: { priceEuros: 'asc' },
+      orderBy: [{ isVipOnly: 'asc' }, { priceEuros: 'asc' }],
     });
   }
 
@@ -33,7 +35,13 @@ export class PropertiesService {
 
     if (!template) throw new NotFoundException('Property not found');
 
-    if (player.euros < template.priceEuros) {
+    if (template.isVipOnly && !isPlayerVipActive(player)) {
+      throw new ForbiddenException(
+        'Propiedad exclusiva del Club VIP. Activa tu membresía VIP en Mercado / Club VIP.',
+      );
+    }
+
+    if (template.priceEuros > 0 && player.euros < template.priceEuros) {
       throw new BadRequestException(
         `Not enough Euros. Need ${template.priceEuros}, have ${player.euros}`,
       );
@@ -46,13 +54,12 @@ export class PropertiesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const whereClause: any = {
-        id: player.id,
-        euros: { gte: template.priceEuros },
-      };
-      const updateData: any = {
-        euros: { decrement: template.priceEuros },
-      };
+      const whereClause: any = { id: player.id };
+      const updateData: any = {};
+      if (template.priceEuros > 0) {
+        whereClause.euros = { gte: template.priceEuros };
+        updateData.euros = { decrement: template.priceEuros };
+      }
       if (template.priceVida) {
         whereClause.vidaCoins = { gte: template.priceVida };
         updateData.vidaCoins = { decrement: template.priceVida };
@@ -79,8 +86,8 @@ export class PropertiesService {
         data: {
           playerId: player.id,
           type: 'PURCHASE',
-          amount: template.priceEuros,
-          currency: 'EUR',
+          amount: template.priceEuros > 0 ? template.priceEuros : (template.priceVida ?? 0),
+          currency: template.priceEuros > 0 ? 'EUR' : 'VIDACOIN',
           reason: `Bought property: ${template.name}`,
           reference: property.id,
         },
@@ -105,7 +112,9 @@ export class PropertiesService {
         ? yieldRate
         : property.template.priceEuros * yieldRate;
     const factionMultiplier = player.faction === 'ENTREPRENEUR' ? 1.15 : 1.0;
-    const rent = Math.round(baseRent * factionMultiplier * 100) / 100;
+    const vipMultiplier = isPlayerVipActive(player) ? 1.15 : 1.0;
+    const rent =
+      Math.round(baseRent * factionMultiplier * vipMultiplier * 100) / 100;
 
     if (rent <= 0) {
       throw new BadRequestException('This property generates no rent');
@@ -145,12 +154,12 @@ export class PropertiesService {
           type: 'EARN',
           amount: rent,
           currency: 'EUR',
-          reason: `Rent from: ${property.template.name}`,
+          reason: `Rent from: ${property.template.name}${vipMultiplier > 1 ? ' (VIP +15%)' : ''}`,
           reference: propertyId,
         },
       });
 
-      return { rent, newBalance: updated.euros };
+      return { rent, newBalance: updated.euros, vipBonusApplied: vipMultiplier > 1 };
     });
   }
 

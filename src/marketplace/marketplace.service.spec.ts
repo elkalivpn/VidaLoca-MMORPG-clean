@@ -150,4 +150,66 @@ describe('MarketplaceService', () => {
       }),
     );
   });
+
+  it('applies 2% P2P seller fee instead of 5% when seller has active Club VIP', async () => {
+    prisma.player.findUnique
+      .mockResolvedValueOnce({ id: 'buyer-1' })
+      .mockResolvedValueOnce({
+        id: 'seller-vip',
+        isVip: true,
+        vipExpiresAt: new Date(Date.now() + 86_400_000),
+      });
+    prisma.marketListing.findUnique.mockResolvedValue({
+      id: 'lst-vip',
+      sellerId: 'seller-vip',
+      templateId: 'tpl-1',
+      quantity: 1,
+      priceEuros: 1000,
+      status: MarketListingStatus.ACTIVE,
+      template: { name: 'La Jefa de Ibiza' },
+    });
+    prisma.marketListing.updateMany.mockResolvedValue({ count: 1 });
+    prisma.player.updateMany.mockResolvedValue({ count: 1 });
+    prisma.player.update.mockResolvedValue({});
+    prisma.inventoryItem.findFirst.mockResolvedValue(null);
+    prisma.inventoryItem.create.mockResolvedValue({});
+    prisma.transactionLog.createMany.mockResolvedValue({});
+
+    const res = await service.buyListing('u-buyer', 'lst-vip');
+
+    expect(res.feeEuros).toBe(20);
+    expect(res.feeRate).toBe(0.02);
+    expect(res.vipDiscountApplied).toBe(true);
+    expect(res.sellerNetEuros).toBe(980);
+  });
+
+  it('unlocks CHARACTER and grants XP pack in VIP Shop', async () => {
+    prisma.player.findUnique.mockResolvedValue({
+      id: 'p1',
+      xp: 0,
+      level: 1,
+      vidaCoins: 500,
+    });
+    prisma.player.updateMany.mockResolvedValue({ count: 1 });
+    prisma.itemTemplate.findFirst.mockResolvedValue({
+      id: 'tpl-char',
+      name: 'La Jefa de Ibiza',
+    });
+    prisma.inventoryItem.findFirst.mockResolvedValue(null);
+    prisma.inventoryItem.create.mockResolvedValue({});
+    prisma.transactionLog.create.mockResolvedValue({});
+
+    const charRes = await service.buyVipOffer('u1', 'char_dona_ibiza');
+    expect(charRes.offerId).toBe('char_dona_ibiza');
+    expect(prisma.inventoryItem.create).toHaveBeenCalledTimes(1);
+
+    prisma.player.update.mockResolvedValue({});
+    const xpRes = await service.buyVipOffer('u1', 'vip_xp_pack');
+    expect(xpRes.offerId).toBe('vip_xp_pack');
+    expect(prisma.player.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ xp: 1000 }),
+      }),
+    );
+  });
 });

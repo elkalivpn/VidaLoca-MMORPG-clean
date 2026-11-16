@@ -6,16 +6,19 @@ import {
 } from '@nestjs/common';
 import { MarketListingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { calculateLevelFromXp } from '../common/utils/level.util';
+import { isPlayerVipActive } from '../common/utils/vip.util';
 import { CreateListingDto } from './dto/marketplace.dto';
 
-export const MARKETPLACE_FEE_RATE = 0.05; // 5% sink anti-inflación
+export const MARKETPLACE_FEE_RATE = 0.05; // 5% sink estándar
+export const MARKETPLACE_VIP_FEE_RATE = 0.02; // 2% tasa reducida Club VIP
 
 export interface VipShopOffer {
   id: string;
   name: string;
   description: string;
   priceVida: number;
-  category: 'VIP' | 'UTILITY' | 'COSMETIC';
+  category: 'VIP' | 'UTILITY' | 'CHARACTER' | 'CLOTHING' | 'WEAPON' | 'COSMETIC';
   templateName?: string;
 }
 
@@ -24,7 +27,7 @@ export const VIP_SHOP_OFFERS: VipShopOffer[] = [
     id: 'vip_7d',
     name: 'Club VIP VidaLoca (7 días)',
     description:
-      '+25% XP en calle, misiones, racha diaria y retos + insignia dorada 👑 VIP.',
+      '+25% XP global, +15% € en misiones y rentas, 2% tasa P2P y acceso a misiones/vehículos/mansiones VIP.',
     priceVida: 120,
     category: 'VIP',
   },
@@ -32,8 +35,16 @@ export const VIP_SHOP_OFFERS: VipShopOffer[] = [
     id: 'vip_30d',
     name: 'Club VIP VidaLoca (30 días)',
     description:
-      'Mes completo con +25% XP global, insignia 👑 VIP y ahorro de 120 VC.',
+      'Mes completo VIP con todos los multiplicadores, catálogo exclusivo y ahorro de 120 VC.',
     priceVida: 360,
+    category: 'VIP',
+  },
+  {
+    id: 'vip_90d',
+    name: 'Club VIP VidaLoca (90 días · Trimestre)',
+    description:
+      '90 días de estatus 👑 VIP máximo con ahorro de 640 VC frente a pases semanales.',
+    priceVida: 900,
     category: 'VIP',
   },
   {
@@ -43,6 +54,130 @@ export const VIP_SHOP_OFFERS: VipShopOffer[] = [
       'Borra instantáneamente todo tu nivel de búsqueda (Heat 0) y antecedentes activos.',
     priceVida: 35,
     category: 'UTILITY',
+  },
+  {
+    id: 'vip_xp_pack',
+    name: 'Contrato Relámpago +1.000 XP',
+    description:
+      'Inyección directa de +1.000 XP en tu expediente para acelerar subidas de nivel.',
+    priceVida: 50,
+    category: 'UTILITY',
+  },
+  {
+    id: 'vip_euro_briefcase',
+    name: 'Maletín Blindado +15.000 €',
+    description:
+      'Liquidez inmediata de 15.000 € limpios acreditados al instante en tu cuenta.',
+    priceVida: 80,
+    category: 'UTILITY',
+  },
+  {
+    id: 'gadget_blackbox',
+    name: 'Caja Negra Anti-Radar Pro',
+    description:
+      'Contramedida electrónica que reduce calor y mejora huida en golpes (intercambiable P2P).',
+    priceVida: 50,
+    category: 'UTILITY',
+    templateName: 'Caja Negra Anti-Radar Pro',
+  },
+  {
+    id: 'skill_master_vip',
+    name: 'Carta Maestra: Imperio VIP',
+    description:
+      'Manual confidencial de alta gestión y expansión patrimonial (intercambiable P2P).',
+    priceVida: 70,
+    category: 'UTILITY',
+    templateName: 'Carta Maestra: Imperio VIP',
+  },
+  {
+    id: 'char_dona_ibiza',
+    name: 'La Jefa de Ibiza',
+    description:
+      'Personaje jugable exclusivo con +10% reputación y presencia nocturna balear (equipa en Personaje).',
+    priceVida: 140,
+    category: 'CHARACTER',
+    templateName: 'La Jefa de Ibiza',
+  },
+  {
+    id: 'char_sombra_madrid',
+    name: 'Agente Sombra CNI',
+    description:
+      'Operador encubierto de élite con sigilo mejorado en infiltraciones urbanas.',
+    priceVida: 110,
+    category: 'CHARACTER',
+    templateName: 'Agente Sombra CNI',
+  },
+  {
+    id: 'char_piloto_apex',
+    name: 'Piloto Nocturno Apex',
+    description:
+      'As del volante underground especializado en fugas de autopista y circuitos.',
+    priceVida: 95,
+    category: 'CHARACTER',
+    templateName: 'Piloto Nocturno Apex',
+  },
+  {
+    id: 'char_magnate_banus',
+    name: 'Magnate de Puerto Banús',
+    description:
+      'Perfil legendario de alto standing con bonificación de negociación en Marbella.',
+    priceVida: 160,
+    category: 'CHARACTER',
+    templateName: 'Magnate de Puerto Banús',
+  },
+  {
+    id: 'cloth_traje_marbella',
+    name: 'Esmoquin Blanco Puerto Banús',
+    description:
+      'Vestimenta de gala VIP perfecta para casinos, clubes exclusivos y subastas.',
+    priceVida: 55,
+    category: 'CLOTHING',
+    templateName: 'Esmoquin Blanco Puerto Banús',
+  },
+  {
+    id: 'cloth_chaqueta_drift',
+    name: 'Chaqueta Cuero Apex Drift',
+    description:
+      'Prenda técnica ignífuga para pilotos nocturnos (intercambiable en P2P).',
+    priceVida: 40,
+    category: 'CLOTHING',
+    templateName: 'Chaqueta Cuero Apex Drift',
+  },
+  {
+    id: 'cloth_traje_blindado',
+    name: 'Gabardina Táctica Kevlar',
+    description:
+      'Abrigo elegante con placas balísticas ocultas (+22 blindaje en asaltos).',
+    priceVida: 85,
+    category: 'CLOTHING',
+    templateName: 'Gabardina Táctica Kevlar',
+  },
+  {
+    id: 'cloth_gafas_oro',
+    name: 'Gafas Aviador Oro 24K',
+    description:
+      'Complemento de lujo con filtro nocturno polarizado y carisma VIP.',
+    priceVida: 35,
+    category: 'CLOTHING',
+    templateName: 'Gafas Aviador Oro 24K',
+  },
+  {
+    id: 'weap_desert_gold',
+    name: 'Desert Eagle Baño Oro',
+    description:
+      'Pistola pesada calibre .50 personalizada en oro de colección (equipa o vende en P2P).',
+    priceVida: 125,
+    category: 'WEAPON',
+    templateName: 'Desert Eagle Baño Oro',
+  },
+  {
+    id: 'weap_katana_neo',
+    name: 'Katana Fibra Carbono Neo',
+    description:
+      'Hoja táctica silenciosa ultraligera para infiltraciones sin disparos.',
+    priceVida: 90,
+    category: 'WEAPON',
+    templateName: 'Katana Fibra Carbono Neo',
   },
   {
     id: 'cosmetic_plate',
@@ -181,7 +316,15 @@ export class MarketplaceService {
         );
       }
 
-      const fee = Math.round(listing.priceEuros * MARKETPLACE_FEE_RATE * 100) / 100;
+      const seller = await tx.player.findUnique({
+        where: { id: listing.sellerId },
+        select: { isVip: true, vipExpiresAt: true },
+      });
+      const sellerIsVip = seller ? isPlayerVipActive(seller) : false;
+      const feeRate = sellerIsVip
+        ? MARKETPLACE_VIP_FEE_RATE
+        : MARKETPLACE_FEE_RATE;
+      const fee = Math.round(listing.priceEuros * feeRate * 100) / 100;
       const sellerNet = Math.round((listing.priceEuros - fee) * 100) / 100;
 
       await tx.player.update({
@@ -227,7 +370,7 @@ export class MarketplaceService {
             type: 'EARN',
             amount: sellerNet,
             currency: 'EUR',
-            reason: `P2P Venta (5% tasa): ${listing.quantity}x ${listing.template.name}`,
+            reason: `P2P Venta (${sellerIsVip ? '2% tasa VIP' : '5% tasa'}): ${listing.quantity}x ${listing.template.name}`,
             reference: listing.id,
           },
         ],
@@ -239,6 +382,8 @@ export class MarketplaceService {
         quantity: listing.quantity,
         priceEuros: listing.priceEuros,
         feeEuros: fee,
+        feeRate,
+        vipDiscountApplied: sellerIsVip,
         sellerNetEuros: sellerNet,
       };
     });
@@ -320,8 +465,12 @@ export class MarketplaceService {
       const now = new Date();
       let detail = '';
 
-      if (offer.id === 'vip_7d' || offer.id === 'vip_30d') {
-        const days = offer.id === 'vip_7d' ? 7 : 30;
+      if (
+        offer.id === 'vip_7d' ||
+        offer.id === 'vip_30d' ||
+        offer.id === 'vip_90d'
+      ) {
+        const days = offer.id === 'vip_7d' ? 7 : offer.id === 'vip_30d' ? 30 : 90;
         const baseTime =
           player.vipExpiresAt && player.vipExpiresAt > now
             ? player.vipExpiresAt.getTime()
@@ -338,23 +487,48 @@ export class MarketplaceService {
           data: { heat: 0, wantedLevel: 0, jailUntil: null },
         });
         detail = 'Nivel de búsqueda limpiado a 0';
+      } else if (offer.id === 'vip_xp_pack') {
+        const newXp = (player.xp ?? 0) + 1000;
+        const calcLevel = calculateLevelFromXp(newXp);
+        const newLevel = calcLevel > (player.level ?? 1) ? calcLevel : player.level;
+        await tx.player.update({
+          where: { id: player.id },
+          data: { xp: newXp, level: newLevel },
+        });
+        detail = `+1.000 XP añadidos (Nv.${newLevel})`;
+      } else if (offer.id === 'vip_euro_briefcase') {
+        await tx.player.update({
+          where: { id: player.id },
+          data: { euros: { increment: 15000 } },
+        });
+        detail = '+15.000 € acreditados en tu cuenta';
       } else if (offer.templateName) {
         const tpl = await tx.itemTemplate.findFirst({
           where: { name: offer.templateName },
         });
         if (!tpl) {
           throw new NotFoundException(
-            `Plantilla cosmética "${offer.templateName}" no disponible aún`,
+            `Plantilla "${offer.templateName}" no disponible aún`,
           );
         }
-        await tx.inventoryItem.create({
-          data: {
-            playerId: player.id,
-            templateId: tpl.id,
-            quantity: 1,
-            equipped: false,
-          },
+        const existing = await tx.inventoryItem.findFirst({
+          where: { playerId: player.id, templateId: tpl.id, equipped: false },
         });
+        if (existing) {
+          await tx.inventoryItem.update({
+            where: { id: existing.id },
+            data: { quantity: { increment: 1 } },
+          });
+        } else {
+          await tx.inventoryItem.create({
+            data: {
+              playerId: player.id,
+              templateId: tpl.id,
+              quantity: 1,
+              equipped: false,
+            },
+          });
+        }
         detail = `${tpl.name} añadido a tu inventario`;
       }
 

@@ -289,4 +289,60 @@ describe('MissionsService (Story, Online Solo, Online Co-op & Optional Choice)',
       expect.objectContaining({ rule: 'DOUBLE_CLAIM' }),
     );
   });
+
+  it('blocks non-VIP players from starting VIP missions and grants +15% EUR / +25% XP to VIPs', async () => {
+    const vipTemplate = {
+      ...soloTemplate,
+      id: 'tpl-vip-1',
+      title: 'VIP · Gala Privada en Puerto Banús',
+      isVipOnly: true,
+      rewardEuros: 1000,
+      rewardXp: 400,
+    };
+
+    prisma.player.findUnique.mockResolvedValue({ ...playerOne, isVip: false });
+    prisma.missionTemplate.findUnique.mockResolvedValue(vipTemplate);
+
+    await expect(
+      service.startMission('user-1', vipTemplate.id),
+    ).rejects.toThrow(ForbiddenException);
+
+    const activeVipPlayer = {
+      ...playerOne,
+      isVip: true,
+      vipExpiresAt: new Date(Date.now() + 86_400_000),
+    };
+    prisma.player.findUnique.mockResolvedValue(activeVipPlayer);
+    prisma.playerMission.findFirst.mockResolvedValue(null);
+    prisma.completedMission.findFirst.mockResolvedValue(null);
+    prisma.playerMission.create.mockResolvedValue({
+      id: 'pm-vip-1',
+      status: MissionStatus.IN_PROGRESS,
+      template: vipTemplate,
+    });
+
+    const started = await service.startMission('user-1', vipTemplate.id);
+    expect(started.id).toBe('pm-vip-1');
+
+    prisma.playerMission.findUnique.mockResolvedValue({
+      id: 'pm-vip-1',
+      playerId: activeVipPlayer.id,
+      templateId: vipTemplate.id,
+      status: MissionStatus.COMPLETED,
+      progress: 100,
+      template: vipTemplate,
+    });
+    prisma.playerMission.updateMany.mockResolvedValue({ count: 1 });
+    prisma.player.update.mockResolvedValue({
+      ...activeVipPlayer,
+      euros: 2150,
+      xp: 10000,
+      level: 10,
+    });
+
+    const claimed = await service.claimReward('user-1', 'pm-vip-1');
+    expect(claimed.rewards.vipBonusApplied).toBe(true);
+    expect(claimed.rewards.euros).toBe(1150); // 1000 * 1.15
+    expect(claimed.rewards.xp).toBe(500); // 400 * 1.25
+  });
 });

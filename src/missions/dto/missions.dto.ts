@@ -79,6 +79,10 @@ export class CreateMissionTemplateDto {
   @Max(30)
   requiredSteps?: number;
 
+  @IsOptional()
+  @IsBoolean()
+  isVipOnly?: boolean;
+
   @IsNumber()
   @IsPositive()
   @Max(500000)
