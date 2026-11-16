@@ -36,6 +36,10 @@ export class AchievementsService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const newlyUnlocked: any[] = [];
 
+    let cachedCompletedCount: number | null = null;
+    let cachedVehicleCount: number | null = null;
+    let cachedPropCount: number | null = null;
+
     for (const ach of allAchievements) {
       if (unlockedIds.has(ach.id)) continue;
 
@@ -52,6 +56,33 @@ export class AchievementsService {
         case 'reputation':
           met = player.reputation >= condition.value;
           break;
+        case 'missions_completed': {
+          if (cachedCompletedCount === null) {
+            cachedCompletedCount = await this.prisma.completedMission.count({
+              where: { playerId: player.id },
+            });
+          }
+          met = cachedCompletedCount >= condition.value;
+          break;
+        }
+        case 'vehicles_owned': {
+          if (cachedVehicleCount === null) {
+            cachedVehicleCount = await this.prisma.playerVehicle.count({
+              where: { playerId: player.id },
+            });
+          }
+          met = cachedVehicleCount >= condition.value;
+          break;
+        }
+        case 'properties_owned': {
+          if (cachedPropCount === null) {
+            cachedPropCount = await this.prisma.playerProperty.count({
+              where: { playerId: player.id },
+            });
+          }
+          met = cachedPropCount >= condition.value;
+          break;
+        }
         default:
           break;
       }

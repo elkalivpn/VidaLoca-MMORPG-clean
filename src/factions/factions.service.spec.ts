@@ -61,21 +61,24 @@ describe('FactionsService', () => {
   });
 
   describe('getCatalog', () => {
-    it('returns all 5 factions with active member counts', async () => {
+    it('returns all 9 factions with active member counts', async () => {
       prisma.player.groupBy.mockResolvedValue([
         { faction: FactionType.POLICE, _count: { _all: 3 } },
         { faction: FactionType.SYNDICATE, _count: { _all: 5 } },
+        { faction: FactionType.CYBER_HACKER, _count: { _all: 2 } },
       ]);
 
       const catalog = await service.getCatalog();
 
-      expect(catalog).toHaveLength(5);
+      expect(catalog).toHaveLength(9);
       const police = catalog.find((c) => c.id === FactionType.POLICE);
       const syndicate = catalog.find((c) => c.id === FactionType.SYNDICATE);
+      const cyber = catalog.find((c) => c.id === FactionType.CYBER_HACKER);
       const civilian = catalog.find((c) => c.id === FactionType.CIVILIAN);
 
       expect(police?.activeMembers).toBe(3);
       expect(syndicate?.activeMembers).toBe(5);
+      expect(cyber?.activeMembers).toBe(2);
       expect(civilian?.activeMembers).toBe(0);
     });
   });
@@ -115,6 +118,14 @@ describe('FactionsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('rejects joining ERTZAINTZA_MOSSOS when heat > 0', async () => {
+      prisma.player.findUnique.mockResolvedValue({ ...basePlayer, heat: 15 });
+
+      await expect(
+        service.joinFaction('user-1', FactionType.ERTZAINTZA_MOSSOS),
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('rejects joining GUARDIA_CIVIL while jailed', async () => {
       prisma.player.findUnique.mockResolvedValue({
         ...basePlayer,
@@ -137,6 +148,20 @@ describe('FactionsService', () => {
       const res = await service.joinFaction('user-1', FactionType.POLICE);
 
       expect(res.faction).toBe(FactionType.POLICE);
+      expect(res.factionRank).toBe(1);
+    });
+
+    it('allows joining CYBER_HACKER and NIGHT_RACING even with heat > 0', async () => {
+      prisma.player.findUnique.mockResolvedValue({ ...basePlayer, heat: 35 });
+      prisma.player.update.mockResolvedValue({
+        ...basePlayer,
+        faction: FactionType.NIGHT_RACING,
+        factionRank: 1,
+      });
+
+      const res = await service.joinFaction('user-1', FactionType.NIGHT_RACING);
+
+      expect(res.faction).toBe(FactionType.NIGHT_RACING);
       expect(res.factionRank).toBe(1);
     });
   });

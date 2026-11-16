@@ -95,6 +95,70 @@ const FACTION_CATALOG: FactionMeta[] = [
     accentBg: 'bg-zinc-800/60',
     accentText: 'text-zinc-300',
   },
+  {
+    id: 'ERTZAINTZA_MOSSOS',
+    name: 'Fuerzas Autonómicas',
+    shortName: 'Autonómicas',
+    badge: '🚓',
+    description:
+      "Ertzaintza y Mossos d'Esquadra: despliegue táctico regional contra bandas y fugitivos.",
+    perks: [
+      'Acceso al botón Interceptar en tu zona',
+      'Despliegue ágil en País Vasco, Navarra y Cataluña',
+      'Recompensas en € y XP por captura',
+    ],
+    accentBorder: 'border-indigo-500/40',
+    accentBg: 'bg-indigo-500/15',
+    accentText: 'text-indigo-300',
+  },
+  {
+    id: 'CYBER_HACKER',
+    name: 'Colectivo ShadowNet',
+    shortName: 'ShadowNet',
+    badge: '💻',
+    description:
+      'Hackers e infiltradores digitales que operan desde las sombras con rastro policial mínimo.',
+    perks: [
+      '-30% de calor policial en movidas y golpes',
+      '+15% de pago en tratos opacos y contactos',
+      'Enfriamiento acelerado del nivel de búsqueda',
+    ],
+    accentBorder: 'border-cyan-500/40',
+    accentBg: 'bg-cyan-500/15',
+    accentText: 'text-cyan-300',
+  },
+  {
+    id: 'CARTEL_MARITIMO',
+    name: 'Hermandad Portuaria',
+    shortName: 'Portuaria',
+    badge: '⚓',
+    description:
+      'Señores de los muelles en Galicia, Levante, Baleares y Canarias expertos en descargas nocturnas.',
+    perks: [
+      '+15% de botín en repartos y cobros de deuda',
+      'Dominio estratégico en rutas portuarias e islas',
+      'Ventaja en logística clandestina de mercancía',
+    ],
+    accentBorder: 'border-teal-500/40',
+    accentBg: 'bg-teal-500/15',
+    accentText: 'text-teal-300',
+  },
+  {
+    id: 'NIGHT_RACING',
+    name: 'Club Nocturno Apex',
+    shortName: 'Apex Racing',
+    badge: '🏎️',
+    description:
+      'Corredores de autovía, drift nocturno y fugas a máxima velocidad por toda la península.',
+    perks: [
+      '-35% de descuento en peajes de autopista',
+      '+15% velocidad efectiva en viajes interurbanos',
+      'Evasión mejorada en controles de carretera',
+    ],
+    accentBorder: 'border-fuchsia-500/40',
+    accentBg: 'bg-fuchsia-500/15',
+    accentText: 'text-fuchsia-300',
+  },
 ];
 
 function formatCountdown(msRemaining: number): string {
@@ -217,7 +281,9 @@ export default function FactionsPanel({
 
   const currentFaction: FactionType = player?.faction ?? 'CIVILIAN';
   const isLawEnforcement =
-    currentFaction === 'POLICE' || currentFaction === 'GUARDIA_CIVIL';
+    currentFaction === 'POLICE' ||
+    currentFaction === 'GUARDIA_CIVIL' ||
+    currentFaction === 'ERTZAINTZA_MOSSOS';
 
   const activeFactionMeta = useMemo(
     () =>
@@ -454,8 +520,8 @@ export default function FactionsPanel({
               </span>
             </h3>
             <p className="text-xs text-zinc-500">
-              Sospechosos con calor ≥ 40. Solo Policía Nacional y Guardia Civil
-              en la misma zona pueden interceptar.
+              Sospechosos con calor ≥ 40. Solo Policía Nacional, Guardia Civil y
+              Fuerzas Autonómicas en la misma zona pueden interceptar.
             </p>
           </div>
           <button
@@ -522,8 +588,7 @@ export default function FactionsPanel({
               let reason = '';
               if (isSelf) reason = 'Eres tú';
               else if (inJail) reason = 'Estás en el calabozo';
-              else if (!isLawEnforcement)
-                reason = 'Solo Policía / Guardia Civil';
+              else if (!isLawEnforcement) reason = 'Solo fuerzas del orden';
               else if (!sameZone) reason = 'Ve a su zona para interceptar';
 
               return (

@@ -99,8 +99,13 @@ export class PropertiesService {
 
     if (!property) throw new NotFoundException('Property not found');
 
-    const yieldRate = property.template.rentYield ?? 0.02; // 2% default
-    const rent = Math.round(property.template.priceEuros * yieldRate * 100) / 100;
+    const yieldRate = property.template.rentYield ?? 0.02; // 2% default if fractional, € value if > 1
+    const baseRent =
+      yieldRate > 1
+        ? yieldRate
+        : property.template.priceEuros * yieldRate;
+    const factionMultiplier = player.faction === 'ENTREPRENEUR' ? 1.15 : 1.0;
+    const rent = Math.round(baseRent * factionMultiplier * 100) / 100;
 
     if (rent <= 0) {
       throw new BadRequestException('This property generates no rent');

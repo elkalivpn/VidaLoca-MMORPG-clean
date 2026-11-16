@@ -3,29 +3,42 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/store/auth';
-import type { BattlePassProgress, PlayerSkill, Skill } from '@/types/game';
+import type {
+  Achievement,
+  BattlePassProgress,
+  PlayerAchievement,
+  PlayerSkill,
+  Skill,
+} from '@/types/game';
 
 export default function SkillsBattlePass() {
-  const { token } = useAuth();
+  const { token, refreshPlayer } = useAuth();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [mySkills, setMySkills] = useState<PlayerSkill[]>([]);
   const [bp, setBp] = useState<BattlePassProgress | null>(null);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [myAchievements, setMyAchievements] = useState<PlayerAchievement[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
 
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const [allSkills, playerSkills, battlePass] = await Promise.all([
-        api.skills() as Promise<Skill[]>,
-        api.mySkills() as Promise<PlayerSkill[]>,
-        api
-          .myBattlePass()
-          .catch(() => null) as Promise<BattlePassProgress | null>,
-      ]);
+      const [allSkills, playerSkills, battlePass, allAch, playerAch] =
+        await Promise.all([
+          api.skills() as Promise<Skill[]>,
+          api.mySkills() as Promise<PlayerSkill[]>,
+          api
+            .myBattlePass()
+            .catch(() => null) as Promise<BattlePassProgress | null>,
+          api.achievements().catch(() => []) as Promise<Achievement[]>,
+          api.myAchievements().catch(() => []) as Promise<PlayerAchievement[]>,
+        ]);
       setSkills(Array.isArray(allSkills) ? allSkills : []);
       setMySkills(Array.isArray(playerSkills) ? playerSkills : []);
       setBp(battlePass);
+      setAchievements(Array.isArray(allAch) ? allAch : []);
+      setMyAchievements(Array.isArray(playerAch) ? playerAch : []);
     } catch {
       /* ignore */
     }
@@ -55,7 +68,27 @@ export default function SkillsBattlePass() {
     try {
       await api.claimBattlePass(level);
       setMsg(`Recompensa de nivel ${level} cobrada`);
-      await load();
+      await Promise.all([load(), refreshPlayer()]);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function checkAchievements() {
+    setBusy('ach-check');
+    setMsg('');
+    try {
+      const unlocked = (await api.checkAchievements()) as PlayerAchievement[];
+      if (Array.isArray(unlocked) && unlocked.length > 0) {
+        setMsg(
+          `¡Desbloqueaste ${unlocked.length} logro(s) nuevo(s)! Recompensas acreditadas.`,
+        );
+      } else {
+        setMsg('No hay nuevos logros desbloqueados por ahora.');
+      }
+      await Promise.all([load(), refreshPlayer()]);
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : 'Error');
     } finally {
@@ -64,6 +97,7 @@ export default function SkillsBattlePass() {
   }
 
   const skillMap = new Map(mySkills.map((ps) => [ps.skill.id, ps]));
+  const unlockedAchIds = new Set(myAchievements.map((pa) => pa.achievement.id));
 
   return (
     <div className="space-y-6">
@@ -99,6 +133,57 @@ export default function SkillsBattlePass() {
                     Entrenar
                   </button>
                 )}
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <section>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-amber-400">
+            Logros ({myAchievements.length}/{achievements.length})
+          </h2>
+          <button
+            type="button"
+            disabled={busy === 'ach-check'}
+            onClick={() => {
+              void checkAchievements();
+            }}
+            className="rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+          >
+            {busy === 'ach-check' ? 'Comprobando…' : 'Comprobar logros'}
+          </button>
+        </div>
+        <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+          {achievements.map((a) => {
+            const unlocked = unlockedAchIds.has(a.id);
+            return (
+              <li
+                key={a.id}
+                className={`rounded-lg border p-3 text-sm flex items-start justify-between gap-2 ${
+                  unlocked
+                    ? 'border-emerald-500/40 bg-emerald-950/20'
+                    : 'border-zinc-800 bg-zinc-900/50'
+                }`}
+              >
+                <div>
+                  <div className="font-medium flex items-center gap-1.5">
+                    <span>{unlocked ? '🏆' : '🔒'}</span>
+                    <span>{a.name}</span>
+                  </div>
+                  <div className="text-xs text-zinc-400 mt-0.5">
+                    {a.description}
+                  </div>
+                </div>
+                <div className="text-right text-xs shrink-0">
+                  <div className="text-emerald-400">
+                    +{a.rewardEuros.toLocaleString('es-ES')} €
+                  </div>
+                  {a.rewardVida > 0 && (
+                    <div className="text-amber-300">+{a.rewardVida} VC</div>
+                  )}
+                </div>
               </li>
             );
           })}

@@ -52,6 +52,14 @@ const MARKET_GOODS: MarketGoodDef[] = [
       Ibiza: 1.34,
       'Las Palmas': 0.82,
       Tenerife: 0.84,
+      Málaga: 1.18,
+      Granada: 0.92,
+      Alicante: 1.15,
+      Murcia: 0.87,
+      Gijón: 0.9,
+      Santander: 1.14,
+      Pamplona: 0.98,
+      Lanzarote: 1.24,
     },
   },
   {
@@ -79,6 +87,14 @@ const MARKET_GOODS: MarketGoodDef[] = [
       Ibiza: 0.88,
       'Las Palmas': 0.78,
       Tenerife: 0.8,
+      Málaga: 1.24,
+      Granada: 0.95,
+      Alicante: 1.04,
+      Murcia: 0.89,
+      Gijón: 0.94,
+      Santander: 0.98,
+      Pamplona: 1.12,
+      Lanzarote: 0.82,
     },
   },
   {
@@ -106,6 +122,14 @@ const MARKET_GOODS: MarketGoodDef[] = [
       Ibiza: 1.28,
       'Las Palmas': 1.12,
       Tenerife: 1.14,
+      Málaga: 0.82,
+      Granada: 0.74,
+      Alicante: 0.94,
+      Murcia: 0.79,
+      Gijón: 1.2,
+      Santander: 1.22,
+      Pamplona: 1.16,
+      Lanzarote: 1.26,
     },
   },
   {
@@ -133,6 +157,14 @@ const MARKET_GOODS: MarketGoodDef[] = [
       Ibiza: 1.15,
       'Las Palmas': 1.22,
       Tenerife: 1.25,
+      Málaga: 1.14,
+      Granada: 1.04,
+      Alicante: 0.85,
+      Murcia: 0.82,
+      Gijón: 1.08,
+      Santander: 1.1,
+      Pamplona: 1.05,
+      Lanzarote: 1.2,
     },
   },
 ];
@@ -355,13 +387,18 @@ export class WorldService {
         condition: number | null;
       };
 
+      const tollMultiplier = player.faction === 'NIGHT_RACING' ? 0.65 : 1;
+      const effectiveToll = Math.round(route.tollEuros * tollMultiplier * 100) / 100;
+
       if (primaryVehicle) {
         const speed = Math.max(20, primaryVehicle.template.speed);
         const condition = Math.max(
           10,
           Math.min(100, primaryVehicle.condition ?? 100),
         );
-        const effectiveKmh = speed * 1.35 * (0.5 + 0.5 * (condition / 100));
+        const racingSpeedBoost = player.faction === 'NIGHT_RACING' ? 1.15 : 1;
+        const effectiveKmh =
+          speed * 1.35 * racingSpeedBoost * (0.5 + 0.5 * (condition / 100));
         durationSec = Math.max(
           3,
           Math.round((route.distanceKm / effectiveKmh) * 60),
@@ -369,7 +406,7 @@ export class WorldService {
         baseCostEuros = route.isIntercity
           ? Math.round(
               (route.distanceKm * 0.12 * (1 + (100 - condition) / 200) +
-                route.tollEuros) *
+                effectiveToll) *
                 100,
             ) / 100
           : Math.max(1, Math.round(route.distanceKm * 0.4 * 100) / 100);
@@ -422,7 +459,8 @@ export class WorldService {
       ];
 
       if (route.isIntercity && newHeat >= 50) {
-        if (primaryVehicle && primaryVehicle.template.speed >= 80) {
+        const evasionSpeedThreshold = player.faction === 'NIGHT_RACING' ? 70 : 80;
+        if (primaryVehicle && primaryVehicle.template.speed >= evasionSpeedThreshold) {
           narrativeParts.push(
             `Control de la Guardia Civil en la ${route.highway}, pero tu ${primaryVehicle.template.name} acelera a fondo y logras evadirlo sin consecuencias.`,
           );
@@ -531,19 +569,45 @@ export class WorldService {
       let narrative = '';
       if (action.id === 'huir_calor') {
         heatDelta = -15 - Math.floor(Math.random() * 10);
+        if (p.faction === 'ENTREPRENEUR' || p.faction === 'CYBER_HACKER') {
+          heatDelta -= 5;
+        }
         narrative = 'Te escondes y dejas pasar el ruido. El calor baja.';
         xpDelta = 5;
       } else if (failed) {
         heatDelta = 8 + Math.floor(Math.random() * 12);
+        if (p.faction === 'CYBER_HACKER') {
+          heatDelta = Math.max(4, Math.round(heatDelta * 0.7));
+        }
         eurosDelta =
           action.lifestyle === 'STREET' ? -Math.floor(20 + Math.random() * 80) : 0;
         narrative = `La movida "${action.label}" se torció. El barrio te mira.`;
         xpDelta = 3;
       } else {
-        eurosDelta = 30 + p.level * 5 + Math.floor(Math.random() * 40);
+        const baseEuros = 30 + p.level * 5 + Math.floor(Math.random() * 40);
+        let factionMultiplier = 1;
+        if (p.faction === 'SYNDICATE' && action.lifestyle === 'STREET') {
+          factionMultiplier = 1.15;
+        } else if (p.faction === 'ENTREPRENEUR' && action.lifestyle === 'LEGAL') {
+          factionMultiplier = 1.15;
+        } else if (
+          p.faction === 'CYBER_HACKER' &&
+          (action.id === 'negocio_gris' || action.id === 'networking')
+        ) {
+          factionMultiplier = 1.15;
+        } else if (
+          p.faction === 'CARTEL_MARITIMO' &&
+          (action.id === 'reparto' || action.id === 'amenaza')
+        ) {
+          factionMultiplier = 1.15;
+        }
+        eurosDelta = Math.round(baseEuros * factionMultiplier);
         xpDelta = 10 + Math.floor(Math.random() * 10);
         repDelta = action.lifestyle === 'STREET' ? 2 : 1;
         heatDelta = Math.floor(action.risk * 20);
+        if (p.faction === 'CYBER_HACKER') {
+          heatDelta = Math.floor(heatDelta * 0.7);
+        }
         narrative = `"${action.label}" sale bien. +${eurosDelta}€`;
       }
       const newHeat = Math.max(0, Math.min(100, heat + heatDelta));

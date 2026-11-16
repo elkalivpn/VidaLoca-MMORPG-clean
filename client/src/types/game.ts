@@ -6,7 +6,15 @@ export interface User {
 }
 
 export type FactionType =
-  'CIVILIAN' | 'POLICE' | 'GUARDIA_CIVIL' | 'SYNDICATE' | 'ENTREPRENEUR';
+  | 'CIVILIAN'
+  | 'POLICE'
+  | 'GUARDIA_CIVIL'
+  | 'SYNDICATE'
+  | 'ENTREPRENEUR'
+  | 'ERTZAINTZA_MOSSOS'
+  | 'CYBER_HACKER'
+  | 'CARTEL_MARITIMO'
+  | 'NIGHT_RACING';
 
 export interface Player {
   id: string;

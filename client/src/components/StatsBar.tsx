@@ -31,6 +31,26 @@ const FACTION_BADGES: Record<
     icon: '🏙️',
     className: 'border-zinc-700 bg-zinc-800/70 text-zinc-300',
   },
+  ERTZAINTZA_MOSSOS: {
+    label: 'Autonómicas',
+    icon: '🚓',
+    className: 'border-indigo-500/40 bg-indigo-500/15 text-indigo-300',
+  },
+  CYBER_HACKER: {
+    label: 'ShadowNet',
+    icon: '💻',
+    className: 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300',
+  },
+  CARTEL_MARITIMO: {
+    label: 'Portuaria',
+    icon: '⚓',
+    className: 'border-teal-500/40 bg-teal-500/15 text-teal-300',
+  },
+  NIGHT_RACING: {
+    label: 'Apex Racing',
+    icon: '🏎️',
+    className: 'border-fuchsia-500/40 bg-fuchsia-500/15 text-fuchsia-300',
+  },
 };
 
 export default function StatsBar({

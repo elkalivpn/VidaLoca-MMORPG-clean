@@ -64,8 +64,16 @@ function inferHighway(from: CityLocation, to: CityLocation): string {
     return `Red Urbana ${from.city}`;
   }
   const cities = new Set([from.city, to.city]);
-  if (cities.has('Las Palmas') || cities.has('Tenerife')) {
-    if (cities.has('Las Palmas') && cities.has('Tenerife')) {
+  if (
+    cities.has('Las Palmas') ||
+    cities.has('Tenerife') ||
+    cities.has('Lanzarote')
+  ) {
+    if (
+      (cities.has('Las Palmas') && cities.has('Tenerife')) ||
+      (cities.has('Las Palmas') && cities.has('Lanzarote')) ||
+      (cities.has('Tenerife') && cities.has('Lanzarote'))
+    ) {
       return 'Ferry Canario / Binter';
     }
     return 'Puente Aéreo Atlántico';
@@ -83,12 +91,24 @@ function inferHighway(from: CityLocation, to: CityLocation): string {
   ) {
     return 'Corredor A-6 / AP-9 Galicia';
   }
+  if (cities.has('Gijón') || cities.has('Santander')) {
+    return 'Autovía del Cantábrico A-8 / A-66';
+  }
+  if (cities.has('Pamplona')) {
+    return 'Autopista AP-15 / A-15 Navarra';
+  }
   if (
     cities.has('San Sebastián') ||
     cities.has('Vitoria-Gasteiz') ||
     cities.has('Bilbao')
   ) {
     return 'Autopista AP-8 / AP-68 País Vasco';
+  }
+  if (cities.has('Málaga') || cities.has('Granada')) {
+    return 'Autovía A-92 / AP-7 Andalucía';
+  }
+  if (cities.has('Alicante') || cities.has('Murcia')) {
+    return 'Corredor Mediterráneo A-7 / A-31';
   }
   if (cities.has('Madrid') && cities.has('Toledo')) return 'Autovía A-42';
   if (cities.has('Madrid') && cities.has('Valladolid'))

@@ -66,8 +66,57 @@ const FACTION_CATALOG: FactionCatalogItem[] = [
     name: 'Empresario',
     description: 'Élite financiera orientada a propiedades, clubes y negocios.',
     perks: [
+      '+15% de rendimiento en alquileres y acciones legales',
       'Perfil limpio ante controles',
       'Sinergia con inversiones y rentas',
+    ],
+    requirements: {},
+  },
+  {
+    id: FactionType.ERTZAINTZA_MOSSOS,
+    name: 'Fuerzas Autonómicas',
+    description:
+      'Unidades tácticas de Ertzaintza y Mossos d\'Esquadra con despliegue rápido regional.',
+    perks: [
+      'Acceso a /intercept contra sospechosos en tu zona',
+      'Despliegue ágil entre País Vasco, Navarra y Cataluña',
+      'Recompensas en € y XP por captura',
+    ],
+    requirements: { maxHeat: 0, notJailed: true },
+  },
+  {
+    id: FactionType.CYBER_HACKER,
+    name: 'Colectivo ShadowNet',
+    description:
+      'Red de hackers, infiltradores digitales y operadores fantasma sin huella.',
+    perks: [
+      '-30% de calor policial generado en golpes y tratos grises',
+      '+5% de éxito adicional en golpes cooperativos',
+      '+15% de recompensa en operaciones digitales y contactos',
+    ],
+    requirements: {},
+  },
+  {
+    id: FactionType.CARTEL_MARITIMO,
+    name: 'Hermandad Portuaria',
+    description:
+      'Sindicato marítimo de Galicia, Levante, Baleares y Canarias experto en descargas y puertos.',
+    perks: [
+      '+15% de botín en repartos y comercio marítimo en ciudades costeras',
+      'Ventaja en rutas de ferry y descargas nocturnas',
+      '+10% de botín en golpes portuarios',
+    ],
+    requirements: {},
+  },
+  {
+    id: FactionType.NIGHT_RACING,
+    name: 'Club Nocturno Apex',
+    description:
+      'Escudería clandestina de autopistas, drift de montaña y fugas a 300 km/h.',
+    perks: [
+      '-35% en peajes de autopistas y autovías',
+      'Evasión mejorada en controles de carretera con vehículos rápidos',
+      'Mayor velocidad efectiva en rutas interurbanas',
     ],
     requirements: {},
   },
@@ -76,6 +125,7 @@ const FACTION_CATALOG: FactionCatalogItem[] = [
 const LAW_ENFORCEMENT_FACTIONS: FactionType[] = [
   FactionType.POLICE,
   FactionType.GUARDIA_CIVIL,
+  FactionType.ERTZAINTZA_MOSSOS,
 ];
 
 @Injectable()
@@ -122,7 +172,7 @@ export class FactionsService {
       }
       if ((player.heat ?? 0) > 0) {
         throw new BadRequestException(
-          'Debes tener calor policial en 0 para unirte a Policía o Guardia Civil',
+          'Debes tener calor policial en 0 para unirte a las fuerzas del orden',
         );
       }
     }
@@ -189,7 +239,7 @@ export class FactionsService {
 
       if (!LAW_ENFORCEMENT_FACTIONS.includes(agent.faction)) {
         throw new ForbiddenException(
-          'Solo Policía o Guardia Civil pueden interceptar sospechosos',
+          'Solo las fuerzas del orden (Policía, Guardia Civil o Autonómicas) pueden interceptar sospechosos',
         );
       }
 
