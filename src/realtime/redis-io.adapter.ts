@@ -74,13 +74,32 @@ export class RedisIoAdapter extends IoAdapter {
   createIOServer(port: number, options?: ServerOptions): any {
     const isProduction =
       this.configService.get<string>('NODE_ENV') === 'production';
-    const frontendUrl = this.configService.get<string>(
-      'FRONTEND_URL',
+    const allowedOrigins = [
+      this.configService.get<string>('FRONTEND_URL', ''),
+      this.configService.get<string>('ALLOWED_ORIGINS', ''),
+      'https://vidaloca-mmorpg.vercel.app',
       'http://localhost:3001',
-    );
+    ]
+      .join(',')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     const corsOrigin = isProduction
-      ? [frontendUrl, 'https://vida-loca-mmorpg.vercel.app']
+      ? (
+          origin: string | undefined,
+          callback: (err: Error | null, allow?: boolean) => void,
+        ) => {
+          if (
+            !origin ||
+            allowedOrigins.includes(origin) ||
+            /^https:\/\/vidaloca[a-z0-9-]*\.vercel\.app$/.test(origin)
+          ) {
+            callback(null, true);
+          } else {
+            callback(new Error('Origin not allowed by WebSocket CORS policy'), false);
+          }
+        }
       : true;
 
     const mergedOptions: ServerOptions = {
