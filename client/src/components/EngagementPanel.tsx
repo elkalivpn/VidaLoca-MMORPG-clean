@@ -4,7 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { playCoinSfx, playLevelUpSfx } from '@/lib/sfx';
-import type { EngagementStatus, LeaderboardsResponse } from '@/types/game';
+import type {
+  EngagementStatus,
+  LeaderboardsResponse,
+  WorldEventStatus,
+} from '@/types/game';
 
 type LbTab = 'richest' | 'topLevel' | 'mostWanted' | 'topClans';
 
@@ -12,6 +16,8 @@ export default function EngagementPanel() {
   const { token, player, refreshPlayer } = useAuth();
   const [status, setStatus] = useState<EngagementStatus | null>(null);
   const [boards, setBoards] = useState<LeaderboardsResponse | null>(null);
+  const [worldEvent, setWorldEvent] = useState<WorldEventStatus | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number>(0);
   const [lbTab, setLbTab] = useState<LbTab>('richest');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -20,12 +26,17 @@ export default function EngagementPanel() {
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const [st, lb] = await Promise.all([
+      const [st, lb, we] = await Promise.all([
         api.engagementStatus(),
         api.leaderboards(),
+        api.worldEvent().catch(() => null),
       ]);
       setStatus(st);
       setBoards(lb);
+      if (we) {
+        setWorldEvent(we);
+        setSecondsLeft(we.remainingSeconds ?? 0);
+      }
     } catch {
       /* ignore transient fetch errors */
     }
@@ -34,6 +45,14 @@ export default function EngagementPanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!worldEvent) return;
+    const id = window.setInterval(() => {
+      setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [worldEvent]);
 
   async function handleClaimDaily() {
     if (!token || busyId) return;
@@ -81,6 +100,29 @@ export default function EngagementPanel() {
     }
   }
 
+  async function handleParticipateEvent() {
+    if (!token || busyId) return;
+    setBusyId('world-event');
+    setMsg('');
+    try {
+      const prevLevel = player?.level ?? 1;
+      const res = await api.participateWorldEvent();
+      if ((res.player?.level ?? 1) > prevLevel) {
+        playLevelUpSfx();
+      } else {
+        playCoinSfx();
+      }
+      setMsg(
+        `🔥 ¡Evento "${res.title}" completado! +${res.reward.euros.toLocaleString('es-ES')} €, +${res.reward.xp} XP, +${res.reward.vidaCoins} VC (+${res.reward.battlePassXp} XP Battle Pass)`,
+      );
+      await Promise.all([load(), refreshPlayer()]);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : 'Error al participar');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   function copyReferralLink() {
     if (!status?.referralCode || typeof window === 'undefined') return;
     const url = `${window.location.origin}/?ref=${status.referralCode}`;
@@ -96,16 +138,19 @@ export default function EngagementPanel() {
         ? `/?ref=${status.referralCode}`
         : '';
 
+  const mm = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
+  const ss = String(secondsLeft % 60).padStart(2, '0');
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold text-amber-400">
-            Recompensas Diarias, Retos &amp; Rankings
+            Eventos en Vivo, Recompensas Diarias &amp; Rankings
           </h2>
           <p className="text-xs text-zinc-400">
-            Entra cada día para multiplicar tus euros y VidaCoins, completa
-            retos y escala en el ranking de España.
+            Participa en el evento horario de España, mantén tu racha diaria y
+            consulta tus últimos movimientos.
           </p>
         </div>
         {status?.isVip && (
@@ -119,6 +164,57 @@ export default function EngagementPanel() {
         <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
           {msg}
         </p>
+      )}
+
+      {/* 0. Evento Dinámico de Ciudad (Rotación Horaria) */}
+      {worldEvent && (
+        <section className="rounded-xl border border-rose-500/40 bg-gradient-to-r from-rose-950/35 via-zinc-900/90 to-amber-950/25 p-4 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-rose-500/20 border border-rose-500/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-300">
+                🔥 Evento en Vivo · {worldEvent.event.city}
+              </span>
+              <span className="text-[11px] font-mono text-amber-300">
+                ⏱ {mm}:{ss}
+              </span>
+            </div>
+            <span className="text-[11px] font-semibold text-emerald-300">
+              +{worldEvent.event.rewardEuros.toLocaleString('es-ES')} € · +
+              {worldEvent.event.rewardXp} XP · +
+              {worldEvent.event.rewardVidaCoins} VC
+              {worldEvent.isVip ? ' (+Bonus VIP)' : ''}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-white">
+                {worldEvent.event.title}
+              </h3>
+              <p className="text-xs text-zinc-300">
+                {worldEvent.event.description}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={worldEvent.participated || busyId === 'world-event'}
+              onClick={() => {
+                void handleParticipateEvent();
+              }}
+              className={`shrink-0 rounded-lg px-4 py-2 text-xs font-bold transition ${
+                worldEvent.participated
+                  ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                  : 'bg-gradient-to-r from-rose-500 to-amber-500 text-zinc-950 hover:from-rose-400 hover:to-amber-400 disabled:opacity-50'
+              }`}
+            >
+              {worldEvent.participated
+                ? '✅ Participado esta hora'
+                : busyId === 'world-event'
+                  ? 'Desplegando…'
+                  : '⚡ Participar en Evento'}
+            </button>
+          </div>
+        </section>
       )}
 
       {/* 1. Racha Diaria 7 Días */}
@@ -412,6 +508,49 @@ export default function EngagementPanel() {
           </ul>
         )}
       </section>
+
+      {/* 5. Buzón / Historial de Movimientos Recientes */}
+      {worldEvent?.recentActivity && worldEvent.recentActivity.length > 0 && (
+        <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-zinc-100">
+              📬 Buzón &amp; Movimientos Recientes
+            </h3>
+            <span className="text-[11px] text-zinc-500">
+              Últimas 10 operaciones
+            </span>
+          </div>
+          <ul className="space-y-1.5">
+            {worldEvent.recentActivity.map((item) => {
+              const isGain = item.type === 'EARN' || item.type === 'GIFT';
+              return (
+                <li
+                  key={item.id}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/70 px-3 py-2 text-xs"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-zinc-200">
+                      {item.reason}
+                    </p>
+                    <p className="text-[10px] text-zinc-500">
+                      {new Date(item.createdAt).toLocaleString('es-ES')}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 font-bold ${
+                      isGain ? 'text-emerald-400' : 'text-rose-400'
+                    }`}
+                  >
+                    {isGain ? '+' : '-'}
+                    {item.amount.toLocaleString('es-ES')}{' '}
+                    {item.currency === 'VIDACOIN' ? 'VC' : '€'}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

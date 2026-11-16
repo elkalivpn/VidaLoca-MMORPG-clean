@@ -7,6 +7,7 @@ import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateLevelFromXp } from '../common/utils/level.util';
 import { grantBattlePassXpTx } from '../common/utils/battle-pass.util';
+import { isPlayerVipActive } from '../common/utils/vip.util';
 
 export interface DailyStreakReward {
   day: number;
@@ -537,5 +538,240 @@ export class EngagementService {
     };
 
     return data;
+  }
+
+  private static readonly WORLD_EVENTS = [
+    {
+      id: 'madrid_convoy',
+      title: 'Convoy Blindado en Gran Vía',
+      city: 'Madrid',
+      zoneId: 'madrid_centro',
+      description:
+        'Un furgón corporativo cruza el centro con reservas limpias. Intercepta o escolta el envío.',
+      rewardEuros: 750,
+      rewardXp: 90,
+      rewardVidaCoins: 2,
+    },
+    {
+      id: 'marbella_subasta',
+      title: 'Subasta Relámpago en Puerto Banús',
+      city: 'Marbella',
+      zoneId: 'marbella_banus',
+      description:
+        'Coleccionistas privados liquidan activos de lujo junto a los megayates.',
+      rewardEuros: 900,
+      rewardXp: 85,
+      rewardVidaCoins: 3,
+    },
+    {
+      id: 'barcelona_redada',
+      title: 'Operación Nocturna en El Raval',
+      city: 'Barcelona',
+      zoneId: 'barcelona_centro',
+      description:
+        'Movimiento coordinado entre puertos y callejones del Barrio Gótico.',
+      rewardEuros: 700,
+      rewardXp: 110,
+      rewardVidaCoins: 2,
+    },
+    {
+      id: 'vigo_ria',
+      title: 'Desembarco en la Ría de Vigo',
+      city: 'Vigo',
+      zoneId: 'vigo_puerto',
+      description:
+        'Descarga nocturna de contenedores de alto valor bajo niebla atlántica.',
+      rewardEuros: 800,
+      rewardXp: 95,
+      rewardVidaCoins: 2,
+    },
+    {
+      id: 'valencia_drift',
+      title: 'Circuito Drift en Ciudad de las Artes',
+      city: 'Valencia',
+      zoneId: 'valencia_centro',
+      description:
+        'Reto callejero cronometrado con apuestas en vivo sobre el asfalto.',
+      rewardEuros: 680,
+      rewardXp: 120,
+      rewardVidaCoins: 2,
+    },
+    {
+      id: 'sansebastian_cumbre',
+      title: 'Cumbre Privada en La Concha',
+      city: 'San Sebastián',
+      zoneId: 'sansebastian_concha',
+      description:
+        'Acuerdos de alto nivel en la bahía con comisiones exprés garantizadas.',
+      rewardEuros: 950,
+      rewardXp: 90,
+      rewardVidaCoins: 3,
+    },
+    {
+      id: 'ibiza_botafoch',
+      title: 'Noche Dorada en Marina Botafoch',
+      city: 'Ibiza',
+      zoneId: 'ibiza_puerto',
+      description:
+        'Fiesta exclusiva VIP y movimiento de divisas entre clubes baleares.',
+      rewardEuros: 1000,
+      rewardXp: 100,
+      rewardVidaCoins: 3,
+    },
+    {
+      id: 'canarias_franca',
+      title: 'Ruta Franca en Puerto de La Luz',
+      city: 'Las Palmas',
+      zoneId: 'palmas_puerto',
+      description:
+        'Ventana libre de aranceles en el puente tricontinental atlántico.',
+      rewardEuros: 780,
+      rewardXp: 105,
+      rewardVidaCoins: 2,
+    },
+  ];
+
+  private getCurrentWorldEventWindow(now = new Date()) {
+    const hourIndex = Math.floor(now.getTime() / 3600_000);
+    const hourKey = now.toISOString().slice(0, 13); // YYYY-MM-DDTHH
+    const event =
+      EngagementService.WORLD_EVENTS[
+        hourIndex % EngagementService.WORLD_EVENTS.length
+      ];
+    const endMs = (hourIndex + 1) * 3600_000;
+    const remainingSeconds = Math.max(0, Math.ceil((endMs - now.getTime()) / 1000));
+    return {
+      hourKey,
+      event,
+      endsAt: new Date(endMs).toISOString(),
+      remainingSeconds,
+    };
+  }
+
+  async getWorldEventStatus(userId: string) {
+    const player = await this.prisma.player.findUnique({ where: { userId } });
+    if (!player) throw new NotFoundException('Player not found');
+
+    const now = new Date();
+    const { hourKey, event, endsAt, remainingSeconds } =
+      this.getCurrentWorldEventWindow(now);
+    const eventRef = `world-event:${hourKey}`;
+
+    const [existingClaim, recentActivity] = await Promise.all([
+      this.prisma.transactionLog.findFirst?.({
+        where: { playerId: player.id, reference: eventRef },
+        select: { id: true },
+      }) ?? Promise.resolve(null),
+      this.prisma.transactionLog.findMany?.({
+        where: { playerId: player.id },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          type: true,
+          amount: true,
+          currency: true,
+          reason: true,
+          createdAt: true,
+        },
+      }) ?? Promise.resolve([]),
+    ]);
+
+    return {
+      hourKey,
+      event,
+      endsAt,
+      remainingSeconds,
+      participated: Boolean(existingClaim),
+      isVip: isPlayerVipActive(player),
+      recentActivity,
+    };
+  }
+
+  async participateInWorldEvent(userId: string) {
+    const player = await this.prisma.player.findUnique({ where: { userId } });
+    if (!player) throw new NotFoundException('Player not found');
+
+    const now = new Date();
+    const { hourKey, event } = this.getCurrentWorldEventWindow(now);
+    const eventRef = `world-event:${hourKey}`;
+    const isVipActive = isPlayerVipActive(player);
+
+    const grantedEuros = Math.round(
+      event.rewardEuros * (isVipActive ? 1.15 : 1.0),
+    );
+    const grantedXp = Math.round(event.rewardXp * (isVipActive ? 1.25 : 1.0));
+    const grantedVidaCoins = event.rewardVidaCoins + (isVipActive ? 1 : 0);
+    const battlePassXp = 40;
+
+    return this.prisma.$transaction(async (tx) => {
+      const alreadyClaimed = await tx.transactionLog.findFirst?.({
+        where: { playerId: player.id, reference: eventRef },
+        select: { id: true },
+      });
+
+      if (alreadyClaimed) {
+        throw new BadRequestException(
+          'Ya participaste en el evento mundial de esta hora. Vuelve en la siguiente hora.',
+        );
+      }
+
+      const nextXp = player.xp + grantedXp;
+      const nextLevel = Math.max(player.level, calculateLevelFromXp(nextXp));
+
+      const updated = await tx.player.update({
+        where: { id: player.id },
+        data: {
+          euros: { increment: grantedEuros },
+          vidaCoins: { increment: grantedVidaCoins },
+          xp: nextXp,
+          level: nextLevel,
+        },
+      });
+
+      await tx.transactionLog.create({
+        data: {
+          playerId: player.id,
+          type: 'EARN',
+          amount: grantedEuros,
+          currency: 'EUR',
+          reason: `Evento Mundial: ${event.title}${isVipActive ? ' (VIP +15%)' : ''}`,
+          reference: eventRef,
+        },
+      });
+
+      await tx.transactionLog.create({
+        data: {
+          playerId: player.id,
+          type: 'EARN',
+          amount: grantedVidaCoins,
+          currency: 'VIDACOIN',
+          reason: `Evento Mundial: ${event.title} (VC)`,
+          reference: eventRef,
+        },
+      });
+
+      await grantBattlePassXpTx(tx, player.id, battlePassXp);
+
+      return {
+        hourKey,
+        eventId: event.id,
+        title: event.title,
+        city: event.city,
+        vipBonusApplied: isVipActive,
+        reward: {
+          euros: grantedEuros,
+          xp: grantedXp,
+          vidaCoins: grantedVidaCoins,
+          battlePassXp,
+        },
+        player: {
+          euros: updated.euros,
+          vidaCoins: updated.vidaCoins,
+          xp: updated.xp,
+          level: updated.level,
+        },
+      };
+    });
   }
 }

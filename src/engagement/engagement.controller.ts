@@ -39,4 +39,16 @@ export class EngagementController {
   async getLeaderboards() {
     return this.engagementService.getLeaderboards();
   }
+
+  @Get('world-event')
+  @UseGuards(AuthGuard('jwt'))
+  async getWorldEvent(@CurrentUser('id') userId: string) {
+    return this.engagementService.getWorldEventStatus(userId);
+  }
+
+  @Post('world-event/participate')
+  @UseGuards(AuthGuard('jwt'))
+  async participateWorldEvent(@CurrentUser('id') userId: string) {
+    return this.engagementService.participateInWorldEvent(userId);
+  }
 }

@@ -19,6 +19,7 @@ import type {
   WorldMapResponse,
   WorldMarketResponse,
   WorldTravelResponse,
+  WorldEventStatus,
 } from '@/types/game';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
@@ -341,6 +342,22 @@ export const api = {
       body: JSON.stringify({ challengeId }),
     }),
   leaderboards: () => request<LeaderboardsResponse>('/engagement/leaderboards'),
+  worldEvent: () => request<WorldEventStatus>('/engagement/world-event'),
+  participateWorldEvent: () =>
+    request<{
+      hourKey: string;
+      eventId: string;
+      title: string;
+      city: string;
+      vipBonusApplied: boolean;
+      reward: {
+        euros: number;
+        xp: number;
+        vidaCoins: number;
+        battlePassXp: number;
+      };
+      player: Partial<Player>;
+    }>('/engagement/world-event/participate', { method: 'POST' }),
 
   // Marketplace P2P & VIP Shop
   marketListings: () => request<MarketListing[]>('/marketplace/listings'),

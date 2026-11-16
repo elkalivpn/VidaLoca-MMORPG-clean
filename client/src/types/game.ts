@@ -542,3 +542,33 @@ export interface VipShopOffer {
     'VIP' | 'UTILITY' | 'CHARACTER' | 'CLOTHING' | 'WEAPON' | 'COSMETIC';
   templateName?: string;
 }
+
+export interface WorldEventItem {
+  id: string;
+  title: string;
+  city: string;
+  zoneId: string;
+  description: string;
+  rewardEuros: number;
+  rewardXp: number;
+  rewardVidaCoins: number;
+}
+
+export interface PlayerActivityItem {
+  id: string;
+  type: 'EARN' | 'SPEND' | 'PURCHASE' | 'GIFT' | 'PENALTY';
+  amount: number;
+  currency: 'EUR' | 'VIDACOIN';
+  reason: string;
+  createdAt: string;
+}
+
+export interface WorldEventStatus {
+  hourKey: string;
+  event: WorldEventItem;
+  endsAt: string;
+  remainingSeconds: number;
+  participated: boolean;
+  isVip: boolean;
+  recentActivity: PlayerActivityItem[];
+}

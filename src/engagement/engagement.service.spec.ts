@@ -19,6 +19,8 @@ describe('EngagementService', () => {
     transactionLog: {
       create: jest.Mock;
       createMany: jest.Mock;
+      findFirst: jest.Mock;
+      findMany: jest.Mock;
     };
     $transaction: jest.Mock;
   };
@@ -38,6 +40,8 @@ describe('EngagementService', () => {
       transactionLog: {
         create: jest.fn(),
         createMany: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
       },
       $transaction: jest.fn(),
     };
@@ -141,5 +145,58 @@ describe('EngagementService', () => {
     await service.getLeaderboards();
 
     expect(prisma.clan.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns active hourly world event and recent activity', async () => {
+    prisma.player.findUnique.mockResolvedValue({
+      id: 'p1',
+      isVip: false,
+      vipExpiresAt: null,
+    });
+    prisma.transactionLog.findFirst.mockResolvedValue(null);
+    prisma.transactionLog.findMany.mockResolvedValue([
+      {
+        id: 'tx-1',
+        type: 'EARN',
+        amount: 500,
+        currency: 'EUR',
+        reason: 'Venta P2P',
+        createdAt: new Date(),
+      },
+    ]);
+
+    const res = await service.getWorldEventStatus('u1');
+
+    expect(res.event).toBeDefined();
+    expect(res.participated).toBe(false);
+    expect(res.recentActivity).toHaveLength(1);
+  });
+
+  it('grants VIP bonus on world event participation and blocks duplicate hourly claim', async () => {
+    prisma.player.findUnique.mockResolvedValue({
+      id: 'p1',
+      xp: 100,
+      level: 2,
+      isVip: true,
+      vipExpiresAt: new Date(Date.now() + 86_400_000),
+    });
+    prisma.transactionLog.findFirst.mockResolvedValueOnce(null);
+    prisma.player.update.mockResolvedValue({
+      euros: 1000,
+      vidaCoins: 5,
+      xp: 220,
+      level: 3,
+    });
+    prisma.transactionLog.create.mockResolvedValue({});
+
+    const res = await service.participateInWorldEvent('u1');
+    expect(res.vipBonusApplied).toBe(true);
+    expect(res.reward.battlePassXp).toBe(40);
+    expect(res.reward.vidaCoins).toBeGreaterThanOrEqual(3);
+
+    prisma.transactionLog.findFirst.mockResolvedValueOnce({ id: 'already' });
+    await expect(service.participateInWorldEvent('u1')).rejects.toThrow(
+      BadRequestException,
+    );
   });
 });
