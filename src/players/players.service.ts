@@ -11,6 +11,7 @@ export class PlayersService {
     const player = await this.prisma.player.findUnique({
       where: { userId },
       include: {
+        user: { select: { username: true, isGuest: true } },
         inventory: { include: { template: true } },
         vehicles: { include: { template: true } },
         properties: { include: { template: true } },

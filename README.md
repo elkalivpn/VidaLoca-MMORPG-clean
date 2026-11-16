@@ -50,9 +50,10 @@ NestJS 11 · Prisma 7 · PostgreSQL (Supabase / Neon) · Socket.IO · Next.js 15
 - Rota `JWT_SECRET` y password de Neon si hubo filtración
 - Variables en hosting (Vercel/Railway), no en el repo
 
-## Fases
+## Documentación y Fases
 
-Ver [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md)
+- Guía de arquitectura, escalabilidad e incorporación de equipo: [ARCHITECTURE.md](./ARCHITECTURE.md)
+- Plan de desarrollo por fases: [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md)
 
 ## Licencia
 

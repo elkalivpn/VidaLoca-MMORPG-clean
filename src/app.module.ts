@@ -22,6 +22,8 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { WorldModule } from './world/world.module';
 import { FactionsModule } from './factions/factions.module';
 import { HeistsModule } from './heists/heists.module';
+import { EngagementModule } from './engagement/engagement.module';
+import { MarketplaceModule } from './marketplace/marketplace.module';
 
 @Module({
   imports: [
@@ -54,6 +56,8 @@ import { HeistsModule } from './heists/heists.module';
     WorldModule,
     FactionsModule,
     HeistsModule,
+    EngagementModule,
+    MarketplaceModule,
   ],
   providers: [
     {

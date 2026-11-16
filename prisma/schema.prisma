@@ -21,6 +21,7 @@ model User {
   username            String    @unique
   password            String
   role                UserRole  @default(PLAYER)
+  isGuest             Boolean   @default(false)
   isBanned            Boolean   @default(false)
   banReason           String?
   failedLoginAttempts Int       @default(0)
@@ -60,45 +61,61 @@ enum FactionType {
 }
 
 model Player {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                      String   @id @default(uuid())
+  userId                  String   @unique
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  displayName     String
-  level           Int      @default(1)
-  xp              Int      @default(0)
-  reputation      Int      @default(0)
+  displayName             String
+  level                   Int      @default(1)
+  xp                      Int      @default(0)
+  reputation              Int      @default(0)
   
-  euros           Float    @default(100.0)
-  dirtyEuros      Float    @default(0)
-  vidaCoins       Int      @default(0)
+  euros                   Float    @default(100.0)
+  dirtyEuros              Float    @default(0)
+  vidaCoins               Int      @default(0)
   
-  locationId      String?  @default("madrid_centro")
-  heat            Int      @default(0)
-  wantedLevel     Int      @default(0)
-  faction         FactionType @default(CIVILIAN)
-  factionRank     Int      @default(1)
-  jailUntil       DateTime?
-  lifestyle       String   @default("GREY")
-  isOnline        Boolean  @default(false)
-  lastLogin       DateTime @default(now())
-  
-  inventory       InventoryItem[]
-  vehicles        PlayerVehicle[]
-  properties      PlayerProperty[]
-  weapons         PlayerWeapon[]
-  clanMember      ClanMember?
-  missions        PlayerMission[]
-  battlePass      BattlePassProgress?
-  achievements    PlayerAchievement[]
-  transactions    TransactionLog[]
-  skills          PlayerSkill[]
-  completedMissions CompletedMission[]
-  gameSessions    GameSession[]
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  locationId              String?  @default("madrid_centro")
+  heat                    Int      @default(0)
+  wantedLevel             Int      @default(0)
+  faction                 FactionType @default(CIVILIAN)
+  factionRank             Int      @default(1)
+  jailUntil               DateTime?
+  lifestyle               String   @default("GREY")
+  isOnline                Boolean  @default(false)
+  lastLogin               DateTime @default(now())
 
+  referralCode            String?  @unique
+  referredByPlayerId      String?
+  loginStreak             Int      @default(0)
+  lastDailyClaimAt        DateTime?
+  isVip                   Boolean  @default(false)
+  vipExpiresAt            DateTime?
+  dailyChallengesDate     String?
+  dailyChallengesProgress Json?
+  
+  inventory               InventoryItem[]
+  vehicles                PlayerVehicle[]
+  properties              PlayerProperty[]
+  weapons                 PlayerWeapon[]
+  clanMember              ClanMember?
+  missions                PlayerMission[]
+  battlePass              BattlePassProgress?
+  achievements            PlayerAchievement[]
+  transactions            TransactionLog[]
+  skills                  PlayerSkill[]
+  completedMissions       CompletedMission[]
+  gameSessions            GameSession[]
+  marketListings          MarketListing[] @relation("SellerListings")
+  marketPurchases         MarketListing[] @relation("BuyerListings")
+  
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([referredByPlayerId])
+  @@index([euros])
+  @@index([reputation])
+  @@index([level, xp])
+  @@index([heat])
   @@map("players")
   @@schema("public")
 }
@@ -113,7 +130,8 @@ model ItemTemplate {
   priceEuros  Float?
   priceVida   Int?
   
-  items       InventoryItem[]
+  items          InventoryItem[]
+  marketListings MarketListing[]
   
   @@map("item_templates")
   @@schema("public")
@@ -279,10 +297,12 @@ model Territory {
   incomeRate  Float
   bonusType   String?
   
-  controllerId String?
-  controller   Clan?     @relation(fields: [controllerId], references: [id], onDelete: SetNull)
-  controls     ClanTerritory[]
+  controllerId       String?
+  controller         Clan?           @relation(fields: [controllerId], references: [id], onDelete: SetNull)
+  lastTaxCollectedAt DateTime?
+  controls           ClanTerritory[]
   
+  @@index([controllerId])
   @@map("territories")
   @@schema("public")
 }
@@ -661,5 +681,39 @@ model VaultAccessLog {
   @@index([actorIdHash, createdAt])
   @@map("vault_access_logs")
   @@schema("vidaloca_vault")
+}
+
+// ============================================
+// MERCADO NEGRO P2P (Subastas/Compraventa entre Jugadores)
+// ============================================
+
+enum MarketListingStatus {
+  ACTIVE
+  SOLD
+  CANCELLED
+
+  @@schema("public")
+}
+
+model MarketListing {
+  id          String              @id @default(uuid())
+  sellerId    String
+  seller      Player              @relation("SellerListings", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyerId     String?
+  buyer       Player?             @relation("BuyerListings", fields: [buyerId], references: [id], onDelete: SetNull)
+  templateId  String
+  template    ItemTemplate        @relation(fields: [templateId], references: [id])
+  quantity    Int                 @default(1)
+  priceEuros  Float
+  status      MarketListingStatus @default(ACTIVE)
+  createdAt   DateTime            @default(now())
+  soldAt      DateTime?
+  updatedAt   DateTime            @updatedAt
+
+  @@index([status, createdAt])
+  @@index([sellerId, status])
+  @@index([templateId])
+  @@map("market_listings")
+  @@schema("public")
 }
 

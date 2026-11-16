@@ -3,6 +3,7 @@ export interface User {
   email: string;
   username: string;
   role: 'PLAYER' | 'ADMIN' | 'MODERATOR';
+  isGuest?: boolean;
 }
 
 export type FactionType =
@@ -35,6 +36,14 @@ export interface Player {
   jailUntil?: string | null;
   isOnline: boolean;
   lastLogin: string;
+  referralCode?: string | null;
+  loginStreak?: number;
+  isVip?: boolean;
+  vipExpiresAt?: string | null;
+  user?: {
+    username: string;
+    isGuest?: boolean;
+  };
   inventory?: InventoryItem[];
   vehicles?: PlayerVehicle[];
   properties?: PlayerProperty[];
@@ -432,4 +441,96 @@ export interface HeistExecuteResponse {
   rewardXp?: number;
   heatDelta?: number;
   player?: Partial<Player>;
+}
+
+export interface DailyStreakReward {
+  day: number;
+  euros: number;
+  vidaCoins: number;
+  xp: number;
+}
+
+export interface DailyChallenge {
+  id: string;
+  title: string;
+  description: string;
+  metric: 'action' | 'travel' | 'trade' | 'mission';
+  target: number;
+  progress: number;
+  claimed: boolean;
+  rewardEuros: number;
+  rewardXp: number;
+  rewardVidaCoins: number;
+}
+
+export interface EngagementStatus {
+  isGuest: boolean;
+  loginStreak: number;
+  canClaimDaily: boolean;
+  nextClaimAt: string | null;
+  nextDay: number;
+  nextReward: DailyStreakReward;
+  streakTable: DailyStreakReward[];
+  referralCode: string | null;
+  referralsCount: number;
+  isVip: boolean;
+  vipExpiresAt: string | null;
+  dailyChallenges: DailyChallenge[];
+}
+
+export interface LeaderboardPlayer {
+  id: string;
+  displayName: string;
+  level: number;
+  euros: number;
+  reputation: number;
+  heat: number;
+  faction: FactionType;
+  isVip: boolean;
+  locationId: string | null;
+  clanTag: string | null;
+}
+
+export interface LeaderboardClan {
+  id: string;
+  name: string;
+  tag: string;
+  level: number;
+  funds: number;
+  membersCount: number;
+  territoriesCount: number;
+}
+
+export interface LeaderboardsResponse {
+  richest: LeaderboardPlayer[];
+  topLevel: LeaderboardPlayer[];
+  mostWanted: LeaderboardPlayer[];
+  topClans: LeaderboardClan[];
+  cachedAt: string;
+}
+
+export interface MarketListing {
+  id: string;
+  sellerId: string;
+  templateId: string;
+  quantity: number;
+  priceEuros: number;
+  status: 'ACTIVE' | 'SOLD' | 'CANCELLED';
+  createdAt: string;
+  template: ItemTemplate;
+  seller: {
+    id: string;
+    displayName: string;
+    level: number;
+    isVip: boolean;
+  };
+}
+
+export interface VipShopOffer {
+  id: string;
+  name: string;
+  description: string;
+  priceVida: number;
+  category: 'VIP' | 'UTILITY' | 'COSMETIC';
+  templateName?: string;
 }

@@ -51,8 +51,7 @@ interface ItemSeed {
   priceVida?: number;
 }
 
-async function main() {
-  // Asegurar que los valores nuevos de FactionType existan en PostgreSQL (Supabase) antes de cualquier query
+async function ensureSchemaUpToDate() {
   const newFactionValues = [
     'ERTZAINTZA_MOSSOS',
     'CYBER_HACKER',
@@ -62,6 +61,80 @@ async function main() {
   for (const val of newFactionValues) {
     await pool.query(`ALTER TYPE "FactionType" ADD VALUE IF NOT EXISTS '${val}'`);
   }
+
+  await pool.query(`
+    DO $$ BEGIN
+      CREATE TYPE "MarketListingStatus" AS ENUM ('ACTIVE', 'SOLD', 'CANCELLED');
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+  `);
+
+  await pool.query(`
+    ALTER TABLE "users"
+      ADD COLUMN IF NOT EXISTS "isGuest" BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  await pool.query(`
+    ALTER TABLE "players"
+      ADD COLUMN IF NOT EXISTS "referralCode" TEXT,
+      ADD COLUMN IF NOT EXISTS "referredByPlayerId" TEXT,
+      ADD COLUMN IF NOT EXISTS "loginStreak" INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "lastDailyClaimAt" TIMESTAMP(3),
+      ADD COLUMN IF NOT EXISTS "isVip" BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS "vipExpiresAt" TIMESTAMP(3),
+      ADD COLUMN IF NOT EXISTS "dailyChallengesDate" TEXT,
+      ADD COLUMN IF NOT EXISTS "dailyChallengesProgress" JSONB;
+  `);
+
+  await pool.query(`
+    ALTER TABLE "territories"
+      ADD COLUMN IF NOT EXISTS "lastTaxCollectedAt" TIMESTAMP(3);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "market_listings" (
+      "id" TEXT NOT NULL,
+      "sellerId" TEXT NOT NULL,
+      "buyerId" TEXT,
+      "templateId" TEXT NOT NULL,
+      "quantity" INTEGER NOT NULL DEFAULT 1,
+      "priceEuros" DOUBLE PRECISION NOT NULL,
+      "status" "MarketListingStatus" NOT NULL DEFAULT 'ACTIVE',
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "soldAt" TIMESTAMP(3),
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "market_listings_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "players_referralCode_key" ON "players"("referralCode");
+    CREATE INDEX IF NOT EXISTS "players_referredByPlayerId_idx" ON "players"("referredByPlayerId");
+    CREATE INDEX IF NOT EXISTS "players_euros_idx" ON "players"("euros");
+    CREATE INDEX IF NOT EXISTS "players_reputation_idx" ON "players"("reputation");
+    CREATE INDEX IF NOT EXISTS "players_level_xp_idx" ON "players"("level", "xp");
+    CREATE INDEX IF NOT EXISTS "players_heat_idx" ON "players"("heat");
+    CREATE INDEX IF NOT EXISTS "territories_controllerId_idx" ON "territories"("controllerId");
+    CREATE INDEX IF NOT EXISTS "market_listings_status_createdAt_idx" ON "market_listings"("status", "createdAt");
+    CREATE INDEX IF NOT EXISTS "market_listings_sellerId_status_idx" ON "market_listings"("sellerId", "status");
+    CREATE INDEX IF NOT EXISTS "market_listings_templateId_idx" ON "market_listings"("templateId");
+  `);
+
+  await pool.query(`
+    DO $$ BEGIN
+      ALTER TABLE "market_listings" ADD CONSTRAINT "market_listings_sellerId_fkey" FOREIGN KEY ("sellerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    DO $$ BEGIN
+      ALTER TABLE "market_listings" ADD CONSTRAINT "market_listings_buyerId_fkey" FOREIGN KEY ("buyerId") REFERENCES "players"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    DO $$ BEGIN
+      ALTER TABLE "market_listings" ADD CONSTRAINT "market_listings_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "item_templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+  `);
+}
+
+async function main() {
+  // Asegurar que los valores nuevos de FactionType, columnas de engagement/VIP y market_listings existan en Supabase antes de cualquier query
+  await ensureSchemaUpToDate();
 
   if (process.argv.includes('--if-needed')) {
     const [
@@ -85,7 +158,7 @@ async function main() {
       territories >= 32 &&
       missions >= 68 &&
       vehicles >= 36 &&
-      items >= 30 &&
+      items >= 33 &&
       properties >= 22 &&
       skills >= 8 &&
       achievements >= 12
@@ -1005,6 +1078,39 @@ async function main() {
       },
       priceEuros: 15000,
       priceVida: 130,
+    },
+    {
+      name: 'Matrícula Dorada VIP',
+      description: 'Placa personalizada con acabado oro cepillado para lucir en el garaje y el mercado.',
+      type: ItemType.COSMETIC,
+      rarity: Rarity.EPIC,
+      stats: {
+        category: 'COSMETIC_PLATE',
+        style: 'GOLD_VIP',
+      },
+      priceVida: 60,
+    },
+    {
+      name: 'Kit Neón Azul Nocturno',
+      description: 'Iluminación LED inferior para carreras nocturnas en las autopistas de España.',
+      type: ItemType.COSMETIC,
+      rarity: Rarity.RARE,
+      stats: {
+        category: 'COSMETIC_NEON',
+        color: '#38bdf8',
+      },
+      priceVida: 45,
+    },
+    {
+      name: 'Emblema Fundador VidaLoca',
+      description: 'Insignia coleccionable de prestigio intercambiable en el Mercado Negro P2P.',
+      type: ItemType.COSMETIC,
+      rarity: Rarity.LEGENDARY,
+      stats: {
+        category: 'COSMETIC_BADGE',
+        tier: 'FOUNDER',
+      },
+      priceVida: 180,
     },
   ];
 

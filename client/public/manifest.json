@@ -1,0 +1,17 @@
+{
+  "name": "VidaLoca MMORPG",
+  "short_name": "VidaLoca",
+  "description": "MMORPG de mundo abierto ambientado en las ciudades de España con economía real, clanes, vehículos y mercados P2P.",
+  "start_url": "/play",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#f59e0b",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/images/madrid-hero.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}

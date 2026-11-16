@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/store/auth';
+import { api } from '@/lib/api';
 import StreetPlay from '@/components/StreetPlay';
 import CityMap from '@/components/CityMap';
 import MissionsPanel from '@/components/MissionsPanel';
@@ -13,6 +14,8 @@ import SkillsBattlePass from '@/components/SkillsBattlePass';
 import ClansPanel from '@/components/ClansPanel';
 import FactionsPanel from '@/components/FactionsPanel';
 import HeistsMarketPanel from '@/components/HeistsMarketPanel';
+import EngagementPanel from '@/components/EngagementPanel';
+import MarketplacePanel from '@/components/MarketplacePanel';
 import ChatPanel from '@/components/ChatPanel';
 import StatsBar from '@/components/StatsBar';
 import { useRealtime } from '@/hooks/useRealtime';
@@ -20,7 +23,9 @@ import { useRealtime } from '@/hooks/useRealtime';
 type Tab =
   | 'calle'
   | 'mapa'
+  | 'diario'
   | 'misiones'
+  | 'mercado'
   | 'inventario'
   | 'vehiculos'
   | 'propiedades'
@@ -29,10 +34,20 @@ type Tab =
   | 'facciones'
   | 'golpes';
 
+const TUTORIAL_KEY = 'vidaloca_tutorial_dismissed';
+
 export default function PlayPage() {
   const router = useRouter();
   const { token, player, refreshPlayer, logout } = useAuth();
   const [tab, setTab] = useState<Tab>('calle');
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [showConvertModal, setShowConvertModal] = useState(false);
+  const [convertEmail, setConvertEmail] = useState('');
+  const [convertUsername, setConvertUsername] = useState('');
+  const [convertPassword, setConvertPassword] = useState('');
+  const [convertMsg, setConvertMsg] = useState('');
+  const [converting, setConverting] = useState(false);
+
   const {
     connected,
     playerId,
@@ -55,6 +70,42 @@ export default function PlayPage() {
     }
   }, [token, player, refreshPlayer]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setShowTutorial(localStorage.getItem(TUTORIAL_KEY) !== '1');
+    }
+  }, []);
+
+  function dismissTutorial() {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(TUTORIAL_KEY, '1');
+    }
+    setShowTutorial(false);
+  }
+
+  async function handleConvertGuest(e: React.FormEvent) {
+    e.preventDefault();
+    setConvertMsg('');
+    setConverting(true);
+    try {
+      await api.convertGuest({
+        email: convertEmail.trim(),
+        username: convertUsername.trim(),
+        password: convertPassword,
+        displayName: convertUsername.trim(),
+      });
+      setConvertMsg('¡Cuenta guardada! Has recibido tu bono de bienvenida.');
+      setShowConvertModal(false);
+      await refreshPlayer();
+    } catch (err: unknown) {
+      setConvertMsg(
+        err instanceof Error ? err.message : 'Error al guardar la cuenta',
+      );
+    } finally {
+      setConverting(false);
+    }
+  }
+
   if (!token || !player) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-400">
@@ -66,7 +117,9 @@ export default function PlayPage() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'calle', label: 'Calle' },
     { id: 'mapa', label: 'Mapa' },
+    { id: 'diario', label: 'Diario / Top' },
     { id: 'misiones', label: 'Misiones' },
+    { id: 'mercado', label: 'Mercado P2P / VIP' },
     { id: 'inventario', label: 'Inventario' },
     { id: 'vehiculos', label: 'Vehículos' },
     { id: 'propiedades', label: 'Propiedades' },
@@ -76,9 +129,131 @@ export default function PlayPage() {
     { id: 'golpes', label: 'Golpes / Mercado' },
   ];
 
+  const isGuest = Boolean(player.user?.isGuest);
+
   return (
     <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
       <StatsBar player={player} connected={connected} onLogout={logout} />
+
+      {isGuest && (
+        <div className="border-b border-sky-500/30 bg-sky-950/40 px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2">
+          <div className="text-sky-200">
+            Estás jugando como <strong>Invitado</strong>. Guarda tu progreso con
+            correo y contraseña para recibir un bono extra de{' '}
+            <strong className="text-amber-300">+500 € y +10 VC</strong> (o
+            +2.000 € / +25 VC si vienes invitado).
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowConvertModal((v) => !v)}
+            className="rounded-md bg-sky-400 px-3 py-1 font-bold text-zinc-950 hover:bg-sky-300"
+          >
+            {showConvertModal ? 'Cerrar' : 'Guardar Cuenta Gratis'}
+          </button>
+        </div>
+      )}
+
+      {isGuest && showConvertModal && (
+        <form
+          onSubmit={(e) => {
+            void handleConvertGuest(e);
+          }}
+          className="border-b border-sky-500/30 bg-zinc-900/95 px-4 py-3 flex flex-wrap items-end gap-2 text-xs"
+        >
+          <div>
+            <label className="mb-1 block text-[11px] text-zinc-400">
+              Correo
+            </label>
+            <input
+              type="email"
+              required
+              value={convertEmail}
+              onChange={(e) => setConvertEmail(e.target.value)}
+              placeholder="tu@correo.es"
+              className="rounded border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-zinc-100"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] text-zinc-400">
+              Nombre en la calle
+            </label>
+            <input
+              required
+              minLength={3}
+              value={convertUsername}
+              onChange={(e) => setConvertUsername(e.target.value)}
+              placeholder="TuAlias"
+              className="rounded border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-zinc-100"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] text-zinc-400">
+              Contraseña (min. 6)
+            </label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={convertPassword}
+              onChange={(e) => setConvertPassword(e.target.value)}
+              placeholder="••••••"
+              className="rounded border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-zinc-100"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={converting}
+            className="rounded bg-amber-500 px-3 py-1.5 font-bold text-zinc-950 hover:bg-amber-400 disabled:opacity-50"
+          >
+            {converting ? 'Guardando…' : 'Confirmar y Reclamar Bono'}
+          </button>
+          {convertMsg && <span className="text-amber-300">{convertMsg}</span>}
+        </form>
+      )}
+
+      {showTutorial && (
+        <div className="border-b border-amber-500/30 bg-amber-950/20 px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 text-zinc-200">
+            <span className="font-bold text-amber-300">Primeros pasos:</span>
+            <button
+              type="button"
+              onClick={() => setTab('diario')}
+              className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-amber-200 hover:bg-amber-500/20"
+            >
+              1. Reclama tu Racha Diaria
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('calle')}
+              className="rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 hover:border-zinc-500"
+            >
+              2. Haz una acción en la Calle 3D
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('misiones')}
+              className="rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 hover:border-zinc-500"
+            >
+              3. Acepta una Misión
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('mercado')}
+              className="rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 hover:border-zinc-500"
+            >
+              4. Visita el Mercado P2P / VIP
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={dismissTutorial}
+            className="text-zinc-400 hover:text-zinc-200"
+          >
+            Ocultar ✕
+          </button>
+        </div>
+      )}
+
       <nav className="flex flex-wrap gap-1 border-b border-zinc-800 px-2 py-1 bg-zinc-900/80">
         {tabs.map((t) => (
           <button
@@ -113,7 +288,9 @@ export default function PlayPage() {
               }}
             />
           )}
+          {tab === 'diario' && <EngagementPanel />}
           {tab === 'misiones' && <MissionsPanel />}
+          {tab === 'mercado' && <MarketplacePanel />}
           {tab === 'inventario' && <InventoryPanel />}
           {tab === 'vehiculos' && <VehiclesPanel />}
           {tab === 'propiedades' && <PropertiesPanel />}

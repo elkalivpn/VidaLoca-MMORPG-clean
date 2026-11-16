@@ -3,15 +3,21 @@ import {
   UnauthorizedException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
   Optional,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { createHash, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SecurityAuditService } from '../security/security-audit.service';
-import { RegisterDto, LoginDto } from './dto/auth.dto';
+import {
+  RegisterDto,
+  LoginDto,
+  GuestLoginDto,
+  ConvertGuestDto,
+} from './dto/auth.dto';
 
 @Injectable()
 export class AuthService {
@@ -30,11 +36,16 @@ export class AuthService {
     return createHash('sha256').update(rawToken).digest('hex');
   }
 
+  private createReferralCode(): string {
+    return `VL-${randomBytes(3).toString('hex').toUpperCase()}`;
+  }
+
   async register(registerDto: RegisterDto, ip?: string) {
     const email = registerDto.email.trim().toLowerCase();
     const username = registerDto.username.trim();
     const displayName = registerDto.displayName.trim();
     const { password } = registerDto;
+    const rawRef = registerDto.referralCode?.trim().toUpperCase();
 
     // Check if user exists
     const existingUser = await this.prisma.user.findFirst({
@@ -47,8 +58,16 @@ export class AuthService {
       throw new ConflictException('Email or username already exists');
     }
 
+    const referrer = rawRef
+      ? await this.prisma.player.findUnique({
+          where: { referralCode: rawRef },
+          select: { id: true, displayName: true },
+        })
+      : null;
+
     // Hash password with cost 12
     const hashedPassword = await bcrypt.hash(password, this.BCRYPT_ROUNDS);
+    const ownRefCode = this.createReferralCode();
 
     // Create user and player in transaction
     const user = await this.prisma.$transaction(async (tx) => {
@@ -58,6 +77,7 @@ export class AuthService {
           username,
           password: hashedPassword,
           role: 'PLAYER',
+          isGuest: false,
         },
       });
 
@@ -65,11 +85,51 @@ export class AuthService {
         data: {
           userId: newUser.id,
           displayName,
-          euros: 100.0,
-          vidaCoins: 0,
+          euros: referrer ? 1600.0 : 100.0,
+          vidaCoins: referrer ? 15 : 0,
           locationId: 'madrid_centro',
+          referralCode: ownRefCode,
+          referredByPlayerId: referrer?.id ?? null,
         },
       });
+
+      if (referrer) {
+        await tx.player.update({
+          where: { id: referrer.id },
+          data: {
+            euros: { increment: 2500 },
+            vidaCoins: { increment: 25 },
+          },
+        });
+        await tx.transactionLog.createMany({
+          data: [
+            {
+              playerId: referrer.id,
+              type: 'GIFT',
+              amount: 2500,
+              currency: 'EUR',
+              reason: `Referido reclutado: ${displayName}`,
+              reference: player.id,
+            },
+            {
+              playerId: referrer.id,
+              type: 'GIFT',
+              amount: 25,
+              currency: 'VIDACOIN',
+              reason: `Bono VidaCoins por referido: ${displayName}`,
+              reference: player.id,
+            },
+            {
+              playerId: player.id,
+              type: 'GIFT',
+              amount: 15,
+              currency: 'VIDACOIN',
+              reason: `Bienvenida por código ${rawRef}`,
+              reference: referrer.id,
+            },
+          ],
+        });
+      }
 
       return { ...newUser, player };
     });
@@ -82,6 +142,73 @@ export class AuthService {
       eventType: 'AUTH_REGISTER',
       severity: 'INFO',
       ip,
+      details: { username: user.username, referred: Boolean(referrer) },
+    });
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+        isGuest: user.isGuest,
+        player: user.player,
+      },
+      ...tokens,
+    };
+  }
+
+  async guestLogin(dto: GuestLoginDto, ip?: string) {
+    const suffix = randomBytes(3).toString('hex');
+    const username = `invitado_${suffix}`;
+    const email = `${username}_${randomUUID().slice(0, 6)}@guest.vidaloca.local`;
+    const displayName =
+      dto.displayName?.trim() || `Visitante ${suffix.toUpperCase()}`;
+    const rawPassword = randomBytes(24).toString('hex');
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
+    const rawRef = dto.referralCode?.trim().toUpperCase();
+
+    const referrer = rawRef
+      ? await this.prisma.player.findUnique({
+          where: { referralCode: rawRef },
+          select: { id: true },
+        })
+      : null;
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          email,
+          username,
+          password: hashedPassword,
+          role: 'PLAYER',
+          isGuest: true,
+        },
+      });
+
+      const player = await tx.player.create({
+        data: {
+          userId: newUser.id,
+          displayName,
+          euros: 250.0,
+          vidaCoins: 5,
+          locationId: 'madrid_centro',
+          referralCode: this.createReferralCode(),
+          referredByPlayerId: referrer?.id ?? null,
+        },
+      });
+
+      return { ...newUser, player };
+    });
+
+    const tokens = await this.generateTokens(user.id, user.tokenVersion);
+    await this.storeRefreshToken(user.id, tokens.refreshToken, ip);
+
+    await this.auditService?.logEvent({
+      actorId: user.id,
+      eventType: 'AUTH_GUEST_LOGIN',
+      severity: 'INFO',
+      ip,
       details: { username: user.username },
     });
 
@@ -91,9 +218,122 @@ export class AuthService {
         email: user.email,
         username: user.username,
         role: user.role,
+        isGuest: user.isGuest,
         player: user.player,
       },
       ...tokens,
+    };
+  }
+
+  async convertGuest(userId: string, dto: ConvertGuestDto, ip?: string) {
+    const existing = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { player: true },
+    });
+
+    if (!existing || !existing.player) {
+      throw new UnauthorizedException('User not found');
+    }
+    if (!existing.isGuest) {
+      throw new BadRequestException('Esta cuenta ya es permanente');
+    }
+
+    const email = dto.email.trim().toLowerCase();
+    const username = dto.username.trim();
+    const conflict = await this.prisma.user.findFirst({
+      where: {
+        id: { not: userId },
+        OR: [{ email }, { username }],
+      },
+    });
+    if (conflict) {
+      throw new ConflictException('Email or username already exists');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, this.BCRYPT_ROUNDS);
+    const displayName = dto.displayName?.trim() || existing.player.displayName;
+    const referrerId = existing.player.referredByPlayerId;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: {
+          email,
+          username,
+          password: hashedPassword,
+          isGuest: false,
+        },
+      });
+
+      const player = await tx.player.update({
+        where: { id: existing.player!.id },
+        data: {
+          displayName,
+          euros: { increment: referrerId ? 2000 : 500 },
+          vidaCoins: { increment: referrerId ? 25 : 10 },
+        },
+      });
+
+      await tx.transactionLog.create({
+        data: {
+          playerId: player.id,
+          type: 'GIFT',
+          amount: referrerId ? 2000 : 500,
+          currency: 'EUR',
+          reason: 'Bono por convertir cuenta invitado a permanente',
+        },
+      });
+
+      if (referrerId && referrerId !== player.id) {
+        await tx.player.update({
+          where: { id: referrerId },
+          data: {
+            euros: { increment: 2500 },
+            vidaCoins: { increment: 25 },
+          },
+        });
+        await tx.transactionLog.createMany({
+          data: [
+            {
+              playerId: referrerId,
+              type: 'GIFT',
+              amount: 2500,
+              currency: 'EUR',
+              reason: `Referido convertido: ${displayName}`,
+              reference: player.id,
+            },
+            {
+              playerId: referrerId,
+              type: 'GIFT',
+              amount: 25,
+              currency: 'VIDACOIN',
+              reason: `Bono VidaCoins por referido: ${displayName}`,
+              reference: player.id,
+            },
+          ],
+        });
+      }
+
+      return { ...updatedUser, player };
+    });
+
+    await this.auditService?.logEvent({
+      actorId: userId,
+      eventType: 'AUTH_GUEST_CONVERTED',
+      severity: 'INFO',
+      ip,
+      details: { username },
+    });
+
+    return {
+      user: {
+        id: updated.id,
+        email: updated.email,
+        username: updated.username,
+        role: updated.role,
+        isGuest: updated.isGuest,
+        player: updated.player,
+      },
     };
   }
 

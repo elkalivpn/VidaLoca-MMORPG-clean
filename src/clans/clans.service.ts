@@ -158,6 +158,20 @@ export class ClansService {
       throw new BadRequestException('Tu clan ya controla este territorio');
     }
 
+    const existingControl = await this.prisma.clanTerritory.findUnique({
+      where: { territoryId },
+    });
+    if (existingControl) {
+      const shieldMs = 2 * 60 * 60 * 1000;
+      const elapsed = Date.now() - existingControl.capturedAt.getTime();
+      if (elapsed < shieldMs) {
+        const minsLeft = Math.ceil((shieldMs - elapsed) / 60_000);
+        throw new BadRequestException(
+          `Territorio protegido tras conquista (${minsLeft} min restantes)`,
+        );
+      }
+    }
+
     const cost = 2500;
     if (clan.funds < cost) {
       throw new BadRequestException(`El clan necesita al menos ${cost} € en fondos`);
@@ -169,6 +183,7 @@ export class ClansService {
         data: {
           funds: { decrement: cost },
           level: { increment: territory.controllerId ? 0 : 1 },
+          xp: { increment: 100 },
         },
       });
 
@@ -194,6 +209,107 @@ export class ClansService {
           controller: { select: { id: true, name: true, tag: true } },
         },
       });
+    });
+  }
+
+  async donateToClan(userId: string, amount: number) {
+    if (!Number.isFinite(amount) || amount < 50 || amount > 10_000_000) {
+      throw new BadRequestException('Aporte válido entre 50 € y 10.000.000 €');
+    }
+    const cleanAmount = Math.round(amount * 100) / 100;
+    const player = await this.getPlayerOrThrow(userId);
+    const member = await this.prisma.clanMember.findUnique({
+      where: { playerId: player.id },
+    });
+    if (!member) {
+      throw new BadRequestException('No perteneces a ningún clan');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const debit = await tx.player.updateMany({
+        where: { id: player.id, euros: { gte: cleanAmount } },
+        data: { euros: { decrement: cleanAmount } },
+      });
+      if (debit.count === 0) {
+        throw new BadRequestException('Saldo insuficiente para aportar al clan');
+      }
+
+      const clan = await tx.clan.update({
+        where: { id: member.clanId },
+        data: { funds: { increment: cleanAmount } },
+      });
+
+      await tx.transactionLog.create({
+        data: {
+          playerId: player.id,
+          type: 'SPEND',
+          amount: cleanAmount,
+          currency: 'EUR',
+          reason: `Donación a fondos del clan [${clan.tag}]`,
+          reference: clan.id,
+        },
+      });
+
+      return { donated: cleanAmount, clanFunds: clan.funds };
+    });
+  }
+
+  async collectTerritoryTax(userId: string, territoryId: string) {
+    const player = await this.getPlayerOrThrow(userId);
+    const member = await this.prisma.clanMember.findUnique({
+      where: { playerId: player.id },
+    });
+    if (!member || (member.role !== 'LEADER' && member.role !== 'OFFICER')) {
+      throw new BadRequestException(
+        'Solo líderes u oficiales pueden recaudar impuestos territoriales',
+      );
+    }
+
+    const territory = await this.prisma.territory.findUnique({
+      where: { id: territoryId },
+    });
+    if (!territory) throw new NotFoundException('Territorio no encontrado');
+    if (territory.controllerId !== member.clanId) {
+      throw new BadRequestException('Tu clan no controla este territorio');
+    }
+
+    const TAX_COOLDOWN_MS = 4 * 60 * 60 * 1000;
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - TAX_COOLDOWN_MS);
+    const taxAmount = Math.round(territory.incomeRate * 2 * 100) / 100;
+
+    return this.prisma.$transaction(async (tx) => {
+      const claim = await tx.territory.updateMany({
+        where: {
+          id: territoryId,
+          controllerId: member.clanId,
+          OR: [
+            { lastTaxCollectedAt: null },
+            { lastTaxCollectedAt: { lte: cutoff } },
+          ],
+        },
+        data: { lastTaxCollectedAt: now },
+      });
+
+      if (claim.count === 0) {
+        throw new BadRequestException(
+          'Impuesto ya recaudado recientemente (cooldown de 4 horas).',
+        );
+      }
+
+      const clan = await tx.clan.update({
+        where: { id: member.clanId },
+        data: {
+          funds: { increment: taxAmount },
+          xp: { increment: 50 },
+        },
+      });
+
+      return {
+        territoryName: territory.name,
+        taxAmount,
+        clanFunds: clan.funds,
+      };
     });
   }
 

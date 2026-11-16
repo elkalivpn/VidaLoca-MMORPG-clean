@@ -12,6 +12,7 @@ import { CreateMissionTemplateDto } from './dto/missions.dto';
 import { calculateLevelFromXp } from '../common/utils/level.util';
 import { ZONES_BY_ID } from '../common/constants/zones';
 import { AntiCheatService } from '../security/anti-cheat.service';
+import { EngagementService } from '../engagement/engagement.service';
 
 export interface CoopParticipant {
   playerId: string;
@@ -33,6 +34,7 @@ export class MissionsService {
   constructor(
     private prisma: PrismaService,
     @Optional() private readonly antiCheat?: AntiCheatService,
+    @Optional() private readonly engagementService?: EngagementService,
   ) {}
 
   // ─── Templates (Catalog & Admin) ─────────────────────────────────────
@@ -532,13 +534,19 @@ export class MissionsService {
       tpl.mode === MissionMode.ONLINE_COOP && participants.length > 1;
     const bonusMultiplier = isTeamBonus ? 1.2 : 1.0;
 
+    const isVipActive =
+      Boolean((player as { isVip?: boolean; vipExpiresAt?: Date | null }).isVip) &&
+      (!(player as { vipExpiresAt?: Date | null }).vipExpiresAt ||
+        new Date((player as { vipExpiresAt: Date }).vipExpiresAt) > new Date());
+    const xpMultiplier = bonusMultiplier * (isVipActive ? 1.25 : 1.0);
+
     const grantedEuros = Math.round(tpl.rewardEuros * bonusMultiplier);
-    const grantedXp = Math.round(tpl.rewardXp * bonusMultiplier);
+    const grantedXp = Math.round(tpl.rewardXp * xpMultiplier);
     const grantedVidaCoins = tpl.rewardVidaCoins ?? 0;
     const grantedReputation = tpl.rewardReputation ?? 0;
     const battlePassXpGain = Math.max(10, Math.round(grantedXp * 0.25));
 
-    return this.prisma.$transaction(async (tx) => {
+    const claimResult = await this.prisma.$transaction(async (tx) => {
       // Atomic status transition to prevent concurrent double-claim exploit
       const claimGuard = await tx.playerMission.updateMany({
         where: {
@@ -686,6 +694,12 @@ export class MissionsService {
         },
       };
     });
+    if (this.engagementService) {
+      await this.engagementService
+        .recordProgress(player.id, 'mission')
+        .catch(() => undefined);
+    }
+    return claimResult;
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────

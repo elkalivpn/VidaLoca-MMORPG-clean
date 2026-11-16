@@ -17,6 +17,7 @@ import {
 import { calculateLevelFromXp } from '../common/utils/level.util';
 import { MarketGoodId, MarketTradeDto } from './dto/market-trade.dto';
 import { AntiCheatService } from '../security/anti-cheat.service';
+import { EngagementService } from '../engagement/engagement.service';
 
 interface MarketGoodDef {
   id: MarketGoodId;
@@ -269,6 +270,7 @@ export class WorldService {
   constructor(
     private prisma: PrismaService,
     @Optional() private readonly antiCheat?: AntiCheatService,
+    @Optional() private readonly engagementService?: EngagementService,
   ) {}
 
   private async player(userId: string) {
@@ -353,7 +355,7 @@ export class WorldService {
       throw new BadRequestException('Destino no válido');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const player = await tx.player.findUnique({ where: { userId } });
       if (!player) {
         throw new NotFoundException('Player not found');
@@ -521,6 +523,10 @@ export class WorldService {
         },
       };
     });
+    if (this.engagementService) {
+      await this.engagementService.recordProgress(result.player.id, 'travel').catch(() => undefined);
+    }
+    return result;
   }
 
   async setLifestyle(userId: string, lifestyle: 'LEGAL' | 'GREY' | 'STREET') {
@@ -759,7 +765,7 @@ export class WorldService {
     }
     this.antiCheat?.assertFinitePositive(dto.quantity, 'quantity', 1000);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const p = await tx.player.findUnique({ where: { userId } });
       if (!p) throw new NotFoundException('Player not found');
       this.assertNotJailed(p.jailUntil);
@@ -797,14 +803,17 @@ export class WorldService {
         });
 
         return {
-          action: 'BUY',
-          goodId: good.id,
-          quantity: dto.quantity,
-          unitPrice,
-          totalAmount,
-          city,
-          owned: cargo[dto.goodId],
-          euros: Math.round((p.euros - totalAmount) * 100) / 100,
+          playerId: p.id,
+          payload: {
+            action: 'BUY' as const,
+            goodId: good.id,
+            quantity: dto.quantity,
+            unitPrice,
+            totalAmount,
+            city,
+            owned: cargo[dto.goodId],
+            euros: Math.round((p.euros - totalAmount) * 100) / 100,
+          },
         };
       }
 
@@ -835,15 +844,24 @@ export class WorldService {
       });
 
       return {
-        action: 'SELL',
-        goodId: good.id,
-        quantity: dto.quantity,
-        unitPrice,
-        totalAmount,
-        city,
-        owned: cargo[dto.goodId],
-        euros: updated.euros,
+        playerId: p.id,
+        payload: {
+          action: 'SELL' as const,
+          goodId: good.id,
+          quantity: dto.quantity,
+          unitPrice,
+          totalAmount,
+          city,
+          owned: cargo[dto.goodId],
+          euros: updated.euros,
+        },
       };
     });
+    if (this.engagementService) {
+      await this.engagementService
+        .recordProgress(result.playerId, 'trade')
+        .catch(() => undefined);
+    }
+    return result.payload;
   }
 }

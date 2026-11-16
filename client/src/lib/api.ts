@@ -1,5 +1,6 @@
 import type {
   BailResponse,
+  EngagementStatus,
   FactionInfo,
   FactionType,
   HeistExecuteResponse,
@@ -7,10 +8,13 @@ import type {
   HeistRole,
   HeistsOverviewResponse,
   InterceptResponse,
+  LeaderboardsResponse,
   MarketItem,
+  MarketListing,
   MarketTradeResponse,
   Player,
   PropertyUseResponse,
+  VipShopOffer,
   WantedSuspect,
   WorldMapResponse,
   WorldMarketResponse,
@@ -64,8 +68,26 @@ export const api = {
     username: string;
     password: string;
     displayName: string;
+    referralCode?: string;
   }) =>
     request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+
+  guestLogin: (data?: { displayName?: string; referralCode?: string }) =>
+    request('/auth/guest', {
+      method: 'POST',
+      body: JSON.stringify(data ?? {}),
+    }),
+
+  convertGuest: (data: {
+    email: string;
+    username: string;
+    password: string;
+    displayName?: string;
+  }) =>
+    request('/auth/convert-guest', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 
   login: (data: { email: string; password: string }) =>
     request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
@@ -197,10 +219,20 @@ export const api = {
   joinClan: (clanId: string) =>
     request(`/clans/join/${clanId}`, { method: 'POST' }),
   leaveClan: () => request('/clans/leave', { method: 'POST' }),
+  donateToClan: (amount: number) =>
+    request<{ donated: number; clanFunds: number }>('/clans/donate', {
+      method: 'POST',
+      body: JSON.stringify({ amount }),
+    }),
   clanLeaderboard: () => request('/clans/leaderboard'),
   territories: () => request('/clans/territories'),
   claimTerritory: (territoryId: string) =>
     request(`/clans/territories/${territoryId}/claim`, { method: 'POST' }),
+  collectClanTerritoryTax: (territoryId: string) =>
+    request<{ territoryName: string; taxAmount: number; clanFunds: number }>(
+      `/clans/territories/${territoryId}/collect`,
+      { method: 'POST' },
+    ),
 
   // Inventory
   inventory: () => request('/inventory'),
@@ -281,5 +313,61 @@ export const api = {
   executeHeist: (lobbyId: string) =>
     request<HeistExecuteResponse>(`/heists/${lobbyId}/execute`, {
       method: 'POST',
+    }),
+
+  // Engagement (Daily Streak, Challenges, Referrals, Leaderboards)
+  engagementStatus: () => request<EngagementStatus>('/engagement/status'),
+  claimDaily: () =>
+    request<{
+      day: number;
+      reward: { euros: number; vidaCoins: number; xp: number };
+      player: Partial<Player>;
+    }>('/engagement/daily-claim', { method: 'POST' }),
+  claimDailyChallenge: (challengeId: string) =>
+    request<{
+      challengeId: string;
+      reward: { euros: number; xp: number; vidaCoins: number };
+      player: Partial<Player>;
+    }>('/engagement/daily-challenges/claim', {
+      method: 'POST',
+      body: JSON.stringify({ challengeId }),
+    }),
+  leaderboards: () => request<LeaderboardsResponse>('/engagement/leaderboards'),
+
+  // Marketplace P2P & VIP Shop
+  marketListings: () => request<MarketListing[]>('/marketplace/listings'),
+  createMarketListing: (data: {
+    inventoryItemId: string;
+    quantity: number;
+    priceEuros: number;
+  }) =>
+    request<MarketListing>('/marketplace/listings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  buyMarketListing: (listingId: string) =>
+    request<{
+      listingId: string;
+      itemName: string;
+      quantity: number;
+      priceEuros: number;
+      feeEuros: number;
+      sellerNetEuros: number;
+    }>(`/marketplace/listings/${listingId}/buy`, { method: 'POST' }),
+  cancelMarketListing: (listingId: string) =>
+    request<{ cancelled: boolean; listingId: string }>(
+      `/marketplace/listings/${listingId}/cancel`,
+      { method: 'POST' },
+    ),
+  vipShop: () => request<VipShopOffer[]>('/marketplace/vip-shop'),
+  buyVipOffer: (offerId: string) =>
+    request<{
+      offerId: string;
+      name: string;
+      priceVida: number;
+      detail: string;
+    }>('/marketplace/vip-shop/buy', {
+      method: 'POST',
+      body: JSON.stringify({ offerId }),
     }),
 };

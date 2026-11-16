@@ -23,6 +23,7 @@ DO $$ BEGIN CREATE TYPE "MissionStatus" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMP
 DO $$ BEGIN CREATE TYPE "TransactionType" AS ENUM ('EARN', 'SPEND', 'PURCHASE', 'GIFT', 'PENALTY'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE "Currency" AS ENUM ('EUR', 'VIDACOIN'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE "SkillCategory" AS ENUM ('COMBAT', 'DRIVING', 'STEALTH', 'BUSINESS', 'SOCIAL'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "MarketListingStatus" AS ENUM ('ACTIVE', 'SOLD', 'CANCELLED'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE "vidaloca_vault"."VaultRecordType" AS ENUM ('PAYMENT_CARD', 'IDENTITY_KYC', 'RECOVERY_SECRET'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 ALTER TYPE "FactionType" ADD VALUE IF NOT EXISTS 'ERTZAINTZA_MOSSOS';
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS "users" (
     "username" TEXT NOT NULL,
     "password" TEXT NOT NULL,
     "role" "UserRole" NOT NULL DEFAULT 'PLAYER',
+    "isGuest" BOOLEAN NOT NULL DEFAULT false,
     "isBanned" BOOLEAN NOT NULL DEFAULT false,
     "banReason" TEXT,
     "failedLoginAttempts" INTEGER NOT NULL DEFAULT 0,
@@ -426,10 +428,26 @@ CREATE TABLE IF NOT EXISTS "vidaloca_vault"."vault_access_logs" (
     CONSTRAINT "vault_access_logs_pkey" PRIMARY KEY ("id")
 );
 
+CREATE TABLE IF NOT EXISTS "market_listings" (
+    "id" TEXT NOT NULL,
+    "sellerId" TEXT NOT NULL,
+    "buyerId" TEXT,
+    "templateId" TEXT NOT NULL,
+    "quantity" INTEGER NOT NULL DEFAULT 1,
+    "priceEuros" DOUBLE PRECISION NOT NULL,
+    "status" "MarketListingStatus" NOT NULL DEFAULT 'ACTIVE',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "soldAt" TIMESTAMP(3),
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "market_listings_pkey" PRIMARY KEY ("id")
+);
+
 -- ----------------------------------------------------------------------------
 -- 3. COLUMNAS NUEVAS PARA TABLAS PRE-EXISTENTES (ACTUALIZACIÓN SIN PÉRDIDA DE DATOS)
 -- ----------------------------------------------------------------------------
 ALTER TABLE "users"
+    ADD COLUMN IF NOT EXISTS "isGuest" BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS "isBanned" BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS "banReason" TEXT,
     ADD COLUMN IF NOT EXISTS "failedLoginAttempts" INTEGER NOT NULL DEFAULT 0,
@@ -444,8 +462,19 @@ ALTER TABLE "players"
     ADD COLUMN IF NOT EXISTS "faction" "FactionType" NOT NULL DEFAULT 'CIVILIAN',
     ADD COLUMN IF NOT EXISTS "factionRank" INTEGER NOT NULL DEFAULT 1,
     ADD COLUMN IF NOT EXISTS "jailUntil" TIMESTAMP(3),
-    ADD COLUMN IF NOT EXISTS "lifestyle" TEXT NOT NULL DEFAULT 'GREY';
+    ADD COLUMN IF NOT EXISTS "lifestyle" TEXT NOT NULL DEFAULT 'GREY',
+    ADD COLUMN IF NOT EXISTS "referralCode" TEXT,
+    ADD COLUMN IF NOT EXISTS "referredByPlayerId" TEXT,
+    ADD COLUMN IF NOT EXISTS "loginStreak" INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS "lastDailyClaimAt" TIMESTAMP(3),
+    ADD COLUMN IF NOT EXISTS "isVip" BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS "vipExpiresAt" TIMESTAMP(3),
+    ADD COLUMN IF NOT EXISTS "dailyChallengesDate" TEXT,
+    ADD COLUMN IF NOT EXISTS "dailyChallengesProgress" JSONB;
 ALTER TABLE "players" ALTER COLUMN "locationId" SET DEFAULT 'madrid_centro';
+
+ALTER TABLE "territories"
+    ADD COLUMN IF NOT EXISTS "lastTaxCollectedAt" TIMESTAMP(3);
 
 ALTER TABLE "player_properties"
     ADD COLUMN IF NOT EXISTS "lastRentCollectedAt" TIMESTAMP(3),
@@ -482,6 +511,16 @@ ALTER TABLE "refresh_tokens"
 CREATE UNIQUE INDEX IF NOT EXISTS "users_email_key" ON "users"("email");
 CREATE UNIQUE INDEX IF NOT EXISTS "users_username_key" ON "users"("username");
 CREATE UNIQUE INDEX IF NOT EXISTS "players_userId_key" ON "players"("userId");
+CREATE UNIQUE INDEX IF NOT EXISTS "players_referralCode_key" ON "players"("referralCode");
+CREATE INDEX IF NOT EXISTS "players_referredByPlayerId_idx" ON "players"("referredByPlayerId");
+CREATE INDEX IF NOT EXISTS "players_euros_idx" ON "players"("euros");
+CREATE INDEX IF NOT EXISTS "players_reputation_idx" ON "players"("reputation");
+CREATE INDEX IF NOT EXISTS "players_level_xp_idx" ON "players"("level", "xp");
+CREATE INDEX IF NOT EXISTS "players_heat_idx" ON "players"("heat");
+CREATE INDEX IF NOT EXISTS "territories_controllerId_idx" ON "territories"("controllerId");
+CREATE INDEX IF NOT EXISTS "market_listings_status_createdAt_idx" ON "market_listings"("status", "createdAt");
+CREATE INDEX IF NOT EXISTS "market_listings_sellerId_status_idx" ON "market_listings"("sellerId", "status");
+CREATE INDEX IF NOT EXISTS "market_listings_templateId_idx" ON "market_listings"("templateId");
 CREATE UNIQUE INDEX IF NOT EXISTS "player_vehicles_licensePlate_key" ON "player_vehicles"("licensePlate");
 CREATE UNIQUE INDEX IF NOT EXISTS "clans_name_key" ON "clans"("name");
 CREATE UNIQUE INDEX IF NOT EXISTS "clans_tag_key" ON "clans"("tag");
@@ -532,4 +571,7 @@ DO $$ BEGIN ALTER TABLE "player_achievements" ADD CONSTRAINT "player_achievement
 DO $$ BEGIN ALTER TABLE "player_achievements" ADD CONSTRAINT "player_achievements_achievementId_fkey" FOREIGN KEY ("achievementId") REFERENCES "achievements"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER TABLE "player_weapons" ADD CONSTRAINT "player_weapons_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER TABLE "game_sessions" ADD CONSTRAINT "game_sessions_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "market_listings" ADD CONSTRAINT "market_listings_sellerId_fkey" FOREIGN KEY ("sellerId") REFERENCES "players"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "market_listings" ADD CONSTRAINT "market_listings_buyerId_fkey" FOREIGN KEY ("buyerId") REFERENCES "players"("id") ON DELETE SET NULL ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "market_listings" ADD CONSTRAINT "market_listings_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "item_templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER TABLE "vidaloca_vault"."vault_access_logs" ADD CONSTRAINT "vault_access_logs_vaultRecordId_fkey" FOREIGN KEY ("vaultRecordId") REFERENCES "vidaloca_vault"."vault_records"("id") ON DELETE SET NULL ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;

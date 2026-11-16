@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/store/auth';
 import { api } from '@/lib/api';
@@ -12,7 +12,7 @@ import type { Player } from '@/types/game';
 
 type AuthResult = {
   accessToken: string;
-  user?: { player?: Player | null; username?: string };
+  user?: { player?: Player | null; username?: string; isGuest?: boolean };
 };
 
 type CityCard = {
@@ -311,6 +311,7 @@ export default function HomePage() {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [sceneIndex, setSceneIndex] = useState(0);
@@ -318,6 +319,16 @@ export default function HomePage() {
 
   const emailInputRef = useRef<HTMLInputElement | null>(null);
   const activeScene = CINEMATIC_SCENES[sceneIndex] ?? CINEMATIC_SCENES[0];
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref')?.trim().toUpperCase();
+    if (ref) {
+      setReferralCode(ref);
+      setMode('register');
+    }
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -332,6 +343,9 @@ export default function HomePage() {
               username,
               password,
               displayName: username,
+              ...(referralCode.trim()
+                ? { referralCode: referralCode.trim().toUpperCase() }
+                : {}),
             })
       ) as AuthResult;
       const player = data.user?.player ?? null;
@@ -339,6 +353,27 @@ export default function HomePage() {
       router.push('/play');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error de autenticación');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function playAsGuest() {
+    setError('');
+    setLoading(true);
+    try {
+      const data = (await api.guestLogin({
+        ...(referralCode.trim()
+          ? { referralCode: referralCode.trim().toUpperCase() }
+          : {}),
+      })) as AuthResult;
+      const player = data.user?.player ?? null;
+      setAuth(data.accessToken, player);
+      router.push('/play');
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : 'Error al entrar como invitado',
+      );
     } finally {
       setLoading(false);
     }
@@ -437,6 +472,16 @@ export default function HomePage() {
                 mundo abierto persistente.
               </p>
               <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => {
+                    void playAsGuest();
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 to-emerald-500 px-5 py-3 text-xs font-black uppercase tracking-wider text-zinc-950 shadow-lg shadow-emerald-500/25 transition hover:from-emerald-300 hover:to-emerald-400 disabled:opacity-50"
+                >
+                  <span>⚡ Jugar Ya en 1 Clic (Invitado)</span>
+                </button>
                 <a
                   href="#descargas"
                   className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-5 py-3 text-xs font-black uppercase tracking-wider text-zinc-950 shadow-lg shadow-amber-500/25 transition hover:from-amber-300 hover:to-amber-400"
@@ -611,6 +656,20 @@ export default function HomePage() {
                   />
                 </div>
 
+                {mode === 'register' && (
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-zinc-400">
+                      Código de referido (opcional · +1.500 € y +15 VC)
+                    </label>
+                    <input
+                      className="w-full rounded-xl border border-zinc-700/90 bg-zinc-900/90 px-3.5 py-2 text-sm uppercase text-zinc-100 placeholder-zinc-500 outline-none transition focus:border-amber-400"
+                      placeholder="VL-XXXXXX"
+                      value={referralCode}
+                      onChange={(e) => setReferralCode(e.target.value)}
+                    />
+                  </div>
+                )}
+
                 {error && (
                   <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
                     {error}
@@ -629,6 +688,19 @@ export default function HomePage() {
                       : 'Crear Cuenta y Jugar'}
                 </button>
               </form>
+
+              <div className="mt-3">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => {
+                    void playAsGuest();
+                  }}
+                  className="w-full rounded-xl border border-emerald-500/40 bg-emerald-500/15 py-2.5 text-xs font-bold uppercase tracking-wider text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50"
+                >
+                  ⚡ Probar Gratis en 1 Clic (Modo Invitado)
+                </button>
+              </div>
 
               <p className="mt-4 text-center text-[11px] text-zinc-400">
                 Controles 3D: <span className="text-zinc-200">WASD</span> mover

@@ -9,7 +9,15 @@ import {
 } from '@nestjs/common';
 import { ClansService } from './clans.service';
 import { AuthGuard } from '@nestjs/passport';
-import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsNumber,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 class CreateClanDto {
   @IsString()
@@ -22,6 +30,13 @@ class CreateClanDto {
     message: 'El tag debe tener entre 2 y 6 caracteres alfanuméricos',
   })
   tag: string;
+}
+
+class DonateClanDto {
+  @IsNumber()
+  @Min(50)
+  @Max(10_000_000)
+  amount: number;
 }
 
 @Controller('clans')
@@ -54,6 +69,11 @@ export class ClansController {
     return this.clansService.leaveClan(req.user.id);
   }
 
+  @Post('donate')
+  async donateToClan(@Req() req: any, @Body() dto: DonateClanDto) {
+    return this.clansService.donateToClan(req.user.id, dto.amount);
+  }
+
   @Get('leaderboard')
   async getLeaderboard() {
     return this.clansService.getClanLeaderboard();
@@ -70,6 +90,14 @@ export class ClansController {
     @Param('territoryId') territoryId: string,
   ) {
     return this.clansService.claimTerritory(req.user.id, territoryId);
+  }
+
+  @Post('territories/:territoryId/collect')
+  async collectTerritoryTax(
+    @Req() req: any,
+    @Param('territoryId') territoryId: string,
+  ) {
+    return this.clansService.collectTerritoryTax(req.user.id, territoryId);
   }
 }
 
