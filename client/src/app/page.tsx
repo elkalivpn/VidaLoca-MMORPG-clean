@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import CinematicBackdrop, {
   CINEMATIC_SCENES,
 } from '@/components/CinematicBackdrop';
+import VipShowcaseSection from '@/components/VipShowcaseSection';
 
 import type { Player } from '@/types/game';
 
@@ -413,9 +414,12 @@ export default function HomePage() {
 
           <nav className="hidden items-center gap-6 text-xs font-semibold uppercase tracking-wider text-zinc-300 md:flex">
             <a
-              href="#descargas"
+              href="#club-vip"
               className="text-amber-300 transition hover:text-amber-200"
             >
+              👑 Club VIP
+            </a>
+            <a href="#descargas" className="transition hover:text-amber-400">
               Descargas
             </a>
             <a href="#ciudades" className="transition hover:text-amber-400">
@@ -535,19 +539,28 @@ export default function HomePage() {
             </div>
 
             {/* Quick Metrics */}
-            <div className="grid grid-cols-3 gap-3 pt-1 sm:max-w-lg">
+            <div className="grid grid-cols-2 gap-3 pt-1 sm:max-w-xl sm:grid-cols-4">
               <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/60 px-3 py-2.5 backdrop-blur-sm">
                 <p className="text-lg font-black text-amber-400">6</p>
                 <p className="text-[11px] text-zinc-400">Ciudades Vivas</p>
               </div>
               <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/60 px-3 py-2.5 backdrop-blur-sm">
-                <p className="text-lg font-black text-sky-400">9</p>
-                <p className="text-[11px] text-zinc-400">Clases de Flota</p>
+                <p className="text-lg font-black text-sky-400">44</p>
+                <p className="text-[11px] text-zinc-400">Vehículos (8 VIP)</p>
               </div>
               <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/60 px-3 py-2.5 backdrop-blur-sm">
-                <p className="text-lg font-black text-emerald-400">4</p>
-                <p className="text-[11px] text-zinc-400">Facciones Activas</p>
+                <p className="text-lg font-black text-emerald-400">78</p>
+                <p className="text-[11px] text-zinc-400">Misiones (10 VIP)</p>
               </div>
+              <a
+                href="#club-vip"
+                className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 backdrop-blur-sm transition hover:border-amber-400"
+              >
+                <p className="text-lg font-black text-amber-300">21</p>
+                <p className="text-[11px] font-semibold text-amber-200">
+                  👑 Ofertas VIP
+                </p>
+              </a>
             </div>
           </div>
 
@@ -711,6 +724,14 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+
+        <VipShowcaseSection
+          loading={loading}
+          onPlayGuest={() => {
+            void playAsGuest();
+          }}
+          onJoinClub={() => focusPortal('register')}
+        />
 
         {/* SECTION 0: PORTAL OFICIAL DE DESCARGAS (GODOT 4) */}
         <section
