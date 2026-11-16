@@ -9,6 +9,7 @@ import {
 } from 'react';
 import * as THREE from 'three';
 import type { PlayerMovePayload, SpatialPlayer } from '@/lib/socket';
+import type { PlayerAppearance3D } from '@/lib/appearance3d';
 
 export type DistrictAction = {
   id: string;
@@ -28,6 +29,7 @@ export type DistrictPlayerInfo = {
   heat: number;
   lifestyle: string;
   locationId: string;
+  appearance?: PlayerAppearance3D;
 };
 
 export interface DistrictPoi {
@@ -192,6 +194,7 @@ type AvatarRig = {
   rightLeg: THREE.Mesh;
   leftArm: THREE.Mesh;
   rightArm: THREE.Mesh;
+  crownMesh?: THREE.Group;
   walkPhase: number;
 };
 
@@ -313,7 +316,11 @@ function createNameLabelSprite(name: string, accent = '#f59e0b'): THREE.Sprite {
   return sprite;
 }
 
-function createAvatarRig(bodyColor: number, accentColor: number): AvatarRig {
+function createAvatarRig(
+  bodyColor: number,
+  accentColor: number,
+  hasCrown = false,
+): AvatarRig {
   const group = new THREE.Group();
 
   const skinMat = new THREE.MeshStandardMaterial({
@@ -394,12 +401,34 @@ function createAvatarRig(bodyColor: number, accentColor: number): AvatarRig {
   visor.position.set(0, 1.75, 0.21);
   group.add(visor);
 
+  let crownMesh: THREE.Group | undefined;
+  if (hasCrown) {
+    crownMesh = new THREE.Group();
+    crownMesh.position.set(0, 2.22, 0);
+    const goldMat = new THREE.MeshStandardMaterial({
+      color: 0xfbbf24,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.7,
+      metalness: 0.8,
+      roughness: 0.2,
+    });
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), goldMat);
+    const halo = new THREE.Mesh(
+      new THREE.TorusGeometry(0.24, 0.035, 8, 24),
+      goldMat,
+    );
+    halo.rotation.x = Math.PI / 2;
+    crownMesh.add(gem, halo);
+    group.add(crownMesh);
+  }
+
   return {
     group,
     leftLeg,
     rightLeg,
     leftArm,
     rightArm,
+    crownMesh,
     walkPhase: 0,
   };
 }
@@ -410,6 +439,9 @@ function animateAvatarRig(
   isSprinting: boolean,
   dt: number,
 ) {
+  if (rig.crownMesh) {
+    rig.crownMesh.rotation.y += dt * 2.2;
+  }
   if (isMoving) {
     rig.walkPhase += dt * (isSprinting ? 14 : 9);
     const swing = Math.sin(rig.walkPhase) * (isSprinting ? 0.65 : 0.42);
@@ -425,20 +457,29 @@ function animateAvatarRig(
   }
 }
 
-function createSupercarRig(accentColor: number): SupercarRig {
+function createSupercarRig(
+  accentColor: number,
+  options?: {
+    bodyColor?: number;
+    underglowColor?: number;
+    underglowOpacity?: number;
+    hasBlueNeon?: boolean;
+    hasGoldPlate?: boolean;
+  },
+): SupercarRig {
   const group = new THREE.Group();
   const chassis = new THREE.Group();
   group.add(chassis);
 
   const bodyMat = new THREE.MeshStandardMaterial({
-    color: 0x18181b,
+    color: options?.bodyColor ?? 0x18181b,
     metalness: 0.78,
     roughness: 0.22,
   });
   const accentMat = new THREE.MeshStandardMaterial({
     color: accentColor,
     emissive: accentColor,
-    emissiveIntensity: 0.35,
+    emissiveIntensity: 0.45,
     metalness: 0.5,
     roughness: 0.3,
   });
@@ -454,7 +495,7 @@ function createSupercarRig(accentColor: number): SupercarRig {
     roughness: 0.85,
   });
   const rimMat = new THREE.MeshStandardMaterial({
-    color: 0xd4d4d8,
+    color: options?.hasGoldPlate ? 0xfbbf24 : 0xd4d4d8,
     metalness: 0.85,
     roughness: 0.2,
   });
@@ -470,18 +511,25 @@ function createSupercarRig(accentColor: number): SupercarRig {
   });
 
   // Underglow ring
+  const glowColor = options?.underglowColor ?? accentColor;
   const underglow = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.9, 4.1),
+    new THREE.PlaneGeometry(2.05, 4.25),
     new THREE.MeshBasicMaterial({
-      color: accentColor,
+      color: glowColor,
       transparent: true,
-      opacity: 0.22,
+      opacity: options?.underglowOpacity ?? 0.22,
       side: THREE.DoubleSide,
     }),
   );
   underglow.rotation.x = -Math.PI / 2;
   underglow.position.y = 0.04;
   group.add(underglow);
+
+  if (options?.hasBlueNeon) {
+    const neonLight = new THREE.PointLight(0x00d4ff, 6, 9, 1.8);
+    neonLight.position.set(0, 0.25, 0);
+    group.add(neonLight);
+  }
 
   // Main lower body
   const lowerBody = new THREE.Mesh(
@@ -552,6 +600,22 @@ function createSupercarRig(accentColor: number): SupercarRig {
   const tailR = tailL.clone();
   tailR.position.x = 0.56;
   chassis.add(tailL, tailR);
+
+  if (options?.hasGoldPlate) {
+    const goldPlateMat = new THREE.MeshStandardMaterial({
+      color: 0xfbbf24,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.65,
+      metalness: 0.9,
+      roughness: 0.15,
+    });
+    const plate = new THREE.Mesh(
+      new THREE.BoxGeometry(0.48, 0.13, 0.05),
+      goldPlateMat,
+    );
+    plate.position.set(0, 0.36, -2.09);
+    chassis.add(plate);
+  }
 
   // Wheels
   const makeWheel = (x: number, z: number) => {
@@ -936,13 +1000,24 @@ export default function District3D({
       poiMeshes.push({ poi, beacon, ring });
     }
 
-    // Local Player Avatar
-    const localRig = createAvatarRig(0x27272a, theme.accent);
+    // Local Player Avatar (reflects equipped Character, Clothing, Cosmetic & VIP Crown)
+    const app = player.appearance;
+    const localRig = createAvatarRig(
+      app?.avatarBodyColor ?? 0x27272a,
+      app?.avatarAccentColor ?? theme.accent,
+      Boolean(app?.hasVipCrown),
+    );
     localRig.group.position.set(0, 0, 2);
     scene.add(localRig.group);
 
-    // Local Supercar
-    const carRig = createSupercarRig(theme.accent);
+    // Local Supercar (reflects equipped Neon, Gold Plate & VIP Fleet)
+    const carRig = createSupercarRig(app?.carAccentColor ?? theme.accent, {
+      bodyColor: app?.carBodyColor,
+      underglowColor: app?.carUnderglowColor,
+      underglowOpacity: app?.carUnderglowOpacity,
+      hasBlueNeon: app?.hasBlueNeon,
+      hasGoldPlate: app?.hasGoldPlate,
+    });
     carRig.group.position.set(3.5, 0, 4.5);
     scene.add(carRig.group);
 
@@ -1660,9 +1735,10 @@ export default function District3D({
       windowTex.dispose();
       renderer.dispose();
     };
-  }, [vibe, remotePlayersRef]);
+  }, [vibe, remotePlayersRef, player.appearance?.appearanceKey]);
 
   const heatStars = Math.min(5, Math.ceil((player.heat || 0) / 20));
+  const app = player.appearance;
 
   if (webglError) {
     return (
@@ -1688,7 +1764,7 @@ export default function District3D({
       <div ref={mountRef} className="w-full h-full" />
 
       {/* Top-Left HUD: District, Heat Stars & Lifestyle */}
-      <div className="absolute top-3 left-3 z-10 flex flex-col gap-2 max-w-[270px] pointer-events-auto">
+      <div className="absolute top-3 left-3 z-10 flex flex-col gap-2 max-w-[285px] pointer-events-auto">
         <div className="rounded-xl bg-zinc-950/80 backdrop-blur-md border border-zinc-800/90 px-3 py-2">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[10px] uppercase tracking-widest text-amber-400 font-semibold">
@@ -1734,6 +1810,40 @@ export default function District3D({
               {player.heat}/100
             </span>
           </div>
+
+          {(app?.isVip ||
+            app?.characterName ||
+            app?.clothingName ||
+            app?.cosmeticName ||
+            app?.vehicleName) && (
+            <div className="mt-1.5 flex flex-wrap gap-1 border-t border-zinc-800/80 pt-1.5 text-[10px]">
+              {app.isVip && (
+                <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-bold text-amber-300">
+                  👑 VIP
+                </span>
+              )}
+              {app.characterName && (
+                <span className="rounded bg-fuchsia-500/15 px-1.5 py-0.5 text-fuchsia-200">
+                  🎭 {app.characterName}
+                </span>
+              )}
+              {app.clothingName && (
+                <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-cyan-200">
+                  👔 {app.clothingName}
+                </span>
+              )}
+              {app.cosmeticName && (
+                <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-sky-200">
+                  ✨ {app.cosmeticName}
+                </span>
+              )}
+              {app.vehicleName && (
+                <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-200">
+                  🏎️ {app.vehicleName}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Quick Lifestyle Selector */}

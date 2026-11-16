@@ -10,6 +10,7 @@ import {
 import { api } from '@/lib/api';
 import { CITIES } from '@/data/cities';
 import { useAuthStore } from '@/store/auth';
+import { resolvePlayerAppearance3D } from '@/lib/appearance3d';
 import District3D from '@/components/District3D';
 import type { PlayerMovePayload, SpatialPlayer } from '@/lib/socket';
 
@@ -201,7 +202,11 @@ export default function StreetPlay({
           <District3D
             zoneName={city?.name || player.locationId}
             vibe={zone.vibe}
-            player={{ ...player, id: authPlayer?.id }}
+            player={{
+              ...player,
+              id: authPlayer?.id,
+              appearance: resolvePlayerAppearance3D(authPlayer),
+            }}
             localPlayerId={localPlayerId ?? authPlayer?.id}
             actions={zone.actions || []}
             remotePlayersRef={remotePlayersRef ?? fallbackRemoteRef}
