@@ -18,7 +18,15 @@ if (!connectionString) {
   process.exit(1);
 }
 
-const pool = new pg.Pool({ connectionString });
+const isLocalHost =
+  connectionString.includes('localhost') ||
+  connectionString.includes('127.0.0.1') ||
+  /@postgres(?::|\/)/.test(connectionString);
+
+const pool = new pg.Pool({
+  connectionString,
+  ...(isLocalHost ? {} : { ssl: { rejectUnauthorized: false } }),
+});
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
@@ -44,6 +52,28 @@ interface ItemSeed {
 }
 
 async function main() {
+  if (process.argv.includes('--if-needed')) {
+    const [territories, missions, vehicles, items, properties] = await Promise.all([
+      prisma.territory.count(),
+      prisma.missionTemplate.count(),
+      prisma.vehicleTemplate.count(),
+      prisma.itemTemplate.count(),
+      prisma.propertyTemplate.count(),
+    ]);
+    if (
+      territories >= 24 &&
+      missions >= 45 &&
+      vehicles >= 20 &&
+      items >= 17 &&
+      properties >= 13
+    ) {
+      console.log(
+        `✅ Mundo ya sembrado (${territories} zonas, ${missions} misiones, ${vehicles} vehículos). Omitiendo seed.`,
+      );
+      return;
+    }
+  }
+
   console.log('🌱 Iniciando seed de datos para VidaLoca MMORPG...');
   console.log(
     '→ DB host:',

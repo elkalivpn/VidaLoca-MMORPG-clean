@@ -23,6 +23,10 @@ async function bootstrap() {
     'FRONTEND_URL',
     'http://localhost:3001',
   );
+  const frontendOrigins = frontendUrl
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
 
   // Hardening: remove Express fingerprint & enforce strict security headers
@@ -37,7 +41,7 @@ async function bootstrap() {
               scriptSrc: ["'self'"],
               styleSrc: ["'self'", "'unsafe-inline'"],
               imgSrc: ["'self'", 'data:', 'https:'],
-              connectSrc: ["'self'", frontendUrl, 'wss:', 'https:'],
+              connectSrc: ["'self'", ...frontendOrigins, 'wss:', 'https:'],
               objectSrc: ["'none'"],
               frameAncestors: ["'none'"],
             },
@@ -57,7 +61,7 @@ async function bootstrap() {
 
   app.enableCors({
     origin: isProduction
-      ? [frontendUrl, 'https://vida-loca-mmorpg.vercel.app']
+      ? [...frontendOrigins, 'https://vida-loca-mmorpg.vercel.app']
       : true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
