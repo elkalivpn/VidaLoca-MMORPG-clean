@@ -319,10 +319,11 @@ export default function FactionsPanel({
     setMsg(null);
     try {
       const res = await api.payBail();
+      const paid = res?.bailCost ?? res?.paidEuros;
       setMsg({
         text:
           res?.message ||
-          `Fianza pagada${res?.paidEuros ? ` (${res.paidEuros.toLocaleString('es-ES')} €)` : ''}. ¡Eres libre!`,
+          `Fianza pagada${paid ? ` (${paid.toLocaleString('es-ES')} €)` : ''}. ¡Eres libre!`,
         tone: 'ok',
       });
       await Promise.all([refreshPlayer(), loadData()]);
@@ -337,19 +338,29 @@ export default function FactionsPanel({
   }
 
   async function handleIntercept(suspect: WantedSuspect) {
-    const targetId = suspect.playerId || suspect.id;
+    const targetId = suspect.id || suspect.playerId;
     if (!token || !targetId || busyAction) return;
     setBusyAction(`intercept:${targetId}`);
     setMsg(null);
     try {
       const res = await api.interceptWanted(targetId);
-      const reward = res?.rewardEuros ?? res?.bountyEuros;
-      setMsg({
-        text:
-          res?.message ||
-          `Sospechoso ${suspect.displayName} interceptado${reward ? ` (+${reward.toLocaleString('es-ES')} €)` : ''}`,
-        tone: 'ok',
-      });
+      const captured = res?.captured ?? res?.outcome !== 'ESCAPED';
+      if (captured) {
+        const reward = res?.bountyEuros;
+        setMsg({
+          text:
+            res?.message ||
+            `¡Captura confirmada! ${suspect.displayName} enviado al calabozo${reward ? ` (+${reward.toLocaleString('es-ES')} €)` : ''}.`,
+          tone: 'ok',
+        });
+      } else {
+        setMsg({
+          text:
+            res?.message ||
+            `${suspect.displayName} ha logrado escapar de la persecución (+${res?.agentXpGain ?? 12} XP de patrulla).`,
+          tone: 'err',
+        });
+      }
       await Promise.all([refreshPlayer(), loadData()]);
     } catch (e: unknown) {
       setMsg({
@@ -436,6 +447,7 @@ export default function FactionsPanel({
           {factions.map((f) => {
             const isCurrent = f.id === currentFaction;
             const isJoining = busyAction === `join:${f.id}`;
+            const onlineCount = f.activeMembers ?? f.memberCount;
             return (
               <div
                 key={f.id}
@@ -455,9 +467,9 @@ export default function FactionsPanel({
                         >
                           {f.name}
                         </div>
-                        {typeof f.memberCount === 'number' && (
+                        {typeof onlineCount === 'number' && (
                           <div className="text-[11px] text-zinc-500">
-                            {f.memberCount} miembros
+                            {onlineCount} activos
                           </div>
                         )}
                       </div>

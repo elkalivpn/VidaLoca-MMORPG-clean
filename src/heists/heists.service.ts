@@ -256,14 +256,36 @@ export const HEIST_CATALOG: HeistCatalogItem[] = [
   },
 ];
 
+const PORT_HEIST_IDS = new Set([
+  'yate_puerto_banus',
+  'puerto_barcelona',
+  'descarga_ria_vigo',
+  'casino_palma_maritimo',
+  'muelle_canarias_atlantico',
+  'terminal_levante_valencia',
+  'botafoch_ibiza_vault',
+]);
+
 @Injectable()
 export class HeistsService {
   private readonly lobbies = new Map<string, HeistLobby>();
+  private readonly STALE_LOBBY_TTL_MS = 10 * 60 * 1000;
 
   constructor(
     private prisma: PrismaService,
     @Optional() private readonly antiCheat?: AntiCheatService,
   ) {}
+
+  private purgeStaleLobbies(now = Date.now()) {
+    for (const [id, lobby] of this.lobbies.entries()) {
+      if (lobby.status !== 'OPEN') {
+        const refTs = new Date(lobby.executedAt || lobby.createdAt).getTime();
+        if (Number.isFinite(refTs) && now - refTs > this.STALE_LOBBY_TTL_MS) {
+          this.lobbies.delete(id);
+        }
+      }
+    }
+  }
 
   private assertNotJailed(jailUntil?: Date | null) {
     if (jailUntil && new Date(jailUntil).getTime() > Date.now()) {
@@ -283,6 +305,7 @@ export class HeistsService {
   }
 
   getCatalogAndLobbies() {
+    this.purgeStaleLobbies();
     const activeLobbies = Array.from(this.lobbies.values()).filter(
       (l) => l.status === 'OPEN',
     );
@@ -293,6 +316,7 @@ export class HeistsService {
   }
 
   async createLobby(userId: string, dto: CreateHeistDto) {
+    this.purgeStaleLobbies();
     const heist = HEIST_CATALOG.find((h) => h.id === dto.heistId);
     if (!heist) {
       throw new NotFoundException(`Golpe desconocido: ${dto.heistId}`);
@@ -392,6 +416,41 @@ export class HeistsService {
     return lobby;
   }
 
+  async leaveLobby(userId: string, lobbyId: string) {
+    const lobby = this.lobbies.get(lobbyId);
+    if (!lobby) {
+      throw new NotFoundException('Lobby de golpe no encontrado');
+    }
+    if (lobby.status !== 'OPEN') {
+      throw new BadRequestException('Este lobby ya no está abierto');
+    }
+
+    const player = await this.getPlayerOrThrow(userId);
+    const idx = lobby.participants.findIndex((p) => p.playerId === player.id);
+    if (idx === -1) {
+      throw new ForbiddenException('No formas parte de este lobby de golpe');
+    }
+
+    if (lobby.leaderPlayerId === player.id) {
+      this.lobbies.delete(lobby.id);
+      return {
+        left: true,
+        disbanded: true,
+        lobbyId: lobby.id,
+        message: 'Has disuelto el lobby de golpe.',
+      };
+    }
+
+    lobby.participants.splice(idx, 1);
+    return {
+      left: true,
+      disbanded: false,
+      lobbyId: lobby.id,
+      lobby,
+      message: 'Has abandonado el lobby de golpe.',
+    };
+  }
+
   async executeLobby(userId: string, lobbyId: string) {
     const lobby = this.lobbies.get(lobbyId);
     if (!lobby) {
@@ -438,14 +497,7 @@ export class HeistsService {
       const hasDriver = uniqueRoles.has('DRIVER');
       const hasHacker = uniqueRoles.has('HACKER');
       const hasEnforcer = uniqueRoles.has('ENFORCER');
-
-      const successChance = Math.min(
-        0.95,
-        heist.baseSuccessChance +
-          (crewCount - 1) * 0.08 +
-          (hasHacker ? 0.05 : 0),
-      );
-      const succeeded = Math.random() < successChance;
+      const isPortHeist = PORT_HEIST_IDS.has(heist.id);
 
       const result = await this.prisma.$transaction(async (tx) => {
         const participantIds = lobby.participants.map((p) => p.playerId);
@@ -460,6 +512,19 @@ export class HeistsService {
         for (const p of players) {
           this.assertNotJailed(p.jailUntil);
         }
+
+        const hasCyberHacker = players.some(
+          (p) => p.faction === 'CYBER_HACKER',
+        );
+
+        const successChance = Math.min(
+          0.95,
+          heist.baseSuccessChance +
+            (crewCount - 1) * 0.08 +
+            (hasHacker ? 0.05 : 0) +
+            (hasCyberHacker ? 0.05 : 0),
+        );
+        const succeeded = Math.random() < successChance;
 
         const eurosMultiplier = hasEnforcer ? 1.1 : 1.0;
         const heatReduction = hasDriver ? 5 : 0;
@@ -478,7 +543,7 @@ export class HeistsService {
         const xpShare = succeeded
           ? Math.round(heist.rewardXp / crewCount)
           : Math.max(15, Math.round(heist.rewardXp * 0.2));
-        const heatGain = Math.max(
+        const baseHeatGain = Math.max(
           5,
           heist.baseHeat + (succeeded ? 0 : 12) - heatReduction,
         );
@@ -492,6 +557,7 @@ export class HeistsService {
           xpGained: number;
           battlePassXpGained: number;
           heatGained: number;
+          reputationGained: number;
           newLevel: number;
           newHeat: number;
           newWantedLevel: number;
@@ -501,31 +567,49 @@ export class HeistsService {
 
         for (const participant of lobby.participants) {
           const dbPlayer = players.find((p) => p.id === participant.playerId)!;
+          const isMaritimeCartel =
+            dbPlayer.faction === 'CARTEL_MARITIMO' && isPortHeist;
+          const playerEurosShare =
+            succeeded && isMaritimeCartel
+              ? Math.round(eurosShare * 1.1 * 100) / 100
+              : eurosShare;
+          const playerDirtyShare =
+            succeeded && isMaritimeCartel
+              ? Math.round(dirtyShare * 1.1 * 100) / 100
+              : dirtyShare;
+          const playerHeatGain =
+            dbPlayer.faction === 'CYBER_HACKER'
+              ? Math.max(4, Math.round(baseHeatGain * 0.7))
+              : baseHeatGain;
+          const repGain =
+            dbPlayer.faction === 'SYNDICATE' ? (succeeded ? 15 : 3) : 0;
+
           const newXp = dbPlayer.xp + xpShare;
           const calcLevel = calculateLevelFromXp(newXp);
           const newLevel =
             calcLevel > dbPlayer.level ? calcLevel : dbPlayer.level;
-          const newHeat = Math.min(100, (dbPlayer.heat ?? 0) + heatGain);
+          const newHeat = Math.min(100, (dbPlayer.heat ?? 0) + playerHeatGain);
           const newWantedLevel = Math.min(5, Math.floor(newHeat / 20));
 
           const updated = await tx.player.update({
             where: { id: dbPlayer.id },
             data: {
-              euros: { increment: eurosShare },
-              dirtyEuros: { increment: dirtyShare },
+              euros: { increment: playerEurosShare },
+              dirtyEuros: { increment: playerDirtyShare },
               xp: newXp,
               level: newLevel,
               heat: newHeat,
               wantedLevel: newWantedLevel,
+              ...(repGain > 0 ? { reputation: { increment: repGain } } : {}),
             },
           });
 
-          if (eurosShare > 0) {
+          if (playerEurosShare > 0) {
             await tx.transactionLog.create({
               data: {
                 playerId: dbPlayer.id,
                 type: 'EARN',
-                amount: eurosShare,
+                amount: playerEurosShare,
                 currency: 'EUR',
                 reason: `Heist "${heist.name}" (${participant.role})`,
                 reference: lobby.id,
@@ -539,11 +623,12 @@ export class HeistsService {
             playerId: dbPlayer.id,
             displayName: dbPlayer.displayName,
             role: participant.role,
-            eurosGained: eurosShare,
-            dirtyEurosGained: dirtyShare,
+            eurosGained: playerEurosShare,
+            dirtyEurosGained: playerDirtyShare,
             xpGained: xpShare,
             battlePassXpGained: battlePassXpGain,
-            heatGained: heatGain,
+            heatGained: playerHeatGain,
+            reputationGained: repGain,
             newLevel: updated.level,
             newHeat: updated.heat,
             newWantedLevel: updated.wantedLevel,

@@ -145,8 +145,13 @@ function estimateRoute(
     backendDistanceKm ??
     (from.id === to.id ? 0 : Math.max(4, Math.round(straight * 1.18)));
   const highway = backendHighway ?? inferHighway(from, to);
+  const isIntercity = from.city !== to.city;
   const costEuros =
-    from.id === to.id ? 0 : Math.max(5, Math.round(roadKm * 0.08 + 5));
+    from.id === to.id
+      ? 0
+      : isIntercity
+        ? Math.round((roadKm * 0.12 + 5) * 100) / 100
+        : Math.max(1, Math.round(roadKm * 0.4 * 100) / 100);
   const avgKmh = vehicleSpeed ? Math.min(185, 85 + vehicleSpeed * 0.5) : 100;
   const totalMinutes =
     from.id === to.id ? 0 : Math.max(8, Math.round((roadKm / avgKmh) * 60));
@@ -218,9 +223,16 @@ export default function CityMap({
     return CITIES.map((base) => {
       const apiZone = mapData?.zones?.find((z) => z.id === base.id);
       const apiTerritory = mapData?.territories?.find(
-        (t) => t.locationId === base.id || t.zoneId === base.id,
+        (t) =>
+          t.locationId === base.id ||
+          t.zoneId === base.id ||
+          (t.city && t.city.toLowerCase() === base.city.toLowerCase()),
       );
-      const clan = apiZone?.controlledByClan ?? apiTerritory?.clan ?? null;
+      const clan =
+        apiZone?.controlledByClan ??
+        apiTerritory?.controller ??
+        apiTerritory?.clan ??
+        null;
       return {
         ...base,
         lng: apiZone?.lng ?? base.lng,
@@ -273,6 +285,7 @@ export default function CityMap({
 
     let map: MapLibreMap;
     try {
+      maplibregl.setWorkerUrl('/maplibre-gl-worker.mjs');
       map = new maplibregl.Map({
         container,
         style: DARK_STYLE_URL,

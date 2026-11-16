@@ -270,10 +270,10 @@ export const api = {
     }),
   worldMarket: () =>
     request<WorldMarketResponse | MarketItem[]>('/world/market'),
-  tradeMarket: (itemId: string, action: 'BUY' | 'SELL', quantity: number) =>
+  tradeMarket: (goodId: string, action: 'BUY' | 'SELL', quantity: number) =>
     request<MarketTradeResponse>('/world/market/trade', {
       method: 'POST',
-      body: JSON.stringify({ itemId, action, quantity }),
+      body: JSON.stringify({ goodId, action, quantity }),
     }),
 
   // Factions & Pursuit
@@ -301,25 +301,32 @@ export const api = {
     request<
       WantedSuspect[] | { suspects?: WantedSuspect[]; wanted?: WantedSuspect[] }
     >('/factions/wanted'),
-  interceptWanted: (targetPlayerId: string) =>
+  interceptWanted: (suspectPlayerId: string) =>
     request<InterceptResponse>('/factions/intercept', {
       method: 'POST',
-      body: JSON.stringify({ targetPlayerId }),
+      body: JSON.stringify({ suspectPlayerId }),
     }),
   payBail: () => request<BailResponse>('/factions/bail', { method: 'POST' }),
 
   // Heists
   heists: () => request<HeistsOverviewResponse>('/heists'),
-  createHeist: (templateId: string) =>
+  createHeist: (heistId: string, role?: HeistRole) =>
     request<HeistLobby>('/heists/create', {
       method: 'POST',
-      body: JSON.stringify({ templateId }),
+      body: JSON.stringify({ heistId, role }),
     }),
   joinHeist: (lobbyId: string, role: HeistRole) =>
     request<HeistLobby>(`/heists/${lobbyId}/join`, {
       method: 'POST',
       body: JSON.stringify({ role }),
     }),
+  leaveHeist: (lobbyId: string) =>
+    request<{
+      left: boolean;
+      disbanded: boolean;
+      lobbyId: string;
+      message?: string;
+    }>(`/heists/${lobbyId}/leave`, { method: 'POST' }),
   executeHeist: (lobbyId: string) =>
     request<HeistExecuteResponse>(`/heists/${lobbyId}/execute`, {
       method: 'POST',

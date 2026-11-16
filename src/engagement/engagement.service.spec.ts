@@ -3,6 +3,8 @@ import { BadRequestException } from '@nestjs/common';
 import { EngagementService } from './engagement.service';
 import { PrismaService } from '../prisma/prisma.service';
 
+import { ZONES_BY_ID } from '../common/constants/zones';
+
 describe('EngagementService', () => {
   let service: EngagementService;
   let prisma: {
@@ -198,5 +200,12 @@ describe('EngagementService', () => {
     await expect(service.participateInWorldEvent('u1')).rejects.toThrow(
       BadRequestException,
     );
+  });
+
+  it('uses only valid ZONES_BY_ID zoneIds across all WORLD_EVENTS', () => {
+    for (const ev of EngagementService.WORLD_EVENTS) {
+      expect(ZONES_BY_ID[ev.zoneId]).toBeDefined();
+      expect(ZONES_BY_ID[ev.zoneId].city).toBe(ev.city);
+    }
   });
 });

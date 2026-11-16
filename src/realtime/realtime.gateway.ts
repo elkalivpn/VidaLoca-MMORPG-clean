@@ -54,11 +54,21 @@ export interface PresenceEntry {
         callback(null, true);
         return;
       }
-      const allowed = (process.env.FRONTEND_URL || '')
+      const allowed = [
+        process.env.FRONTEND_URL || '',
+        process.env.ALLOWED_ORIGINS || '',
+        'https://vidaloca-mmorpg.vercel.app',
+        'http://localhost:3001',
+      ]
+        .join(',')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
-      if (!origin || allowed.includes(origin)) {
+      if (
+        !origin ||
+        allowed.includes(origin) ||
+        /^https:\/\/vidaloca[a-z0-9-]*\.vercel\.app$/.test(origin)
+      ) {
         callback(null, true);
       } else {
         callback(new Error('Origin not allowed by WebSocket CORS policy'), false);

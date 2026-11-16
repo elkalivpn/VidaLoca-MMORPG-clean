@@ -698,18 +698,53 @@ export class WorldService {
     return Math.max(10, Math.round(price * 100) / 100);
   }
 
-  private getPlayerCargo(playerId: string): Record<MarketGoodId, number> {
-    let cargo = this.marketCargo.get(playerId);
-    if (!cargo) {
-      cargo = {
-        relojes_lujo: 0,
-        tech_chips: 0,
-        aceite_gourmet: 0,
-        piezas_tuning: 0,
-      };
-      this.marketCargo.set(playerId, cargo);
+  private static readonly COASTAL_CITIES = new Set([
+    'Vigo',
+    'A Coruña',
+    'Gijón',
+    'Santander',
+    'San Sebastián',
+    'Barcelona',
+    'Valencia',
+    'Alicante',
+    'Marbella',
+    'Málaga',
+    'Palma',
+    'Ibiza',
+    'Las Palmas',
+    'Tenerife',
+    'Lanzarote',
+  ]);
+
+  private extractCargo(
+    playerId: string,
+    dbCargo?: unknown,
+  ): Record<MarketGoodId, number> {
+    const base: Record<MarketGoodId, number> = {
+      relojes_lujo: 0,
+      tech_chips: 0,
+      aceite_gourmet: 0,
+      piezas_tuning: 0,
+    };
+
+    if (dbCargo && typeof dbCargo === 'object' && !Array.isArray(dbCargo)) {
+      const rec = dbCargo as Record<string, unknown>;
+      for (const key of Object.keys(base) as MarketGoodId[]) {
+        const val = rec[key];
+        if (typeof val === 'number' && Number.isFinite(val) && val >= 0) {
+          base[key] = Math.floor(val);
+        }
+      }
+      this.marketCargo.set(playerId, base);
+      return base;
     }
-    return cargo;
+
+    const mem = this.marketCargo.get(playerId);
+    if (mem) {
+      return { ...base, ...mem };
+    }
+    this.marketCargo.set(playerId, base);
+    return base;
   }
 
   async getMarket(userId: string) {
@@ -720,7 +755,7 @@ export class WorldService {
     const now = Date.now();
     const hourBucket = this.getHourWindowBucket(now);
     const windowExpiresAt = new Date((hourBucket + 1) * 60 * 60 * 1000).toISOString();
-    const cargo = this.getPlayerCargo(p.id);
+    const cargo = this.extractCargo(p.id, p.marketCargo);
 
     const goods = MARKET_GOODS.map((good) => {
       const cityPrices: Record<string, number> = {};
@@ -775,27 +810,35 @@ export class WorldService {
       const city = zone.city;
       const hourBucket = this.getHourWindowBucket();
       const unitPrice = this.computeGoodPrice(good, city, hourBucket);
-      const totalAmount = Math.round(unitPrice * dto.quantity * 100) / 100;
-      const cargo = this.getPlayerCargo(p.id);
+      const baseAmount = Math.round(unitPrice * dto.quantity * 100) / 100;
+      const cargo = this.extractCargo(p.id, p.marketCargo);
 
       if (dto.action === 'BUY') {
+        const nextCargo = {
+          ...cargo,
+          [dto.goodId]: (cargo[dto.goodId] ?? 0) + dto.quantity,
+        };
+
         const debit = await tx.player.updateMany({
-          where: { id: p.id, euros: { gte: totalAmount } },
-          data: { euros: { decrement: totalAmount } },
+          where: { id: p.id, euros: { gte: baseAmount } },
+          data: {
+            euros: { decrement: baseAmount },
+            marketCargo: nextCargo,
+          },
         });
         if (debit.count === 0) {
           throw new BadRequestException(
-            `No tienes suficientes euros (necesitas ${totalAmount}€)`,
+            `No tienes suficientes euros (necesitas ${baseAmount}€)`,
           );
         }
 
-        cargo[dto.goodId] = (cargo[dto.goodId] ?? 0) + dto.quantity;
+        this.marketCargo.set(p.id, nextCargo);
 
         await tx.transactionLog.create({
           data: {
             playerId: p.id,
             type: 'SPEND',
-            amount: totalAmount,
+            amount: baseAmount,
             currency: 'EUR',
             reason: `Market BUY ${dto.quantity}x ${good.name} in ${city}`,
             reference: good.id,
@@ -809,10 +852,10 @@ export class WorldService {
             goodId: good.id,
             quantity: dto.quantity,
             unitPrice,
-            totalAmount,
+            totalAmount: baseAmount,
             city,
-            owned: cargo[dto.goodId],
-            euros: Math.round((p.euros - totalAmount) * 100) / 100,
+            owned: nextCargo[dto.goodId],
+            euros: Math.round((p.euros - baseAmount) * 100) / 100,
           },
         };
       }
@@ -825,20 +868,34 @@ export class WorldService {
         );
       }
 
-      cargo[dto.goodId] = currentOwned - dto.quantity;
+      const maritimeBonusApplied =
+        p.faction === 'CARTEL_MARITIMO' &&
+        WorldService.COASTAL_CITIES.has(city);
+      const effectiveTotalAmount = maritimeBonusApplied
+        ? Math.round(baseAmount * 1.15 * 100) / 100
+        : baseAmount;
+
+      const nextCargo = {
+        ...cargo,
+        [dto.goodId]: currentOwned - dto.quantity,
+      };
+      this.marketCargo.set(p.id, nextCargo);
 
       const updated = await tx.player.update({
         where: { id: p.id },
-        data: { euros: { increment: totalAmount } },
+        data: {
+          euros: { increment: effectiveTotalAmount },
+          marketCargo: nextCargo,
+        },
       });
 
       await tx.transactionLog.create({
         data: {
           playerId: p.id,
           type: 'EARN',
-          amount: totalAmount,
+          amount: effectiveTotalAmount,
           currency: 'EUR',
-          reason: `Market SELL ${dto.quantity}x ${good.name} in ${city}`,
+          reason: `Market SELL ${dto.quantity}x ${good.name} in ${city}${maritimeBonusApplied ? ' (Portuaria +15%)' : ''}`,
           reference: good.id,
         },
       });
@@ -850,9 +907,10 @@ export class WorldService {
           goodId: good.id,
           quantity: dto.quantity,
           unitPrice,
-          totalAmount,
+          totalAmount: effectiveTotalAmount,
+          maritimeBonusApplied,
           city,
-          owned: cargo[dto.goodId],
+          owned: nextCargo[dto.goodId],
           euros: updated.euros,
         },
       };

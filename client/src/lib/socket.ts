@@ -63,14 +63,19 @@ export interface WorldEvent {
   [key: string]: unknown;
 }
 
+export type PlayerAnimState = 'idle' | 'walk' | 'run' | 'drive';
+
 export interface SpatialPlayer {
   playerId: string;
   displayName: string;
-  locationId: string;
+  locationId?: string;
   x: number;
   y: number;
   z: number;
-  rotationY: number;
+  rotY: number;
+  rotationY?: number;
+  anim?: PlayerAnimState;
+  vehicleId?: string;
   speed?: number;
   isMoving?: boolean;
   lifestyle?: string;
@@ -81,10 +86,9 @@ export interface PlayerMovePayload {
   x: number;
   y: number;
   z: number;
-  rotationY: number;
-  speed?: number;
-  isMoving?: boolean;
-  locationId?: string;
+  rotY: number;
+  anim?: PlayerAnimState;
+  vehicleId?: string;
 }
 
 export interface WorldSnapshotPayload {

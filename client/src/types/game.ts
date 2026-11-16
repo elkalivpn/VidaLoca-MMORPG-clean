@@ -272,8 +272,12 @@ export interface WorldMapResponse {
   zones?: WorldMapZone[];
   routes?: WorldMapRoute[];
   territories?: Array<{
+    id?: string;
+    name?: string;
+    city?: string;
     locationId?: string;
     zoneId?: string;
+    controller?: { id?: string; name: string; tag: string } | null;
     clan?: { id?: string; name: string; tag: string } | null;
   }>;
 }
@@ -311,12 +315,13 @@ export interface FactionInfo {
   description: string;
   perks: string[];
   badge?: string;
+  activeMembers?: number;
   memberCount?: number;
 }
 
 export interface WantedSuspect {
-  playerId: string;
-  id?: string;
+  playerId?: string;
+  id: string;
   displayName: string;
   heat: number;
   wantedLevel: number;
@@ -328,25 +333,39 @@ export interface WantedSuspect {
 }
 
 export interface InterceptResponse {
-  ok?: boolean;
-  success?: boolean;
-  intercepted?: boolean;
-  message?: string;
-  rewardEuros?: number;
+  captured: boolean;
+  outcome: 'CAPTURED' | 'ESCAPED';
+  locationId?: string;
+  captureChance?: number;
+  fineEuros?: number;
   bountyEuros?: number;
-  xpGained?: number;
+  suspectRepGain?: number;
+  agentXpGain?: number;
   jailUntil?: string | null;
-  targetPlayerId?: string;
-  targetDisplayName?: string;
-  player?: Partial<Player>;
+  message?: string;
+  agent?: {
+    id: string;
+    displayName: string;
+    euros: number;
+    xp: number;
+    level: number;
+  };
+  suspect?: {
+    id: string;
+    displayName: string;
+    heat: number;
+    wantedLevel: number;
+    jailUntil?: string | null;
+  };
 }
 
 export interface BailResponse {
-  ok?: boolean;
+  released?: boolean;
+  bailCost?: number;
+  eurosRemaining?: number;
   paidEuros?: number;
   message?: string;
   jailUntil?: string | null;
-  player?: Partial<Player>;
 }
 
 export interface PropertyUseResponse {
@@ -363,91 +382,106 @@ export interface PropertyUseResponse {
 export interface MarketItem {
   id: string;
   name: string;
-  category?: string;
   description?: string;
-  basePrice?: number;
-  buyPrice: number;
-  sellPrice: number;
+  basePrice: number;
+  currentPrice: number;
+  owned: number;
+  cityPrices?: Record<string, number>;
+  buyPrice?: number;
+  sellPrice?: number;
   price?: number;
-  trend?: string;
-  deltaPercent?: number;
-  stock?: number;
-  owned?: number;
-  illegal?: boolean;
-  heatDelta?: number;
 }
 
 export interface WorldMarketResponse {
+  currentZoneId?: string;
+  currentCity?: string;
+  hourWindow?: number;
+  windowExpiresAt?: string;
+  euros?: number;
+  goods: MarketItem[];
   locationId?: string;
   city?: string;
-  items: MarketItem[];
-  updatedAt?: string;
+  items?: MarketItem[];
 }
 
 export interface MarketTradeResponse {
-  ok?: boolean;
+  action: 'BUY' | 'SELL';
+  goodId: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  maritimeBonusApplied?: boolean;
+  city: string;
+  owned: number;
+  euros: number;
   message?: string;
-  itemId?: string;
-  action?: 'BUY' | 'SELL';
-  quantity?: number;
-  totalEuros?: number;
-  player?: Partial<Player>;
 }
 
-export type HeistRole = 'Conductor' | 'Hacker' | 'Asalto';
+export type HeistRole = 'DRIVER' | 'HACKER' | 'ENFORCER';
 
 export interface HeistTemplate {
   id: string;
   name: string;
+  city?: string;
+  zoneId?: string;
   description?: string;
-  difficulty?: string;
-  minPlayers?: number;
-  maxPlayers?: number;
-  requiredRoles?: HeistRole[];
+  difficulty?: 'MEDIUM' | 'HARD' | 'SUICIDE';
+  minLevel?: number;
+  minCrew?: number;
+  maxCrew?: number;
   rewardEuros?: number;
   rewardDirtyEuros?: number;
   rewardXp?: number;
-  heatDelta?: number;
-  locationId?: string;
+  baseHeat?: number;
+  baseSuccessChance?: number;
 }
 
 export interface HeistLobbyMember {
   playerId: string;
+  userId?: string;
   displayName?: string;
-  role: string;
-  ready?: boolean;
+  role: HeistRole;
+  joinedAt?: string;
 }
 
 export interface HeistLobby {
   id: string;
-  templateId: string;
-  templateName?: string;
-  template?: HeistTemplate;
-  locationId: string;
-  city?: string;
-  leaderId: string;
-  leaderName?: string;
+  heistId: string;
+  heistName?: string;
+  zoneId: string;
+  leaderPlayerId: string;
   status: string;
-  members: HeistLobbyMember[];
-  maxPlayers?: number;
+  participants: HeistLobbyMember[];
   createdAt?: string;
 }
 
 export interface HeistsOverviewResponse {
-  templates?: HeistTemplate[];
-  catalog?: HeistTemplate[];
-  lobbies?: HeistLobby[];
+  catalog: HeistTemplate[];
+  activeLobbies: HeistLobby[];
+}
+
+export interface HeistRewardEntry {
+  playerId: string;
+  displayName: string;
+  role: HeistRole;
+  eurosGained: number;
+  dirtyEurosGained: number;
+  xpGained: number;
+  battlePassXpGained?: number;
+  heatGained: number;
+  reputationGained?: number;
+  newLevel: number;
+  newHeat: number;
+  newWantedLevel: number;
 }
 
 export interface HeistExecuteResponse {
-  ok?: boolean;
-  success?: boolean;
-  message?: string;
-  rewardEuros?: number;
-  rewardDirtyEuros?: number;
-  rewardXp?: number;
-  heatDelta?: number;
-  player?: Partial<Player>;
+  outcome: 'COMPLETED' | 'FAILED';
+  succeeded: boolean;
+  heist: { id: string; name: string; difficulty: string };
+  lobbyId: string;
+  rewards: HeistRewardEntry[];
+  narrative: string;
 }
 
 export interface DailyStreakReward {

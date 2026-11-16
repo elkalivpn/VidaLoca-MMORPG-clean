@@ -19,14 +19,21 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 3000);
-  const frontendUrl = configService.get<string>(
-    'FRONTEND_URL',
-    'http://localhost:3001',
-  );
-  const frontendOrigins = frontendUrl
+  const allowedOriginsEnv = [
+    configService.get<string>('FRONTEND_URL', ''),
+    configService.get<string>('ALLOWED_ORIGINS', ''),
+  ]
+    .join(',')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+  const frontendOrigins = Array.from(
+    new Set([
+      ...allowedOriginsEnv,
+      'https://vidaloca-mmorpg.vercel.app',
+      'http://localhost:3001',
+    ]),
+  );
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
 
   // Hardening: remove Express fingerprint & enforce strict security headers
@@ -61,7 +68,17 @@ async function bootstrap() {
 
   app.enableCors({
     origin: isProduction
-      ? [...frontendOrigins, 'https://vida-loca-mmorpg.vercel.app']
+      ? (origin, callback) => {
+          if (
+            !origin ||
+            frontendOrigins.includes(origin) ||
+            /^https:\/\/vidaloca[a-z0-9-]*\.vercel\.app$/.test(origin)
+          ) {
+            callback(null, true);
+          } else {
+            callback(new Error('Origin not allowed by CORS'), false);
+          }
+        }
       : true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -119,7 +136,9 @@ async function bootstrap() {
     logger.log('📚 Swagger disabled in production');
   }
   logger.log(`🔌 WebSocket → ws://localhost:${port}/game`);
-  logger.log(`🌍 CORS: ${isProduction ? frontendUrl : 'development (open)'}`);
+  logger.log(
+    `🌍 CORS: ${isProduction ? frontendOrigins.join(', ') : 'development (open)'}`,
+  );
 }
 
 bootstrap().catch((err) => {

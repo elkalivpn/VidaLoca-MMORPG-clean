@@ -38,6 +38,14 @@ export class HeistsController {
     return this.heistsService.joinLobby(userId, lobbyId, dto);
   }
 
+  @Post(':lobbyId/leave')
+  leaveLobby(
+    @CurrentUser('id') userId: string,
+    @Param('lobbyId') lobbyId: string,
+  ) {
+    return this.heistsService.leaveLobby(userId, lobbyId);
+  }
+
   @Post(':lobbyId/execute')
   executeLobby(
     @CurrentUser('id') userId: string,

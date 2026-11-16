@@ -1565,14 +1565,19 @@ export default function District3D({
       // 2. Emit player:move throttled (~16 Hz)
       if ((isMoving && now - lastEmitTime > 60) || (!isMoving && wasMoving)) {
         lastEmitTime = now;
+        const sprinting = Boolean(keys['shift'] || sprintTouchRef.current);
         emitMoveRef.current({
           x: Number(localRig.group.position.x.toFixed(2)),
           y: 0,
           z: Number(localRig.group.position.z.toFixed(2)),
-          rotationY: Number(localRig.group.rotation.y.toFixed(3)),
-          speed: isMoving ? Number(currentSpeed.toFixed(2)) : 0,
-          isMoving,
-          locationId: locationIdRef.current,
+          rotY: Number(localRig.group.rotation.y.toFixed(3)),
+          anim: !isMoving
+            ? 'idle'
+            : inVehicleRef.current
+              ? 'drive'
+              : sprinting
+                ? 'run'
+                : 'walk',
         });
       }
       wasMoving = isMoving;
@@ -1652,11 +1657,15 @@ export default function District3D({
         if (remote.locationId && remote.locationId !== locationIdRef.current) {
           continue;
         }
+        const remoteRotY = remote.rotY ?? remote.rotationY ?? 0;
+        const remoteMoving = remote.anim
+          ? remote.anim !== 'idle'
+          : Boolean(remote.isMoving);
         let entry = remoteAvatars.get(id);
         if (!entry) {
           const rig = createAvatarRig(0x1e293b, 0x38bdf8);
           rig.group.position.set(remote.x || 0, remote.y || 0, remote.z || 0);
-          rig.group.rotation.y = remote.rotationY || 0;
+          rig.group.rotation.y = remoteRotY;
           const labelSprite = createNameLabelSprite(
             remote.displayName || 'Jugador',
             '#38bdf8',
@@ -1670,16 +1679,16 @@ export default function District3D({
               remote.y || 0,
               remote.z || 0,
             ),
-            targetRotY: remote.rotationY || 0,
-            isMoving: Boolean(remote.isMoving),
+            targetRotY: remoteRotY,
+            isMoving: remoteMoving,
             displayName: remote.displayName,
             labelSprite,
           };
           remoteAvatars.set(id, entry);
         } else {
           entry.targetPos.set(remote.x || 0, remote.y || 0, remote.z || 0);
-          entry.targetRotY = remote.rotationY || 0;
-          entry.isMoving = Boolean(remote.isMoving);
+          entry.targetRotY = remoteRotY;
+          entry.isMoving = remoteMoving;
         }
       }
 

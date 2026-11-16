@@ -310,4 +310,52 @@ describe('HeistsService', () => {
       expect(prisma.transactionLog.create).not.toHaveBeenCalled();
     });
   });
+
+  describe('leaveLobby', () => {
+    it('allows a non-leader member to leave cleanly without disbanding', async () => {
+      prisma.player.findUnique.mockResolvedValueOnce(leaderPlayer);
+      const lobby = await service.createLobby('user-1', {
+        heistId: 'blindado_castellana',
+        role: 'DRIVER',
+      });
+
+      prisma.player.findUnique.mockResolvedValueOnce(hackerPlayer);
+      await service.joinLobby('user-2', lobby.id, { role: 'HACKER' });
+
+      prisma.player.findUnique.mockResolvedValueOnce(hackerPlayer);
+      const res = await service.leaveLobby('user-2', lobby.id);
+
+      expect(res.left).toBe(true);
+      expect(res.disbanded).toBe(false);
+      expect(service.getCatalogAndLobbies().activeLobbies[0].participants).toHaveLength(1);
+    });
+
+    it('disbands the lobby when leader leaves', async () => {
+      prisma.player.findUnique.mockResolvedValueOnce(leaderPlayer);
+      const lobby = await service.createLobby('user-1', {
+        heistId: 'blindado_castellana',
+        role: 'DRIVER',
+      });
+
+      prisma.player.findUnique.mockResolvedValueOnce(leaderPlayer);
+      const res = await service.leaveLobby('user-1', lobby.id);
+
+      expect(res.left).toBe(true);
+      expect(res.disbanded).toBe(true);
+      expect(service.getCatalogAndLobbies().activeLobbies).toHaveLength(0);
+    });
+
+    it('throws ForbiddenException if caller is not a lobby participant', async () => {
+      prisma.player.findUnique.mockResolvedValueOnce(leaderPlayer);
+      const lobby = await service.createLobby('user-1', {
+        heistId: 'blindado_castellana',
+        role: 'DRIVER',
+      });
+
+      prisma.player.findUnique.mockResolvedValueOnce(enforcerPlayer);
+      await expect(service.leaveLobby('user-3', lobby.id)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+  });
 });

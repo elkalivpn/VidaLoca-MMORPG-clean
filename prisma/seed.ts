@@ -99,7 +99,8 @@ async function ensureSchemaUpToDate() {
       ADD COLUMN IF NOT EXISTS "isVip" BOOLEAN NOT NULL DEFAULT false,
       ADD COLUMN IF NOT EXISTS "vipExpiresAt" TIMESTAMP(3),
       ADD COLUMN IF NOT EXISTS "dailyChallengesDate" TEXT,
-      ADD COLUMN IF NOT EXISTS "dailyChallengesProgress" JSONB;
+      ADD COLUMN IF NOT EXISTS "dailyChallengesProgress" JSONB,
+      ADD COLUMN IF NOT EXISTS "marketCargo" JSONB;
   `);
 
   await pool.query(`

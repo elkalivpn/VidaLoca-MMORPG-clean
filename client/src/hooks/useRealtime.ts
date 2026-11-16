@@ -186,14 +186,54 @@ export function useRealtime(enabled: boolean) {
 
   const sendZoneChat = useCallback((message: string) => {
     const socket = getSocket();
-    if (!socket?.connected) return;
-    socket.emit('chat:zone', { message });
+    if (!socket?.connected) {
+      return Promise.resolve({
+        ok: false,
+        error: 'Sin conexión en tiempo real al servidor',
+      });
+    }
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      socket.emit(
+        'chat:zone',
+        { message },
+        (res?: { ok?: boolean; error?: string; message?: string }) => {
+          if (res && res.ok === false) {
+            resolve({
+              ok: false,
+              error: res.error || 'No se pudo enviar el mensaje',
+            });
+          } else {
+            resolve({ ok: true });
+          }
+        },
+      );
+    });
   }, []);
 
   const sendGlobalChat = useCallback((message: string) => {
     const socket = getSocket();
-    if (!socket?.connected) return;
-    socket.emit('chat:global', { message });
+    if (!socket?.connected) {
+      return Promise.resolve({
+        ok: false,
+        error: 'Sin conexión en tiempo real al servidor',
+      });
+    }
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      socket.emit(
+        'chat:global',
+        { message },
+        (res?: { ok?: boolean; error?: string; message?: string }) => {
+          if (res && res.ok === false) {
+            resolve({
+              ok: false,
+              error: res.error || 'No se pudo enviar el mensaje',
+            });
+          } else {
+            resolve({ ok: true });
+          }
+        },
+      );
+    });
   }, []);
 
   const requestPresence = useCallback(() => {

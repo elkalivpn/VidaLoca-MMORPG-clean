@@ -304,6 +304,7 @@ export default function PlayPage() {
         <aside className="border-t lg:border-t-0 lg:border-l border-zinc-800 p-2">
           <ChatPanel
             messages={messages}
+            connected={connected}
             onSend={(text, scope) =>
               scope === 'global' ? sendGlobalChat(text) : sendZoneChat(text)
             }

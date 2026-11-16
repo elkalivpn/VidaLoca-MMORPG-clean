@@ -284,4 +284,49 @@ describe('WorldService', () => {
       expect(prisma.player.update).not.toHaveBeenCalled();
     });
   });
+
+  describe('regional market', () => {
+    it('loads persisted marketCargo from database and saves BUY/SELL with CARTEL_MARITIMO coastal bonus', async () => {
+      const coastalPlayer = {
+        id: 'player-1',
+        userId: 'user-1',
+        locationId: 'vigo_puerto',
+        euros: 5000,
+        faction: 'CARTEL_MARITIMO',
+        jailUntil: null,
+        marketCargo: {
+          relojes_lujo: 2,
+          tech_chips: 0,
+          aceite_gourmet: 1,
+          piezas_tuning: 0,
+        },
+      };
+      (prisma.player as any).updateMany = jest.fn().mockResolvedValue({ count: 1 });
+      (prisma as any).transactionLog = { create: jest.fn().mockResolvedValue({}) };
+
+      prisma.player.findUnique.mockResolvedValue(coastalPlayer);
+      const market = await service.getMarket('user-1');
+      expect(market.currentCity).toBe('Vigo');
+      const watches = market.goods.find((g) => g.id === 'relojes_lujo');
+      expect(watches?.owned).toBe(2);
+
+      prisma.player.update.mockResolvedValue({ ...coastalPlayer, euros: 5800 });
+      const sellRes = await service.tradeMarket('user-1', {
+        goodId: 'relojes_lujo',
+        action: 'SELL',
+        quantity: 2,
+      });
+
+      expect(sellRes.maritimeBonusApplied).toBe(true);
+      expect(sellRes.owned).toBe(0);
+      expect(prisma.player.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'player-1' },
+          data: expect.objectContaining({
+            marketCargo: expect.objectContaining({ relojes_lujo: 0 }),
+          }),
+        }),
+      );
+    });
+  });
 });

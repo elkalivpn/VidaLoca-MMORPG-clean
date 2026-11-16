@@ -353,9 +353,6 @@ export class EngagementService {
   }
 
   async claimChallenge(userId: string, challengeId: string) {
-    const player = await this.prisma.player.findUnique({ where: { userId } });
-    if (!player) throw new NotFoundException('Player not found');
-
     const now = new Date();
     const dateKey = this.getTodayKey(now);
     const todays = this.getTodaysChallenges(dateKey);
@@ -364,28 +361,40 @@ export class EngagementService {
       throw new BadRequestException('Reto diario no disponible hoy');
     }
 
-    const state = this.normalizeProgress(
-      dateKey,
-      player.dailyChallengesDate,
-      player.dailyChallengesProgress,
-    );
-
-    if (state.claimed.includes(challengeId)) {
-      throw new BadRequestException('Ya reclamaste este reto diario');
-    }
-    if ((state[def.metric] || 0) < def.target) {
-      throw new BadRequestException(
-        `Aún te falta completar el reto (${state[def.metric] || 0}/${def.target})`,
-      );
-    }
-
-    state.claimed.push(challengeId);
-    const isVipActive =
-      Boolean(player.isVip) &&
-      (!player.vipExpiresAt || player.vipExpiresAt > now);
-    const xpGain = isVipActive ? Math.round(def.rewardXp * 1.25) : def.rewardXp;
+    const challengeRef = `daily-challenge:${def.id}:${dateKey}`;
 
     return this.prisma.$transaction(async (tx) => {
+      const player = await tx.player.findUnique({ where: { userId } });
+      if (!player) throw new NotFoundException('Player not found');
+
+      const alreadyClaimedTx = await tx.transactionLog.findFirst?.({
+        where: { playerId: player.id, reference: challengeRef },
+        select: { id: true },
+      });
+      if (alreadyClaimedTx) {
+        throw new BadRequestException('Ya reclamaste este reto diario');
+      }
+
+      const state = this.normalizeProgress(
+        dateKey,
+        player.dailyChallengesDate,
+        player.dailyChallengesProgress,
+      );
+
+      if (state.claimed.includes(challengeId)) {
+        throw new BadRequestException('Ya reclamaste este reto diario');
+      }
+      if ((state[def.metric] || 0) < def.target) {
+        throw new BadRequestException(
+          `Aún te falta completar el reto (${state[def.metric] || 0}/${def.target})`,
+        );
+      }
+
+      state.claimed.push(challengeId);
+      const isVipActive =
+        Boolean(player.isVip) &&
+        (!player.vipExpiresAt || player.vipExpiresAt > now);
+      const xpGain = isVipActive ? Math.round(def.rewardXp * 1.25) : def.rewardXp;
       const nextXp = player.xp + xpGain;
       const nextLevel = Math.max(player.level, calculateLevelFromXp(nextXp));
 
@@ -408,7 +417,7 @@ export class EngagementService {
           amount: def.rewardEuros,
           currency: 'EUR',
           reason: `Reto diario: ${def.title}`,
-          reference: def.id,
+          reference: challengeRef,
         },
       });
 
@@ -420,7 +429,7 @@ export class EngagementService {
             amount: def.rewardVidaCoins,
             currency: 'VIDACOIN',
             reason: `Reto diario: ${def.title}`,
-            reference: def.id,
+            reference: challengeRef,
           },
         });
       }
@@ -540,7 +549,7 @@ export class EngagementService {
     return data;
   }
 
-  private static readonly WORLD_EVENTS = [
+  public static readonly WORLD_EVENTS = [
     {
       id: 'madrid_convoy',
       title: 'Convoy Blindado en Gran Vía',
@@ -556,7 +565,7 @@ export class EngagementService {
       id: 'marbella_subasta',
       title: 'Subasta Relámpago en Puerto Banús',
       city: 'Marbella',
-      zoneId: 'marbella_banus',
+      zoneId: 'puerto_banus',
       description:
         'Coleccionistas privados liquidan activos de lujo junto a los megayates.',
       rewardEuros: 900,
@@ -567,7 +576,7 @@ export class EngagementService {
       id: 'barcelona_redada',
       title: 'Operación Nocturna en El Raval',
       city: 'Barcelona',
-      zoneId: 'barcelona_centro',
+      zoneId: 'barcelona_ramblas',
       description:
         'Movimiento coordinado entre puertos y callejones del Barrio Gótico.',
       rewardEuros: 700,
@@ -589,7 +598,7 @@ export class EngagementService {
       id: 'valencia_drift',
       title: 'Circuito Drift en Ciudad de las Artes',
       city: 'Valencia',
-      zoneId: 'valencia_centro',
+      zoneId: 'valencia_artes',
       description:
         'Reto callejero cronometrado con apuestas en vivo sobre el asfalto.',
       rewardEuros: 680,
@@ -611,7 +620,7 @@ export class EngagementService {
       id: 'ibiza_botafoch',
       title: 'Noche Dorada en Marina Botafoch',
       city: 'Ibiza',
-      zoneId: 'ibiza_puerto',
+      zoneId: 'ibiza_daltvila',
       description:
         'Fiesta exclusiva VIP y movimiento de divisas entre clubes baleares.',
       rewardEuros: 1000,
@@ -622,7 +631,7 @@ export class EngagementService {
       id: 'canarias_franca',
       title: 'Ruta Franca en Puerto de La Luz',
       city: 'Las Palmas',
-      zoneId: 'palmas_puerto',
+      zoneId: 'laspalmas_canteras',
       description:
         'Ventana libre de aranceles en el puente tricontinental atlántico.',
       rewardEuros: 780,
@@ -689,22 +698,14 @@ export class EngagementService {
   }
 
   async participateInWorldEvent(userId: string) {
-    const player = await this.prisma.player.findUnique({ where: { userId } });
-    if (!player) throw new NotFoundException('Player not found');
-
     const now = new Date();
     const { hourKey, event } = this.getCurrentWorldEventWindow(now);
     const eventRef = `world-event:${hourKey}`;
-    const isVipActive = isPlayerVipActive(player);
-
-    const grantedEuros = Math.round(
-      event.rewardEuros * (isVipActive ? 1.15 : 1.0),
-    );
-    const grantedXp = Math.round(event.rewardXp * (isVipActive ? 1.25 : 1.0));
-    const grantedVidaCoins = event.rewardVidaCoins + (isVipActive ? 1 : 0);
-    const battlePassXp = 40;
 
     return this.prisma.$transaction(async (tx) => {
+      const player = await tx.player.findUnique({ where: { userId } });
+      if (!player) throw new NotFoundException('Player not found');
+
       const alreadyClaimed = await tx.transactionLog.findFirst?.({
         where: { playerId: player.id, reference: eventRef },
         select: { id: true },
@@ -715,6 +716,14 @@ export class EngagementService {
           'Ya participaste en el evento mundial de esta hora. Vuelve en la siguiente hora.',
         );
       }
+
+      const isVipActive = isPlayerVipActive(player);
+      const grantedEuros = Math.round(
+        event.rewardEuros * (isVipActive ? 1.15 : 1.0),
+      );
+      const grantedXp = Math.round(event.rewardXp * (isVipActive ? 1.25 : 1.0));
+      const grantedVidaCoins = event.rewardVidaCoins + (isVipActive ? 1 : 0);
+      const battlePassXp = 40;
 
       const nextXp = player.xp + grantedXp;
       const nextLevel = Math.max(player.level, calculateLevelFromXp(nextXp));

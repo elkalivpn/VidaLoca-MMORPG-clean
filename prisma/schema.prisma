@@ -92,6 +92,7 @@ model Player {
   vipExpiresAt            DateTime?
   dailyChallengesDate     String?
   dailyChallengesProgress Json?
+  marketCargo             Json?
   
   inventory               InventoryItem[]
   vehicles                PlayerVehicle[]
