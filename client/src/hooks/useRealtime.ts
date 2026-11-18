@@ -7,9 +7,11 @@ import {
   emitPlayerMove,
   getSocket,
   type ChatMessage,
+  type CombatDamagedEvent,
   type PlayerMovePayload,
   type PresencePlayer,
   type PursuitAlert,
+  type RemoteCombatShot,
   type SpatialPlayer,
   type WorldEvent,
   type WorldSnapshotPayload,
@@ -25,6 +27,13 @@ export function useRealtime(enabled: boolean) {
   const [pursuitAlerts, setPursuitAlerts] = useState<PursuitAlert[]>([]);
   const [locationId, setLocationId] = useState<string | null>(null);
   const remotePlayersRef = useRef<Map<string, SpatialPlayer>>(new Map());
+  const combatShotsRef = useRef<RemoteCombatShot[]>([]);
+  const combatShotListenersRef = useRef<Set<(shot: RemoteCombatShot) => void>>(
+    new Set(),
+  );
+  const combatDamagedListenersRef = useRef<
+    Set<(ev: CombatDamagedEvent) => void>
+  >(new Set());
 
   useEffect(() => {
     if (!enabled) return;
@@ -85,8 +94,10 @@ export function useRealtime(enabled: boolean) {
       for (const p of list) {
         if (!p?.playerId) continue;
         activeIds.add(p.playerId);
+        const existing = remotePlayersRef.current.get(p.playerId);
         remotePlayersRef.current.set(p.playerId, {
           ...p,
+          hp: typeof p.hp === 'number' ? p.hp : existing?.hp,
           updatedAt: now,
         });
       }
@@ -94,6 +105,37 @@ export function useRealtime(enabled: boolean) {
         if (!activeIds.has(id)) {
           remotePlayersRef.current.delete(id);
         }
+      }
+    };
+
+    const onCombatShotEvent = (shot: RemoteCombatShot) => {
+      if (!shot || typeof shot.x !== 'number' || typeof shot.z !== 'number') {
+        return;
+      }
+      const normalized: RemoteCombatShot = {
+        ...shot,
+        timestamp: shot.timestamp || new Date().toISOString(),
+      };
+      combatShotsRef.current = [
+        ...combatShotsRef.current.slice(-31),
+        normalized,
+      ];
+      for (const listener of combatShotListenersRef.current) {
+        listener(normalized);
+      }
+    };
+
+    const onCombatDamagedEvent = (ev: CombatDamagedEvent) => {
+      if (!ev || !ev.targetPlayerId) return;
+      const existing = remotePlayersRef.current.get(ev.targetPlayerId);
+      if (existing && typeof ev.remainingHp === 'number') {
+        remotePlayersRef.current.set(ev.targetPlayerId, {
+          ...existing,
+          hp: ev.remainingHp,
+        });
+      }
+      for (const listener of combatDamagedListenersRef.current) {
+        listener(ev);
       }
     };
 
@@ -140,6 +182,8 @@ export function useRealtime(enabled: boolean) {
     socket.on('player:joined', onPlayerJoined);
     socket.on('player:left', onPlayerLeft);
     socket.on('world:snapshot', onWorldSnapshot);
+    socket.on('combat:shot', onCombatShotEvent);
+    socket.on('combat:damaged', onCombatDamagedEvent);
     socket.on('chat:message', onChat);
     socket.on('world:event', onWorldEvent);
     socket.on('pursuit:alert', onPursuitAlert);
@@ -156,6 +200,8 @@ export function useRealtime(enabled: boolean) {
       socket.off('player:joined', onPlayerJoined);
       socket.off('player:left', onPlayerLeft);
       socket.off('world:snapshot', onWorldSnapshot);
+      socket.off('combat:shot', onCombatShotEvent);
+      socket.off('combat:damaged', onCombatDamagedEvent);
       socket.off('chat:message', onChat);
       socket.off('world:event', onWorldEvent);
       socket.off('pursuit:alert', onPursuitAlert);
@@ -251,8 +297,32 @@ export function useRealtime(enabled: boolean) {
   }, []);
 
   const emitMove = useCallback((payload: PlayerMovePayload) => {
-    emitPlayerMove(payload);
+    emitPlayerMove({
+      ...payload,
+      vehicleClass: payload.vehicleClass,
+      isDrifting: payload.isDrifting,
+    });
   }, []);
+
+  const subscribeCombatShot = useCallback(
+    (cb: (shot: RemoteCombatShot) => void) => {
+      combatShotListenersRef.current.add(cb);
+      return () => {
+        combatShotListenersRef.current.delete(cb);
+      };
+    },
+    [],
+  );
+
+  const subscribeCombatDamaged = useCallback(
+    (cb: (ev: CombatDamagedEvent) => void) => {
+      combatDamagedListenersRef.current.add(cb);
+      return () => {
+        combatDamagedListenersRef.current.delete(cb);
+      };
+    },
+    [],
+  );
 
   return {
     connected,
@@ -264,6 +334,9 @@ export function useRealtime(enabled: boolean) {
     pursuitAlerts,
     locationId,
     remotePlayersRef,
+    combatShotsRef,
+    subscribeCombatShot,
+    subscribeCombatDamaged,
     joinZone,
     sendZoneChat,
     sendGlobalChat,

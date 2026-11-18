@@ -23,10 +23,173 @@ import type {
   WorldTravelResponse,
 } from '@/types/game';
 
-const DARK_STYLE_URL =
-  'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
+const OFFLINE_SPAIN_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  name: 'VidaLoca Iberia Dark',
+  sources: {
+    'spain-land': {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { region: 'Peninsula Ibérica' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [-9.3, 43.0],
+                  [-8.8, 43.45],
+                  [-7.0, 43.6],
+                  [-5.6, 43.6],
+                  [-3.8, 43.48],
+                  [-1.78, 43.38],
+                  [0.7, 42.75],
+                  [3.32, 42.45],
+                  [2.2, 41.38],
+                  [0.85, 40.7],
+                  [0.12, 39.4],
+                  [0.2, 38.7],
+                  [-0.7, 37.6],
+                  [-2.1, 36.72],
+                  [-4.4, 36.7],
+                  [-5.45, 36.0],
+                  [-6.3, 36.5],
+                  [-7.4, 37.18],
+                  [-8.95, 37.02],
+                  [-9.5, 38.7],
+                  [-8.9, 41.15],
+                  [-8.85, 42.15],
+                  [-9.3, 43.0],
+                ],
+              ],
+            },
+          },
+          {
+            type: 'Feature',
+            properties: { region: 'Mallorca' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [2.35, 39.55],
+                  [2.75, 39.92],
+                  [3.48, 39.75],
+                  [3.2, 39.28],
+                  [2.58, 39.42],
+                  [2.35, 39.55],
+                ],
+              ],
+            },
+          },
+          {
+            type: 'Feature',
+            properties: { region: 'Ibiza' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [1.18, 38.92],
+                  [1.58, 39.12],
+                  [1.62, 38.84],
+                  [1.26, 38.82],
+                  [1.18, 38.92],
+                ],
+              ],
+            },
+          },
+          {
+            type: 'Feature',
+            properties: { region: 'Tenerife' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [-16.92, 28.35],
+                  [-16.15, 28.58],
+                  [-16.32, 28.05],
+                  [-16.82, 28.02],
+                  [-16.92, 28.35],
+                ],
+              ],
+            },
+          },
+          {
+            type: 'Feature',
+            properties: { region: 'Gran Canaria' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [-15.82, 28.0],
+                  [-15.42, 28.18],
+                  [-15.36, 27.76],
+                  [-15.78, 27.74],
+                  [-15.82, 28.0],
+                ],
+              ],
+            },
+          },
+          {
+            type: 'Feature',
+            properties: { region: 'Lanzarote' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [-13.85, 29.22],
+                  [-13.45, 29.24],
+                  [-13.52, 28.84],
+                  [-13.88, 28.86],
+                  [-13.85, 29.22],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    },
+  },
+  layers: [
+    {
+      id: 'ocean-bg',
+      type: 'background',
+      paint: {
+        'background-color': '#050914',
+      },
+    },
+    {
+      id: 'spain-land-fill',
+      type: 'fill',
+      source: 'spain-land',
+      paint: {
+        'fill-color': '#111827',
+        'fill-opacity': 0.96,
+      },
+    },
+    {
+      id: 'spain-coast-glow',
+      type: 'line',
+      source: 'spain-land',
+      paint: {
+        'line-color': '#38bdf8',
+        'line-width': 2.2,
+        'line-opacity': 0.35,
+      },
+    },
+  ],
+};
 const SPAIN_CENTER: [number, number] = [-3.7038, 40.4168];
 const SPAIN_ZOOM = 5.5;
+
+const MARKER_OFFSETS: Record<string, [number, number]> = {
+  madrid_centro: [-18, 6],
+  malasana: [-18, -14],
+  salamanca: [22, -6],
+  puerto_banus: [-14, 4],
+  malaga_soho: [16, -6],
+};
 
 interface MergedZone extends CityLocation {
   clanTag?: string | null;
@@ -139,6 +302,7 @@ function estimateRoute(
   vehicleSpeed?: number,
   backendHighway?: string,
   backendDistanceKm?: number,
+  hasVehicle = false,
 ): RouteEstimate {
   const straight = haversineKm(from, to);
   const roadKm =
@@ -146,12 +310,18 @@ function estimateRoute(
     (from.id === to.id ? 0 : Math.max(4, Math.round(straight * 1.18)));
   const highway = backendHighway ?? inferHighway(from, to);
   const isIntercity = from.city !== to.city;
-  const costEuros =
-    from.id === to.id
-      ? 0
-      : isIntercity
+  let costEuros = 0;
+  if (from.id !== to.id) {
+    if (hasVehicle) {
+      costEuros = isIntercity
         ? Math.round((roadKm * 0.12 + 5) * 100) / 100
         : Math.max(1, Math.round(roadKm * 0.4 * 100) / 100);
+    } else {
+      costEuros = isIntercity
+        ? Math.max(15, Math.round(roadKm * 0.18 * 100) / 100)
+        : 3;
+    }
+  }
   const avgKmh = vehicleSpeed ? Math.min(185, 85 + vehicleSpeed * 0.5) : 100;
   const totalMinutes =
     from.id === to.id ? 0 : Math.max(8, Math.round((roadKm / avgKmh) * 60));
@@ -266,15 +436,11 @@ export default function CityMap({
       primaryVehicle?.template.speed,
       backendRoute?.highway,
       backendRoute?.distanceKm,
+      Boolean(primaryVehicle),
     );
-  }, [
-    currentZone,
-    selectedZone,
-    primaryVehicle?.template.speed,
-    mapData?.routes,
-  ]);
+  }, [currentZone, selectedZone, primaryVehicle, mapData?.routes]);
 
-  // Initialize MapLibre GL JS
+  // Initialize MapLibre GL JS with offline-proof inline Iberian vector style
   useEffect(() => {
     if (!isWebGLAvailable()) {
       setWebglOk(false);
@@ -288,7 +454,7 @@ export default function CityMap({
       maplibregl.setWorkerUrl('/maplibre-gl-worker.mjs');
       map = new maplibregl.Map({
         container,
-        style: DARK_STYLE_URL,
+        style: OFFLINE_SPAIN_STYLE,
         center: SPAIN_CENTER,
         zoom: SPAIN_ZOOM,
         minZoom: 4.5,
@@ -305,13 +471,8 @@ export default function CityMap({
       'top-right',
     );
 
-    map.on('error', (e) => {
-      if (
-        e?.error?.message?.toLowerCase().includes('webgl') ||
-        e?.error?.message?.toLowerCase().includes('context')
-      ) {
-        setWebglOk(false);
-      }
+    map.on('error', () => {
+      setWebglOk(false);
     });
 
     map.on('load', () => {
@@ -430,12 +591,16 @@ export default function CityMap({
       const isHere = zone.id === hereId;
       const isSelected = zone.id === selectedZone.id;
       const hex = VIBE_HEX_COLORS[zone.vibe];
+      const offset = MARKER_OFFSETS[zone.id] ?? [0, 0];
 
       const el = document.createElement('button');
       el.type = 'button';
       el.title = `${zone.name} (${zone.city})`;
       el.className =
-        'group relative flex flex-col items-center cursor-pointer focus:outline-none';
+        'group relative flex flex-col items-center cursor-pointer focus:outline-none hover:z-30';
+      if (isHere || isSelected) {
+        el.style.zIndex = '25';
+      }
 
       const ring = document.createElement('span');
       ring.className = `flex items-center justify-center rounded-full transition-transform duration-150 ${
@@ -477,7 +642,11 @@ export default function CityMap({
         selectZone(zone);
       });
 
-      const marker = new maplibregl.Marker({ element: el, anchor: 'top' })
+      const marker = new maplibregl.Marker({
+        element: el,
+        anchor: 'top',
+        offset,
+      })
         .setLngLat([zone.lng, zone.lat])
         .addTo(map);
 

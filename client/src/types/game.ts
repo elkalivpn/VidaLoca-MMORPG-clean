@@ -653,3 +653,113 @@ export interface AdminOverviewResponse {
     createdAt: string;
   }>;
 }
+
+export type CasinoRouletteBetType =
+  'RED' | 'BLACK' | 'GREEN' | 'EVEN' | 'ODD' | 'NUMBER';
+
+export type CasinoDiceChoice = 'HIGH' | 'LOW' | 'SEVEN';
+
+export interface CasinoCard {
+  rank: string;
+  suit: '♠' | '♥' | '♦' | '♣';
+  value: number;
+}
+
+export interface CasinoStatusResponse {
+  minBet: number;
+  maxBet: number;
+  vipMaxBet: number;
+  player: {
+    euros: number;
+    vidaCoins: number;
+    isVip: boolean;
+    heat: number;
+    level: number;
+  };
+  recentPlays: Array<{
+    id: string;
+    type: string;
+    amount: number;
+    reason: string;
+    createdAt: string;
+  }>;
+}
+
+export interface CasinoRouletteResponse {
+  game: 'ROULETTE';
+  outcomeNumber?: number;
+  resultNumber?: number;
+  color?: 'RED' | 'BLACK' | 'GREEN';
+  resultColor?: 'RED' | 'BLACK' | 'GREEN';
+  won: boolean;
+  multiplier: number;
+  bet: number;
+  payout: number;
+  net?: number;
+  netProfit?: number;
+  xpGained?: number;
+  xpDelta?: number;
+  narrative?: string;
+  player: { euros: number; xp: number; level: number };
+}
+
+export interface CasinoDiceResponse {
+  game: 'DICE';
+  die1?: number;
+  die2?: number;
+  dice?: [number, number];
+  total: number;
+  won: boolean;
+  multiplier: number;
+  bet: number;
+  payout: number;
+  net?: number;
+  netProfit?: number;
+  xpGained?: number;
+  xpDelta?: number;
+  narrative?: string;
+  player: { euros: number; xp: number; level: number };
+}
+
+export interface CasinoBlackjackResponse {
+  handId: string | null;
+  status:
+    | 'PLAYING'
+    | 'PLAYER_BLACKJACK'
+    | 'DEALER_BLACKJACK'
+    | 'PLAYER_WIN'
+    | 'DEALER_WIN'
+    | 'BUST'
+    | 'PUSH';
+  playerCards: CasinoCard[];
+  dealerCards: CasinoCard[];
+  playerScore: number;
+  dealerScore: number;
+  bet: number;
+  payout: number;
+  net?: number;
+  netProfit?: number;
+  xpGained?: number;
+  xpDelta?: number;
+  narrative?: string;
+  player?: { euros: number; xp: number; level: number };
+}
+
+export interface StreetCombatResponse {
+  won: boolean;
+  damageTaken: number;
+  targetType: 'THUG' | 'ENFORCER' | 'RIVAL_CAR';
+  eurosDelta: number;
+  xpDelta: number;
+  repDelta: number;
+  heatDelta: number;
+  narrative: string;
+  player: {
+    level: number;
+    xp: number;
+    euros: number;
+    heat: number;
+    wantedLevel: number;
+    reputation: number;
+  };
+}

@@ -22,7 +22,7 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function InventoryPanel() {
-  const { token, refreshPlayer } = useAuth();
+  const { token, player, refreshPlayer } = useAuth();
   const [tab, setTab] = useState<'bag' | 'shop'>('bag');
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [weapons, setWeapons] = useState<PlayerWeapon[]>([]);
@@ -383,61 +383,91 @@ export default function InventoryPanel() {
             </p>
           ) : (
             <ul className="grid gap-2 sm:grid-cols-2">
-              {visibleCatalog.map((tpl) => (
-                <li
-                  key={tpl.id}
-                  className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-sm flex flex-col justify-between gap-2"
-                >
-                  <div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">
-                        {ITEM_TYPE_LABELS[tpl.type] ?? tpl.type}
-                      </span>
-                      <span className="font-medium text-zinc-100">
-                        {tpl.name}
-                      </span>
+              {visibleCatalog.map((tpl) => {
+                const playerEuros = player?.euros ?? 0;
+                const playerVc = player?.vidaCoins ?? 0;
+                const canAffordEur =
+                  tpl.priceEuros != null &&
+                  tpl.priceEuros > 0 &&
+                  playerEuros >= tpl.priceEuros;
+                const canAffordVc =
+                  tpl.priceVida != null &&
+                  tpl.priceVida > 0 &&
+                  playerVc >= tpl.priceVida;
+                return (
+                  <li
+                    key={tpl.id}
+                    className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-sm flex flex-col justify-between gap-2"
+                  >
+                    <div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">
+                          {ITEM_TYPE_LABELS[tpl.type] ?? tpl.type}
+                        </span>
+                        <span className="font-medium text-zinc-100">
+                          {tpl.name}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-400 mt-1">
+                        {tpl.description}
+                      </p>
                     </div>
-                    <p className="text-xs text-zinc-400 mt-1">
-                      {tpl.description}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-800/70">
-                    <span className="text-[11px] text-zinc-500">
-                      {tpl.rarity}
-                    </span>
-                    <div className="flex gap-1.5">
-                      {tpl.priceEuros != null && tpl.priceEuros > 0 && (
-                        <button
-                          type="button"
-                          disabled={!!busyId}
-                          onClick={() => {
-                            void buyItem(tpl.id, 'EUR');
-                          }}
-                          className="rounded bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-1 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
-                        >
-                          {busyId === `buy:${tpl.id}:EUR`
-                            ? '…'
-                            : `${tpl.priceEuros.toLocaleString('es-ES')} €`}
-                        </button>
-                      )}
-                      {tpl.priceVida != null && tpl.priceVida > 0 && (
-                        <button
-                          type="button"
-                          disabled={!!busyId}
-                          onClick={() => {
-                            void buyItem(tpl.id, 'VIDACOIN');
-                          }}
-                          className="rounded bg-amber-500/20 border border-amber-500/40 px-2.5 py-1 text-xs font-semibold text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
-                        >
-                          {busyId === `buy:${tpl.id}:VIDACOIN`
-                            ? '…'
-                            : `${tpl.priceVida} VC`}
-                        </button>
-                      )}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-800/70">
+                      <span className="text-[11px] text-zinc-500">
+                        {tpl.rarity}
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {tpl.priceEuros != null && tpl.priceEuros > 0 && (
+                          <button
+                            type="button"
+                            disabled={!!busyId || !canAffordEur}
+                            title={
+                              canAffordEur
+                                ? `Comprar ${tpl.name}`
+                                : `Faltan ${Math.ceil(tpl.priceEuros - playerEuros).toLocaleString('es-ES')} €`
+                            }
+                            onClick={() => {
+                              void buyItem(tpl.id, 'EUR');
+                            }}
+                            className={`rounded border px-2.5 py-1 text-xs font-semibold transition ${
+                              canAffordEur
+                                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50'
+                                : 'bg-zinc-900 border-zinc-800 text-zinc-500 cursor-not-allowed'
+                            }`}
+                          >
+                            {busyId === `buy:${tpl.id}:EUR`
+                              ? 'Comprando…'
+                              : `Comprar · ${tpl.priceEuros.toLocaleString('es-ES')} €`}
+                          </button>
+                        )}
+                        {tpl.priceVida != null && tpl.priceVida > 0 && (
+                          <button
+                            type="button"
+                            disabled={!!busyId || !canAffordVc}
+                            title={
+                              canAffordVc
+                                ? `Comprar ${tpl.name}`
+                                : `Faltan ${tpl.priceVida - playerVc} VC`
+                            }
+                            onClick={() => {
+                              void buyItem(tpl.id, 'VIDACOIN');
+                            }}
+                            className={`rounded border px-2.5 py-1 text-xs font-semibold transition ${
+                              canAffordVc
+                                ? 'bg-amber-500/20 border-amber-500/40 text-amber-200 hover:bg-amber-500/30 disabled:opacity-50'
+                                : 'bg-zinc-900 border-zinc-800 text-zinc-500 cursor-not-allowed'
+                            }`}
+                          >
+                            {busyId === `buy:${tpl.id}:VIDACOIN`
+                              ? 'Comprando…'
+                              : `Comprar · ${tpl.priceVida} VC`}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

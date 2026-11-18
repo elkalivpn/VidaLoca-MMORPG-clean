@@ -276,6 +276,17 @@ export default function PropertiesPanel() {
           <ul className="space-y-2">
             {catalog.map((t) => {
               const vipLocked = Boolean(t.isVipOnly && !isVipActive);
+              const playerEuros = player?.euros ?? 0;
+              const playerVc = player?.vidaCoins ?? 0;
+              const missingEuros =
+                t.priceEuros > 0 && playerEuros < t.priceEuros
+                  ? Math.ceil(t.priceEuros - playerEuros)
+                  : 0;
+              const missingVc =
+                (t.priceVida ?? 0) > 0 && playerVc < (t.priceVida ?? 0)
+                  ? (t.priceVida ?? 0) - playerVc
+                  : 0;
+              const cantAfford = missingEuros > 0 || missingVc > 0;
               return (
                 <li
                   key={t.id}
@@ -320,13 +331,23 @@ export default function PropertiesPanel() {
                   ) : (
                     <button
                       type="button"
-                      disabled={busy === t.id}
+                      disabled={busy === t.id || cantAfford}
                       onClick={() => {
                         void buy(t.id);
                       }}
-                      className="text-xs text-amber-400 underline disabled:opacity-50 shrink-0"
+                      className={`rounded-md border px-2.5 py-1 text-xs font-semibold shrink-0 transition ${
+                        cantAfford
+                          ? 'border-zinc-800 bg-zinc-900 text-zinc-500 cursor-not-allowed'
+                          : 'border-amber-500/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 disabled:opacity-50'
+                      }`}
                     >
-                      {busy === t.id ? 'Comprando…' : 'Comprar'}
+                      {busy === t.id
+                        ? 'Comprando…'
+                        : missingEuros > 0
+                          ? `Faltan ${missingEuros.toLocaleString('es-ES')} €`
+                          : missingVc > 0
+                            ? `Faltan ${missingVc} VC`
+                            : 'Comprar'}
                     </button>
                   )}
                 </li>

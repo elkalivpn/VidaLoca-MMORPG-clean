@@ -48,6 +48,15 @@ export const CINEMATIC_SCENES: CinematicScene[] = [
     image: '/images/valencia-fleet.jpg',
     accent: 'from-emerald-500/25',
   },
+  {
+    id: 'moto_noche',
+    city: 'Noche & Asfalto',
+    district: 'Ruta Clandestina · +18',
+    tagline:
+      'Motos deportivas, neones reales, tiroteos, clubes sin censura y adrenalina pura.',
+    image: '/images/vidaloca-loading.png',
+    accent: 'from-fuchsia-500/25',
+  },
 ];
 
 interface CinematicBackdropProps {

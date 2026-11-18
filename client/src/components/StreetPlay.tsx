@@ -11,8 +11,13 @@ import { api } from '@/lib/api';
 import { CITIES } from '@/data/cities';
 import { useAuthStore } from '@/store/auth';
 import { resolvePlayerAppearance3D } from '@/lib/appearance3d';
-import District3D from '@/components/District3D';
-import type { PlayerMovePayload, SpatialPlayer } from '@/lib/socket';
+import District3D, { type CombatHitResult } from '@/components/District3D';
+import type {
+  CombatDamagedEvent,
+  PlayerMovePayload,
+  RemoteCombatShot,
+  SpatialPlayer,
+} from '@/lib/socket';
 
 type Action = {
   id: string;
@@ -60,6 +65,11 @@ const LIFE_LABEL: Record<string, string> = {
 export interface StreetPlayProps {
   onChanged?: () => void;
   remotePlayersRef?: MutableRefObject<Map<string, SpatialPlayer>>;
+  remoteShotsRef?: MutableRefObject<RemoteCombatShot[]>;
+  onSubscribeCombatShot?: (cb: (shot: RemoteCombatShot) => void) => () => void;
+  onSubscribeCombatDamaged?: (
+    cb: (ev: CombatDamagedEvent) => void,
+  ) => () => void;
   emitMove?: (payload: PlayerMovePayload) => void;
   connected?: boolean;
   localPlayerId?: string | null;
@@ -69,6 +79,9 @@ export interface StreetPlayProps {
 export default function StreetPlay({
   onChanged,
   remotePlayersRef,
+  remoteShotsRef,
+  onSubscribeCombatShot,
+  onSubscribeCombatDamaged,
   emitMove,
   connected = false,
   localPlayerId,
@@ -134,6 +147,50 @@ export default function StreetPlay({
       setBusy(false);
     }
   };
+
+  const handleCombatHit = useCallback(
+    async (
+      targetType: 'THUG' | 'ENFORCER' | 'RIVAL_CAR',
+      weaponUsed?: string,
+    ): Promise<CombatHitResult | void> => {
+      try {
+        const res = await api.worldCombat({ targetType, weaponUsed });
+        if (res.narrative) {
+          setLog((prev) => [res.narrative, ...prev].slice(0, 12));
+        }
+        setState((prev) =>
+          prev
+            ? {
+                ...prev,
+                player: {
+                  ...prev.player,
+                  euros: res.player.euros,
+                  xp: res.player.xp,
+                  level: res.player.level,
+                  heat: res.player.heat,
+                  reputation: res.player.reputation,
+                },
+              }
+            : prev,
+        );
+        await refreshPlayer();
+        onChanged?.();
+        return {
+          won: res.won,
+          eurosDelta: res.eurosDelta,
+          xpDelta: res.xpDelta,
+          heatDelta: res.heatDelta,
+          damageTaken: res.damageTaken,
+          narrative: res.narrative,
+        };
+      } catch (e: unknown) {
+        const msg =
+          e instanceof Error ? e.message : 'No se pudo registrar el combate';
+        setLog((prev) => [msg, ...prev].slice(0, 12));
+      }
+    },
+    [onChanged, refreshPlayer],
+  );
 
   if (loading && !state) {
     return (
@@ -210,12 +267,22 @@ export default function StreetPlay({
             localPlayerId={localPlayerId ?? authPlayer?.id}
             actions={zone.actions || []}
             remotePlayersRef={remotePlayersRef ?? fallbackRemoteRef}
+            remoteShotsRef={remoteShotsRef}
+            onSubscribeCombatShot={onSubscribeCombatShot}
+            onSubscribeCombatDamaged={onSubscribeCombatDamaged}
+            onRefreshPlayer={() => {
+              void refreshPlayer();
+              void load();
+              onChanged?.();
+            }}
+            onChanged={onChanged}
             emitMove={emitMove ?? noopEmitMove}
             connected={connected}
             busy={busy}
             lastNarrative={log[0]}
             onAction={act}
             onSetLifestyle={setLife}
+            onCombatHit={handleCombatHit}
             onSwitchClassic={() => setViewMode('classic')}
             onNavigateTab={onNavigateTab}
           />

@@ -25,6 +25,7 @@ import { HeistsModule } from './heists/heists.module';
 import { EngagementModule } from './engagement/engagement.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
 import { AdminModule } from './admin/admin.module';
+import { CasinoModule } from './casino/casino.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { AdminModule } from './admin/admin.module';
     EngagementModule,
     MarketplaceModule,
     AdminModule,
+    CasinoModule,
   ],
   providers: [
     {

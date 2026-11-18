@@ -34,7 +34,7 @@ const FACTION_CATALOG: FactionCatalogItem[] = [
     name: 'Policía Nacional',
     description: 'Cuerpo urbano encargado de mantener el orden en las calles.',
     perks: [
-      'Acceso a /intercept en ciudad',
+      'Acceso a Interceptar sospechosos en ciudad',
       'Recompensas en € y XP por captura',
       'Insignia de autoridad local',
     ],
@@ -45,7 +45,7 @@ const FACTION_CATALOG: FactionCatalogItem[] = [
     name: 'Guardia Civil',
     description: 'Patrulla de carreteras y control interurbano de alto nivel.',
     perks: [
-      'Acceso a /intercept en todas las zonas',
+      'Acceso a Interceptar sospechosos en todas las zonas',
       'Bonificación en persecuciones de alta velocidad',
       'Recompensas en € y XP por captura',
     ],
@@ -78,7 +78,7 @@ const FACTION_CATALOG: FactionCatalogItem[] = [
     description:
       'Unidades tácticas de Ertzaintza y Mossos d\'Esquadra con despliegue rápido regional.',
     perks: [
-      'Acceso a /intercept contra sospechosos en tu zona',
+      'Acceso a Interceptar sospechosos en tu zona',
       'Despliegue ágil entre País Vasco, Navarra y Cataluña',
       'Recompensas en € y XP por captura',
     ],

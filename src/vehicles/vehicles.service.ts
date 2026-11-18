@@ -104,6 +104,13 @@ export class VehiclesService {
         }
       }
 
+      const existingPrimary = tx.playerVehicle.findFirst
+        ? await tx.playerVehicle.findFirst({
+            where: { playerId: player.id, isPrimary: true },
+            select: { id: true },
+          })
+        : null;
+
       // Create vehicle
       const created = await tx.playerVehicle.create({
         data: {
@@ -112,7 +119,7 @@ export class VehiclesService {
           licensePlate,
           color: dto.color || 'white',
           condition: 100,
-          isPrimary: false,
+          isPrimary: !existingPrimary,
         },
         include: { template: true },
       });

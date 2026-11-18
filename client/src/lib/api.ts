@@ -21,9 +21,21 @@ import type {
   WorldTravelResponse,
   WorldEventStatus,
   AdminOverviewResponse,
+  CasinoStatusResponse,
+  CasinoRouletteBetType,
+  CasinoRouletteResponse,
+  CasinoDiceChoice,
+  CasinoDiceResponse,
+  CasinoBlackjackResponse,
+  StreetCombatResponse,
 } from '@/types/game';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+const RAW_API_BASE = (process.env.NEXT_PUBLIC_API_URL || '')
+  .trim()
+  .replace(/\/+$/, '');
+const API_BASE = RAW_API_BASE.endsWith('/api')
+  ? RAW_API_BASE.slice(0, -4)
+  : RAW_API_BASE;
 
 type ApiSuccess<T> = { success: true; data: T; timestamp: string };
 type ApiError = {
@@ -466,6 +478,46 @@ export const api = {
     data: { days?: number; vidaCoins?: number; reason?: string },
   ) =>
     request(`/admin/players/${playerId}/grant-vip`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Street Combat (+18)
+  worldCombat: (data: {
+    targetType: 'THUG' | 'ENFORCER' | 'RIVAL_CAR';
+    weaponUsed?: string;
+  }) =>
+    request<StreetCombatResponse>('/world/combat', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Clandestine Casino (+18)
+  casinoStatus: () => request<CasinoStatusResponse>('/casino/status'),
+  casinoRoulette: (data: {
+    bet: number;
+    betType: CasinoRouletteBetType;
+    number?: number;
+  }) =>
+    request<CasinoRouletteResponse>('/casino/roulette', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  casinoDice: (data: { bet: number; choice: CasinoDiceChoice }) =>
+    request<CasinoDiceResponse>('/casino/dice', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  casinoBlackjackStart: (data: { bet: number }) =>
+    request<CasinoBlackjackResponse>('/casino/blackjack/start', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  casinoBlackjackAction: (data: {
+    handId: string;
+    action: 'HIT' | 'STAND' | 'DOUBLE';
+  }) =>
+    request<CasinoBlackjackResponse>('/casino/blackjack/action', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

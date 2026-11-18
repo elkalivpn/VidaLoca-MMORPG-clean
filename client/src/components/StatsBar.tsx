@@ -97,6 +97,16 @@ export default function StatsBar({
 
   return (
     <header className="flex flex-wrap items-center gap-3 border-b border-zinc-800 bg-zinc-900/90 px-3 py-2 text-sm">
+      <div className="flex items-center gap-2">
+        <img
+          src="/images/vidaloca-logo.png"
+          alt="VidaLoca"
+          className="h-6 w-auto object-contain"
+        />
+        <span className="rounded border border-rose-500/40 bg-rose-500/15 px-1 py-0.5 text-[10px] font-black leading-none text-rose-300">
+          +18
+        </span>
+      </div>
       <span className="font-semibold text-amber-400">
         {player?.displayName}
       </span>

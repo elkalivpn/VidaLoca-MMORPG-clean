@@ -2,17 +2,26 @@
 
 import { io, Socket } from 'socket.io-client';
 
-const WS_URL =
-  process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_API_URL || '';
+const RAW_WS_URL = (
+  process.env.NEXT_PUBLIC_WS_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  ''
+)
+  .trim()
+  .replace(/\/+$/, '');
+const WS_URL = RAW_WS_URL.endsWith('/api')
+  ? RAW_WS_URL.slice(0, -4)
+  : RAW_WS_URL;
 
 let socket: Socket | null = null;
+let socketToken = '';
 
 export function getSocket(): Socket | null {
   return socket;
 }
 
 export function connectSocket(token: string): Socket {
-  if (socket?.connected) {
+  if (socket && socketToken === token && (socket.connected || socket.active)) {
     return socket;
   }
 
@@ -20,9 +29,10 @@ export function connectSocket(token: string): Socket {
     socket.disconnect();
   }
 
+  socketToken = token;
   socket = io(`${WS_URL}/game`, {
     auth: { token },
-    transports: ['polling', 'websocket'],
+    transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 1000,
@@ -35,6 +45,7 @@ export function disconnectSocket() {
   if (socket) {
     socket.disconnect();
     socket = null;
+    socketToken = '';
   }
 }
 
@@ -76,9 +87,12 @@ export interface SpatialPlayer {
   rotationY?: number;
   anim?: PlayerAnimState;
   vehicleId?: string;
+  vehicleClass?: string;
+  isDrifting?: boolean;
   speed?: number;
   isMoving?: boolean;
   lifestyle?: string;
+  hp?: number;
   updatedAt?: number;
 }
 
@@ -89,6 +103,45 @@ export interface PlayerMovePayload {
   rotY: number;
   anim?: PlayerAnimState;
   vehicleId?: string;
+  vehicleClass?: string;
+  isDrifting?: boolean;
+}
+
+export interface CombatShotPayload {
+  x: number;
+  y: number;
+  z: number;
+  dirX: number;
+  dirZ: number;
+  weaponType?: string;
+}
+
+export interface RemoteCombatShot extends CombatShotPayload {
+  playerId: string;
+  displayName: string;
+  timestamp: string;
+}
+
+export interface CombatPvpHitPayload {
+  targetPlayerId: string;
+  attackType: 'SHOT' | 'MELEE';
+  weaponType?: string;
+}
+
+export interface CombatDamagedEvent {
+  attackerId: string;
+  attackerName: string;
+  targetPlayerId: string;
+  targetName: string;
+  attackType: 'SHOT' | 'MELEE';
+  damage: number;
+  remainingHp: number;
+  knockout: boolean;
+  lootEuros?: number;
+  narrative?: string;
+  x?: number;
+  z?: number;
+  timestamp: string;
 }
 
 export interface WorldSnapshotPayload {
@@ -100,6 +153,16 @@ export interface WorldSnapshotPayload {
 export function emitPlayerMove(payload: PlayerMovePayload) {
   if (!socket?.connected) return;
   socket.emit('player:move', payload);
+}
+
+export function emitCombatShot(payload: CombatShotPayload) {
+  if (!socket?.connected) return;
+  socket.emit('combat:fire', payload);
+}
+
+export function emitCombatPvpHit(payload: CombatPvpHitPayload) {
+  if (!socket?.connected) return;
+  socket.emit('combat:pvp-hit', payload);
 }
 
 export interface PursuitAlert {

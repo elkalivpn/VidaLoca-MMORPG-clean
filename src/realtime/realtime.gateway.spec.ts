@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { RealtimeGateway } from './realtime.gateway';
 import { PrismaService } from '../prisma/prisma.service';
+import { WorldService } from '../world/world.service';
 
 describe('RealtimeGateway', () => {
   let gateway: RealtimeGateway;
@@ -124,6 +125,7 @@ describe('RealtimeGateway', () => {
               z: 3,
               rotY: 1.5,
               anim: 'run',
+              hp: 100,
               vehicleId: 'veh-1',
             },
           ],
@@ -405,4 +407,304 @@ describe('RealtimeGateway', () => {
       expect(serverEmitMock).toHaveBeenCalledTimes(2);
     });
   });
+
+  describe('combat:pvp-hit', () => {
+    it('applies authoritative SHOT/MELEE damage, emits combat:damaged, and updates snapshot hp', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+      const attacker = await connectPlayer(
+        'sock-att',
+        'user-att',
+        'player-att',
+        'El Rubio',
+        'madrid_centro',
+      );
+      const target = await connectPlayer(
+        'sock-tgt',
+        'user-tgt',
+        'player-tgt',
+        'El Cobra',
+        'madrid_centro',
+      );
+
+      gateway.handlePlayerMove(attacker, { x: 0, y: 0, z: 0, rotY: 0 });
+      gateway.handlePlayerMove(target, { x: 3, y: 0, z: 4, rotY: 0 });
+      gateway.flushWorldSnapshots();
+      roomEmitMock.mockClear();
+
+      jest.spyOn(Math, 'random').mockReturnValue(0.5); // SHOT: 24 + 6 = 30
+      const shotRes = await gateway.handleCombatPvpHit(attacker, {
+        targetPlayerId: 'player-tgt',
+        attackType: 'SHOT',
+        weaponType: 'PISTOL',
+      });
+
+      expect(shotRes).toEqual(
+        expect.objectContaining({
+          ok: true,
+          attackerId: 'player-att',
+          attackerName: 'El Rubio',
+          targetPlayerId: 'player-tgt',
+          targetName: 'El Cobra',
+          attackType: 'SHOT',
+          damage: 30,
+          remainingHp: 70,
+          knockout: false,
+          lootEuros: 0,
+          x: 3,
+          z: 4,
+        }),
+      );
+      expect(gateway.server.to).toHaveBeenCalledWith('zone:madrid_centro');
+      expect(roomEmitMock).toHaveBeenCalledWith(
+        'combat:damaged',
+        expect.objectContaining({
+          targetPlayerId: 'player-tgt',
+          damage: 30,
+          remainingHp: 70,
+          knockout: false,
+        }),
+      );
+
+      // Snapshot reflects updated hp
+      roomEmitMock.mockClear();
+      gateway.flushWorldSnapshots();
+      expect(roomEmitMock).toHaveBeenCalledWith(
+        'world:snapshot',
+        expect.objectContaining({
+          players: expect.arrayContaining([
+            expect.objectContaining({ playerId: 'player-tgt', hp: 70 }),
+          ]),
+        }),
+      );
+    });
+
+    it('rejects self-target, different zone, out-of-range attacks, and enforces 350ms rate limit', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+      const attacker = await connectPlayer(
+        'sock-att',
+        'user-att',
+        'player-att',
+        'El Rubio',
+        'madrid_centro',
+      );
+      const target = await connectPlayer(
+        'sock-tgt',
+        'user-tgt',
+        'player-tgt',
+        'El Cobra',
+        'madrid_centro',
+      );
+      await connectPlayer(
+        'sock-far-zone',
+        'user-other',
+        'player-other',
+        'Sombra',
+        'malasana',
+      );
+
+      expect(
+        await gateway.handleCombatPvpHit(attacker, {
+          targetPlayerId: 'player-att',
+          attackType: 'MELEE',
+        }),
+      ).toEqual({ ok: false, error: 'Cannot target yourself' });
+
+      expect(
+        await gateway.handleCombatPvpHit(attacker, {
+          targetPlayerId: 'player-other',
+          attackType: 'SHOT',
+        }),
+      ).toEqual({ ok: false, error: 'Target player is in a different zone' });
+
+      // Move target 10 units away (> 6.5 MELEE max range, <= 65 SHOT max range)
+      gateway.handlePlayerMove(attacker, { x: 0, y: 0, z: 0, rotY: 0 });
+      gateway.handlePlayerMove(target, { x: 10, y: 0, z: 0, rotY: 0 });
+
+      expect(
+        await gateway.handleCombatPvpHit(attacker, {
+          targetPlayerId: 'player-tgt',
+          attackType: 'MELEE',
+        }),
+      ).toEqual({ ok: false, reason: 'out_of_range' });
+
+      // Valid SHOT at distance 10
+      const firstHit = await gateway.handleCombatPvpHit(attacker, {
+        targetPlayerId: 'player-tgt',
+        attackType: 'SHOT',
+      });
+      expect(firstHit).toEqual(expect.objectContaining({ ok: true }));
+
+      // Second hit after 200ms (< 350ms) is rate-limited
+      jest.advanceTimersByTime(200);
+      expect(
+        await gateway.handleCombatPvpHit(attacker, {
+          targetPlayerId: 'player-tgt',
+          attackType: 'SHOT',
+        }),
+      ).toEqual({ ok: false, reason: 'rate_limited' });
+
+      // Third hit after +150ms (total 350ms) succeeds
+      jest.advanceTimersByTime(150);
+      expect(
+        await gateway.handleCombatPvpHit(attacker, {
+          targetPlayerId: 'player-tgt',
+          attackType: 'SHOT',
+        }),
+      ).toEqual(expect.objectContaining({ ok: true }));
+    });
+
+    it('resolves knockout via WorldService, resets HP to 100, and emits pvp_ko world:event', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+      const worldServiceMock = {
+        resolvePvpKnockout: jest.fn().mockResolvedValue({
+          lootEuros: 45,
+          attackerStats: {
+            level: 2,
+            xp: 150,
+            euros: 545,
+            reputation: 30,
+            heat: 20,
+            wantedLevel: 1,
+          },
+          targetRemainingEuros: 0,
+        }),
+      };
+
+      const pvpModule = await Test.createTestingModule({
+        providers: [
+          RealtimeGateway,
+          { provide: JwtService, useValue: jwtService },
+          { provide: ConfigService, useValue: configService },
+          { provide: PrismaService, useValue: prisma },
+          { provide: WorldService, useValue: worldServiceMock },
+        ],
+      }).compile();
+
+      const pvpGateway = pvpModule.get<RealtimeGateway>(RealtimeGateway);
+      const pvpRoomEmit = jest.fn();
+      pvpGateway.server = {
+        to: jest.fn().mockReturnValue({ emit: pvpRoomEmit }),
+        emit: jest.fn(),
+      } as any;
+
+      jwtService.verify.mockReturnValue({ sub: 'user-att' });
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-att',
+        player: {
+          id: 'player-att',
+          displayName: 'El Rubio',
+          locationId: 'madrid_centro',
+        },
+      });
+      const attacker = createMockSocket({ id: 'sock-att' });
+      await pvpGateway.handleConnection(attacker);
+
+      jwtService.verify.mockReturnValue({ sub: 'user-tgt' });
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-tgt',
+        player: {
+          id: 'player-tgt',
+          displayName: 'El Cobra',
+          locationId: 'madrid_centro',
+        },
+      });
+      const target = createMockSocket({ id: 'sock-tgt' });
+      await pvpGateway.handleConnection(target);
+
+      // Lower target HP to 20 so next MELEE hit (18..28) knocks out with random = 0.5 -> 23
+      (pvpGateway as any).presence.get('sock-tgt').hp = 20;
+      jest.spyOn(Math, 'random').mockReturnValue(0.5);
+      pvpRoomEmit.mockClear();
+
+      const koRes = await pvpGateway.handleCombatPvpHit(attacker, {
+        targetPlayerId: 'player-tgt',
+        attackType: 'MELEE',
+      });
+
+      expect(worldServiceMock.resolvePvpKnockout).toHaveBeenCalledWith(
+        'user-att',
+        'user-tgt',
+      );
+      expect(koRes).toEqual(
+        expect.objectContaining({
+          ok: true,
+          damage: 23,
+          remainingHp: 100,
+          knockout: true,
+          lootEuros: 45,
+          attackerStats: expect.objectContaining({ euros: 545, xp: 150 }),
+        }),
+      );
+      expect((pvpGateway as any).presence.get('sock-tgt').hp).toBe(100);
+      expect(pvpRoomEmit).toHaveBeenCalledWith(
+        'combat:damaged',
+        expect.objectContaining({
+          knockout: true,
+          remainingHp: 100,
+          lootEuros: 45,
+        }),
+      );
+      expect(pvpRoomEmit).toHaveBeenCalledWith(
+        'world:event',
+        expect.objectContaining({
+          type: 'pvp_ko',
+          attackerId: 'player-att',
+          targetPlayerId: 'player-tgt',
+          lootEuros: 45,
+        }),
+      );
+
+      // Verify DB error during knockout resolution is caught safely
+      (pvpGateway as any).presence.get('sock-tgt').hp = 10;
+      worldServiceMock.resolvePvpKnockout.mockRejectedValueOnce(
+        new Error('DB timeout'),
+      );
+      jest.advanceTimersByTime(400);
+
+      const safeRes = await pvpGateway.handleCombatPvpHit(attacker, {
+        targetPlayerId: 'player-tgt',
+        attackType: 'MELEE',
+      });
+      expect(safeRes).toEqual(
+        expect.objectContaining({
+          ok: true,
+          knockout: true,
+          remainingHp: 100,
+          lootEuros: 0,
+        }),
+      );
+
+      pvpGateway.onModuleDestroy();
+    });
+
+    it('deduplicates same playerId when connected via multiple sockets in world:snapshot', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+      await connectPlayer('sock-dup-1', 'user-dup', 'player-dup', 'Dupli', 'madrid_centro');
+      await connectPlayer('sock-dup-2', 'user-dup', 'player-dup', 'Dupli', 'madrid_centro');
+
+      roomEmitMock.mockClear();
+      gateway.flushWorldSnapshots();
+
+      expect(roomEmitMock).toHaveBeenCalledWith(
+        'world:snapshot',
+        expect.objectContaining({
+          locationId: 'madrid_centro',
+          players: [expect.objectContaining({ playerId: 'player-dup' })],
+        }),
+      );
+      const snapshotPayload = roomEmitMock.mock.calls.find(
+        ([event]) => event === 'world:snapshot',
+      )?.[1];
+      expect(snapshotPayload.players).toHaveLength(1);
+    });
+  });
 });
+

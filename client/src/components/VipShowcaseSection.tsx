@@ -225,7 +225,8 @@ export default function VipShowcaseSection({
             <p className="mt-2 max-w-2xl text-sm text-zinc-300">
               Equipa personaje, vestimenta, arma y cosmético al mismo tiempo,
               desbloquea 8 superdeportivos y yates VIP, 4 mansiones y 10
-              misiones exclusivas con multiplicadores reales.
+              misiones exclusivas con multiplicadores reales en Historia en
+              Solitario, Mundo Libre Online 3D y Cooperativo y Clanes.
             </p>
           </div>
 

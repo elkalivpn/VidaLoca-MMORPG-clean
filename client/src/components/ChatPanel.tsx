@@ -41,7 +41,7 @@ export default function ChatPanel({
   }
 
   return (
-    <div className="flex h-full min-h-[240px] flex-col rounded-xl border border-zinc-800 bg-zinc-900/60">
+    <div className="flex h-full min-h-[240px] min-w-0 flex-col rounded-xl border border-zinc-800 bg-zinc-900/60">
       <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
         <span>Chat</span>
         <span
@@ -62,7 +62,7 @@ export default function ChatPanel({
           <p className="text-zinc-600 text-xs">Sin mensajes aún…</p>
         )}
         {messages.map((m, i) => (
-          <div key={m.id || i} className="text-zinc-300">
+          <div key={m.id || i} className="text-zinc-300 break-words">
             <span className="text-amber-400/90 font-medium">
               {m.displayName || 'sistema'}
             </span>
@@ -96,19 +96,19 @@ export default function ChatPanel({
         onSubmit={(e) => {
           void submit(e);
         }}
-        className="flex gap-1 border-t border-zinc-800 p-2"
+        className="flex min-w-0 items-center gap-1 border-t border-zinc-800 p-2"
       >
         <select
           value={scope}
           onChange={(e) => setScope(e.target.value as 'zone' | 'global')}
           disabled={!connected}
-          className="rounded border border-zinc-700 bg-zinc-950 text-xs px-1 disabled:opacity-50"
+          className="shrink-0 rounded border border-zinc-700 bg-zinc-950 text-xs px-1 py-1 disabled:opacity-50"
         >
           <option value="zone">Zona</option>
           <option value="global">Global</option>
         </select>
         <input
-          className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm disabled:opacity-50"
+          className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm disabled:opacity-50"
           value={text}
           onChange={(e) => setText(e.target.value)}
           disabled={!connected}
@@ -117,7 +117,7 @@ export default function ChatPanel({
         <button
           type="submit"
           disabled={!connected || sending || !text.trim()}
-          className="rounded bg-zinc-700 px-2 text-xs hover:bg-zinc-600 disabled:opacity-50"
+          className="shrink-0 rounded bg-zinc-700 px-2.5 py-1 text-xs font-medium hover:bg-zinc-600 disabled:opacity-50"
         >
           {sending ? '…' : 'Enviar'}
         </button>

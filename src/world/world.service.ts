@@ -16,6 +16,7 @@ import {
 } from '../common/constants/zones';
 import { calculateLevelFromXp } from '../common/utils/level.util';
 import { MarketGoodId, MarketTradeDto } from './dto/market-trade.dto';
+import { StreetCombatDto } from './dto/street-combat.dto';
 import { AntiCheatService } from '../security/anti-cheat.service';
 import { EngagementService } from '../engagement/engagement.service';
 import { AchievementsService } from '../achievements/achievements.service';
@@ -255,6 +256,42 @@ const ACTIONS: ActionDef[] = [
     minLevel: 1,
     risk: 0,
     vibes: [],
+  },
+  {
+    id: 'pelea_clandestina',
+    label: 'Pelea clandestina (+18)',
+    description: 'Combate sin reglas en un sótano. Sangre, apuestas y respeto.',
+    lifestyle: 'STREET',
+    minLevel: 1,
+    risk: 0.35,
+    vibes: ['street', 'nightlife', 'business'],
+  },
+  {
+    id: 'contrabando_nocturno',
+    label: 'Pase de mercancía (+18)',
+    description: 'Mueve sustancias y fardos de noche evitando controles.',
+    lifestyle: 'STREET',
+    minLevel: 2,
+    risk: 0.38,
+    vibes: ['street', 'nightlife', 'industrial'],
+  },
+  {
+    id: 'sala_privada_vip',
+    label: 'Club privado sin censura (+18)',
+    description: 'Tratos entre copas, espectáculo adulto y contactos VIP.',
+    lifestyle: 'GREY',
+    minLevel: 1,
+    risk: 0.12,
+    vibes: ['nightlife', 'luxury', 'business'],
+  },
+  {
+    id: 'ajuste_cuentas',
+    label: 'Ajuste de cuentas armado (+18)',
+    description: 'Tiroteo rápido contra rivales del distrito. Alto calor policial.',
+    lifestyle: 'STREET',
+    minLevel: 2,
+    risk: 0.42,
+    vibes: ['street', 'nightlife', 'industrial'],
   },
 ];
 
@@ -553,9 +590,11 @@ export class WorldService {
     const action = ACTIONS.find((a) => a.id === actionId);
     if (!action) throw new NotFoundException('Acción desconocida');
 
+    let actorPlayerId = '';
     const result = await this.prisma.$transaction(async (tx) => {
       const p = await tx.player.findUnique({ where: { userId } });
       if (!p) throw new NotFoundException('Player not found');
+      actorPlayerId = p.id;
       this.assertNotJailed(p.jailUntil);
 
       this.antiCheat?.assertActionCooldown(
@@ -690,7 +729,283 @@ export class WorldService {
       };
     });
 
+    if (!result.failed && actionId !== 'huir_calor' && actorPlayerId && this.engagementService) {
+      await this.engagementService
+        .recordProgress(actorPlayerId, 'action')
+        .catch(() => undefined);
+    }
     await this.achievementsService?.checkAndUnlock(userId).catch(() => undefined);
+    return result;
+  }
+
+  async streetCombat(userId: string, dto: StreetCombatDto) {
+    const TARGET_CONFIG: Record<
+      'THUG' | 'ENFORCER' | 'RIVAL_CAR',
+      {
+        label: string;
+        minEuros: number;
+        maxEuros: number;
+        xp: number;
+        rep: number;
+        minHeat: number;
+        maxHeat: number;
+        baseWinChance: number;
+      }
+    > = {
+      THUG: {
+        label: 'Matón callejero',
+        minEuros: 55,
+        maxEuros: 110,
+        xp: 18,
+        rep: 4,
+        minHeat: 6,
+        maxHeat: 10,
+        baseWinChance: 0.86,
+      },
+      ENFORCER: {
+        label: 'Sicario del distrito',
+        minEuros: 95,
+        maxEuros: 175,
+        xp: 28,
+        rep: 7,
+        minHeat: 9,
+        maxHeat: 14,
+        baseWinChance: 0.78,
+      },
+      RIVAL_CAR: {
+        label: 'Vehículo rival armado',
+        minEuros: 120,
+        maxEuros: 220,
+        xp: 35,
+        rep: 9,
+        minHeat: 11,
+        maxHeat: 16,
+        baseWinChance: 0.72,
+      },
+    };
+
+    const config = TARGET_CONFIG[dto.targetType];
+    if (!config) {
+      throw new BadRequestException('Objetivo de combate no válido');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const p = await tx.player.findUnique({ where: { userId } });
+      if (!p) throw new NotFoundException('Player not found');
+      this.assertNotJailed(p.jailUntil);
+
+      this.antiCheat?.assertActionCooldown(
+        userId,
+        'world_combat',
+        1200,
+        'Espera un momento antes de iniciar otro combate en la calle.',
+      );
+
+      const equippedWeapon = tx.playerWeapon?.findFirst
+        ? await tx.playerWeapon.findFirst({
+            where: { playerId: p.id, equipped: true },
+          })
+        : null;
+
+      const levelBonus = Math.min(0.12, Math.max(0, p.level - 1) * 0.015);
+      const weaponBonus = equippedWeapon
+        ? Math.min(
+            0.15,
+            (equippedWeapon.damage ?? 10) / 400 +
+              (equippedWeapon.accuracy ?? 50) / 1000,
+          )
+        : 0;
+      const winChance = Math.min(
+        0.96,
+        Math.max(0.5, config.baseWinChance + levelBonus + weaponBonus),
+      );
+      const won = Math.random() < winChance;
+
+      const weaponLabel =
+        equippedWeapon?.name || dto.weaponUsed || 'puños desnudos';
+
+      let eurosDelta = 0;
+      let xpDelta = 0;
+      let repDelta = 0;
+      let heatDelta = 0;
+      let damageTaken = 0;
+      let narrative = '';
+
+      if (won) {
+        eurosDelta =
+          config.minEuros +
+          Math.floor(Math.random() * (config.maxEuros - config.minEuros + 1));
+        xpDelta = config.xp;
+        repDelta = config.rep;
+        heatDelta =
+          config.minHeat +
+          Math.floor(Math.random() * (config.maxHeat - config.minHeat + 1));
+        damageTaken = Math.floor(Math.random() * 12);
+        narrative = `Abates al ${config.label} usando ${weaponLabel}. Botín de +${eurosDelta}€ y +${repDelta} reputación.`;
+      } else {
+        damageTaken = 18 + Math.floor(Math.random() * 18); // 18..35
+        const fine = Math.floor(Math.random() * 36); // 0..35€
+        eurosDelta = -Math.min(p.euros, fine);
+        xpDelta = 8;
+        repDelta = 0;
+        heatDelta = 4 + Math.floor(Math.random() * 5);
+        narrative = `El ${config.label} te supera en el intercambio (${damageTaken} daño). Pagas ${Math.abs(eurosDelta)}€ en curas rápidas y escapas.`;
+      }
+
+      const newHeat = Math.max(0, Math.min(100, (p.heat ?? 0) + heatDelta));
+      const newWantedLevel = Math.min(5, Math.floor(newHeat / 20));
+      const newXp = p.xp + xpDelta;
+      const calculatedLevel = calculateLevelFromXp(newXp);
+      const newLevel = calculatedLevel > p.level ? calculatedLevel : p.level;
+
+      const updated = await tx.player.update({
+        where: { userId },
+        data: {
+          euros: Math.max(0, Math.round((p.euros + eurosDelta) * 100) / 100),
+          xp: newXp,
+          level: newLevel,
+          reputation: p.reputation + repDelta,
+          heat: newHeat,
+          wantedLevel: newWantedLevel,
+        },
+      });
+
+      if (won && tx.playerMission?.findMany) {
+        const loc = p.locationId || 'madrid_centro';
+        const currentCity = ZONES_BY_ID[loc]?.city;
+        const missions = await tx.playerMission.findMany({
+          where: { playerId: p.id, status: 'IN_PROGRESS' },
+          include: { template: true },
+          take: 3,
+        });
+        for (const m of missions) {
+          const tpl = m.template as
+            | { mode?: string; city?: string | null; requiredSteps?: number }
+            | undefined;
+          if (tpl?.mode === 'ONLINE_COOP') continue;
+          if (tpl?.city && currentCity && tpl.city !== currentCity) continue;
+          const steps = Math.max(1, tpl?.requiredSteps ?? 3);
+          const stepPct = Math.max(5, Math.floor(100 / steps));
+          const prog = Math.min(100, m.progress + stepPct);
+          await tx.playerMission.update({
+            where: { id: m.id },
+            data: {
+              progress: prog,
+              status: prog >= 100 ? 'COMPLETED' : 'IN_PROGRESS',
+              completedAt: prog >= 100 ? new Date() : undefined,
+              lastStepAt: new Date(),
+            },
+          });
+        }
+      }
+
+      return {
+        won,
+        damageTaken,
+        targetType: dto.targetType,
+        eurosDelta,
+        xpDelta,
+        repDelta,
+        heatDelta,
+        narrative,
+        player: {
+          level: updated.level,
+          xp: updated.xp,
+          euros: updated.euros,
+          heat: updated.heat,
+          wantedLevel: updated.wantedLevel,
+          reputation: updated.reputation,
+        },
+      };
+    });
+
+    await this.achievementsService
+      ?.checkAndUnlock(userId)
+      .catch(() => undefined);
+    return result;
+  }
+
+  async resolvePvpKnockout(attackerUserId: string, targetUserId: string) {
+    if (!attackerUserId || !targetUserId) {
+      throw new BadRequestException('Jugadores no válidos para knockout PvP');
+    }
+    if (attackerUserId === targetUserId) {
+      throw new BadRequestException('No puedes noquearte a ti mismo');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const [attacker, target] = await Promise.all([
+        tx.player.findUnique({ where: { userId: attackerUserId } }),
+        tx.player.findUnique({ where: { userId: targetUserId } }),
+      ]);
+
+      if (!attacker || !target) {
+        throw new NotFoundException('Player not found');
+      }
+
+      const safeBalance = Math.max(0, Math.floor(target.euros ?? 0));
+      const loot = Math.min(60, safeBalance);
+
+      let actualLoot = 0;
+      if (loot > 0) {
+        const debit = await tx.player.updateMany({
+          where: { id: target.id, euros: { gte: loot } },
+          data: { euros: { decrement: loot } },
+        });
+        if (debit.count > 0) {
+          actualLoot = loot;
+        }
+      }
+
+      const newHeat = Math.max(0, Math.min(100, (attacker.heat ?? 0) + 10));
+      const newWantedLevel = Math.min(5, Math.floor(newHeat / 20));
+      const newXp = (attacker.xp ?? 0) + 30;
+      const calculatedLevel = calculateLevelFromXp(newXp);
+      const newLevel =
+        calculatedLevel > (attacker.level ?? 1)
+          ? calculatedLevel
+          : (attacker.level ?? 1);
+
+      const updatedAttacker = await tx.player.update({
+        where: { id: attacker.id },
+        data: {
+          euros: { increment: actualLoot },
+          xp: newXp,
+          level: newLevel,
+          reputation: (attacker.reputation ?? 0) + 10,
+          heat: newHeat,
+          wantedLevel: newWantedLevel,
+        },
+      });
+
+      const fallbackEuros =
+        Math.round(((attacker.euros ?? 0) + actualLoot) * 100) / 100;
+      const attackerStats = {
+        level: updatedAttacker?.level ?? newLevel,
+        xp: updatedAttacker?.xp ?? newXp,
+        euros:
+          typeof updatedAttacker?.euros === 'number'
+            ? updatedAttacker.euros
+            : fallbackEuros,
+        reputation: updatedAttacker?.reputation ?? (attacker.reputation ?? 0) + 10,
+        heat: updatedAttacker?.heat ?? newHeat,
+        wantedLevel: updatedAttacker?.wantedLevel ?? newWantedLevel,
+      };
+      const targetRemainingEuros = Math.max(
+        0,
+        Math.round(((target.euros ?? 0) - actualLoot) * 100) / 100,
+      );
+
+      return {
+        lootEuros: actualLoot,
+        attackerStats,
+        targetRemainingEuros,
+      };
+    });
+
+    await this.achievementsService
+      ?.checkAndUnlock(attackerUserId)
+      .catch(() => undefined);
     return result;
   }
 

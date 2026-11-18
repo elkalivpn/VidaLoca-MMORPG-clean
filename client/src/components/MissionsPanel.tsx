@@ -124,6 +124,40 @@ export default function MissionsPanel() {
     [myMissions],
   );
 
+  const completedUniqueTemplateIds = useMemo(
+    () =>
+      new Set(
+        myMissions
+          .filter(
+            (m) =>
+              (m.status === 'CLAIMED' || m.status === 'COMPLETED') &&
+              !m.template.isRepeatable,
+          )
+          .map((m) => m.template.id),
+      ),
+    [myMissions],
+  );
+
+  const cooldownHoursByTemplateId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const m of myMissions) {
+      if (
+        m.status === 'CLAIMED' &&
+        m.template.isRepeatable &&
+        (m.template.cooldownHours ?? 0) > 0 &&
+        m.completedAt
+      ) {
+        const readyAt =
+          new Date(m.completedAt).getTime() +
+          (m.template.cooldownHours ?? 0) * 3600_000;
+        if (readyAt > nowMs) {
+          map.set(m.template.id, Math.ceil((readyAt - nowMs) / 3600_000));
+        }
+      }
+    }
+    return map;
+  }, [myMissions, nowMs]);
+
   const availableCities = useMemo(() => {
     const cities = new Set<string>();
     templates.forEach((t) => {
@@ -517,6 +551,9 @@ export default function MissionsPanel() {
             {filteredTemplates.map((t) => {
               const isActive = activeTemplateIds.has(t.id);
               const isSkipped = skippedTemplateIds.has(t.id);
+              const isCompletedUnique = completedUniqueTemplateIds.has(t.id);
+              const cooldownHoursLeft =
+                cooldownHoursByTemplateId.get(t.id) ?? 0;
               const lockedByLevel =
                 Boolean(player?.level) &&
                 (t.minLevel ?? 1) > (player?.level ?? 1);
@@ -597,26 +634,30 @@ export default function MissionsPanel() {
                       {t.rewardItemName ? ` · 🎁 ${t.rewardItemName}` : ''}
                     </div>
                     <div className="flex items-center gap-2">
-                      {!isActive && t.isOptional !== false && (
-                        <button
-                          type="button"
-                          disabled={busy === `skip-${t.id}` || isSkipped}
-                          onClick={() =>
-                            void runAction(
-                              `skip-${t.id}`,
-                              () => api.skipMission(t.id),
-                              'Misión marcada como omitida (puedes aceptarla cuando quieras)',
-                            )
-                          }
-                          className="text-[11px] text-zinc-500 hover:text-zinc-300 disabled:opacity-40"
-                        >
-                          {isSkipped ? 'Omitida' : 'Omitir'}
-                        </button>
-                      )}
+                      {!isActive &&
+                        !isCompletedUnique &&
+                        t.isOptional !== false && (
+                          <button
+                            type="button"
+                            disabled={busy === `skip-${t.id}` || isSkipped}
+                            onClick={() =>
+                              void runAction(
+                                `skip-${t.id}`,
+                                () => api.skipMission(t.id),
+                                'Misión marcada como omitida (puedes aceptarla cuando quieras)',
+                              )
+                            }
+                            className="text-[11px] text-zinc-500 hover:text-zinc-300 disabled:opacity-40"
+                          >
+                            {isSkipped ? 'Omitida' : 'Omitir'}
+                          </button>
+                        )}
                       <button
                         type="button"
                         disabled={
                           isActive ||
+                          isCompletedUnique ||
+                          cooldownHoursLeft > 0 ||
                           lockedByLevel ||
                           lockedByVip ||
                           busy === t.id
@@ -637,13 +678,17 @@ export default function MissionsPanel() {
                       >
                         {isActive
                           ? 'En curso'
-                          : lockedByVip
-                            ? 'Solo Club VIP'
-                            : lockedByLevel
-                              ? `Req. Nv ${t.minLevel}`
-                              : isCoop
-                                ? 'Crear Escuadra'
-                                : 'Aceptar'}
+                          : isCompletedUnique
+                            ? 'Completada ✓'
+                            : cooldownHoursLeft > 0
+                              ? `CD ~${cooldownHoursLeft}h`
+                              : lockedByVip
+                                ? 'Solo Club VIP'
+                                : lockedByLevel
+                                  ? `Req. Nv ${t.minLevel}`
+                                  : isCoop
+                                    ? 'Crear Escuadra'
+                                    : 'Aceptar'}
                       </button>
                     </div>
                   </div>

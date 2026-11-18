@@ -4,6 +4,7 @@ import { IsIn, IsNotEmpty, IsString } from 'class-validator';
 import { WorldService } from './world.service';
 import { TravelDto } from './dto/travel.dto';
 import { MarketTradeDto } from './dto/market-trade.dto';
+import { StreetCombatDto } from './dto/street-combat.dto';
 
 class PerformActionDto {
   @IsString()
@@ -54,5 +55,10 @@ export class WorldController {
   @Post('market/trade')
   tradeMarket(@Req() req: any, @Body() dto: MarketTradeDto) {
     return this.world.tradeMarket(req.user.id, dto);
+  }
+
+  @Post('combat')
+  combat(@Req() req: { user: { id: string } }, @Body() dto: StreetCombatDto) {
+    return this.world.streetCombat(req.user.id, dto);
   }
 }

@@ -105,4 +105,34 @@ describe('VehiclesService', () => {
       service.buyVehicle('u-vip', { templateId: 'veh-vc', currency: 'EUR' }),
     ).rejects.toThrow(BadRequestException);
   });
+
+  it('auto-marks the first purchased vehicle as primary when player has none', async () => {
+    (prisma.playerVehicle as any).findFirst = jest.fn().mockResolvedValue(null);
+    prisma.player.findUnique.mockResolvedValue({
+      id: 'p1',
+      euros: 5000,
+      vidaCoins: 0,
+      isVip: false,
+    });
+    prisma.vehicleTemplate.findUnique.mockResolvedValue({
+      id: 'vespa-1',
+      name: 'Vespa Primavera 125',
+      priceEuros: 650,
+      priceVida: null,
+      isVipOnly: false,
+    });
+    prisma.player.updateMany.mockResolvedValue({ count: 1 });
+    prisma.playerVehicle.create.mockImplementation(async ({ data }: any) => ({
+      id: 'pv-first',
+      ...data,
+    }));
+    prisma.transactionLog.create.mockResolvedValue({});
+
+    const first = await service.buyVehicle('u1', { templateId: 'vespa-1' });
+    expect(first.isPrimary).toBe(true);
+
+    (prisma.playerVehicle as any).findFirst.mockResolvedValue({ id: 'pv-first' });
+    const second = await service.buyVehicle('u1', { templateId: 'vespa-1' });
+    expect(second.isPrimary).toBe(false);
+  });
 });

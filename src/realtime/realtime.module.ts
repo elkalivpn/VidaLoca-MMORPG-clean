@@ -3,10 +3,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { RealtimeGateway } from './realtime.gateway';
 import { PrismaModule } from '../prisma/prisma.module';
+import { WorldModule } from '../world/world.module';
 
 @Module({
   imports: [
     PrismaModule,
+    WorldModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({

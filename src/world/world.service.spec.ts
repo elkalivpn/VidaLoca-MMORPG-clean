@@ -331,4 +331,131 @@ describe('WorldService', () => {
       );
     });
   });
+
+  describe('resolvePvpKnockout', () => {
+    it('deducts up to 60€ atomically from target and rewards attacker with +loot, +30 XP, +10 rep, +10 heat', async () => {
+      const attacker = {
+        id: 'att-player',
+        userId: 'att-user',
+        level: 2,
+        xp: 120,
+        euros: 300,
+        reputation: 15,
+        heat: 20,
+      };
+      const target = {
+        id: 'tgt-player',
+        userId: 'tgt-user',
+        level: 2,
+        xp: 100,
+        euros: 250,
+        reputation: 10,
+        heat: 5,
+      };
+      (prisma.player as any).updateMany = jest
+        .fn()
+        .mockResolvedValue({ count: 1 });
+
+      prisma.player.findUnique
+        .mockResolvedValueOnce(attacker)
+        .mockResolvedValueOnce(target);
+      prisma.player.update.mockResolvedValue({
+        ...attacker,
+        euros: 360,
+        xp: 150,
+        level: 2,
+        reputation: 25,
+        heat: 30,
+        wantedLevel: 1,
+      });
+
+      const res = await service.resolvePvpKnockout('att-user', 'tgt-user');
+
+      expect((prisma.player as any).updateMany).toHaveBeenCalledWith({
+        where: { id: 'tgt-player', euros: { gte: 60 } },
+        data: { euros: { decrement: 60 } },
+      });
+      expect(prisma.player.update).toHaveBeenCalledWith({
+        where: { id: 'att-player' },
+        data: expect.objectContaining({
+          euros: { increment: 60 },
+          xp: 150,
+          reputation: 25,
+          heat: 30,
+          wantedLevel: 1,
+        }),
+      });
+      expect(res).toEqual({
+        lootEuros: 60,
+        attackerStats: {
+          level: 2,
+          xp: 150,
+          euros: 360,
+          reputation: 25,
+          heat: 30,
+          wantedLevel: 1,
+        },
+        targetRemainingEuros: 190,
+      });
+    });
+
+    it('caps loot to target balance when target has less than 60€ and handles concurrent debit failure safely', async () => {
+      const attacker = {
+        id: 'att-player',
+        userId: 'att-user',
+        level: 1,
+        xp: 10,
+        euros: 100,
+        reputation: 0,
+        heat: 95,
+      };
+      const target = {
+        id: 'tgt-player',
+        userId: 'tgt-user',
+        euros: 25.5,
+      };
+      (prisma.player as any).updateMany = jest
+        .fn()
+        .mockResolvedValue({ count: 0 });
+
+      prisma.player.findUnique
+        .mockResolvedValueOnce(attacker)
+        .mockResolvedValueOnce(target);
+      prisma.player.update.mockResolvedValue({
+        ...attacker,
+        euros: 100,
+        xp: 40,
+        reputation: 10,
+        heat: 100,
+        wantedLevel: 5,
+      });
+
+      const res = await service.resolvePvpKnockout('att-user', 'tgt-user');
+
+      expect((prisma.player as any).updateMany).toHaveBeenCalledWith({
+        where: { id: 'tgt-player', euros: { gte: 25 } },
+        data: { euros: { decrement: 25 } },
+      });
+      expect(res.lootEuros).toBe(0);
+      expect(res.targetRemainingEuros).toBe(25.5);
+      expect(res.attackerStats.heat).toBe(100);
+      expect(res.attackerStats.xp).toBe(40);
+      expect(res.attackerStats.reputation).toBe(10);
+    });
+
+    it('rejects self-knockout and missing players', async () => {
+      await expect(
+        service.resolvePvpKnockout('same-user', 'same-user'),
+      ).rejects.toThrow(BadRequestException);
+
+      prisma.player.findUnique
+        .mockResolvedValueOnce({ id: 'p1', userId: 'u1' })
+        .mockResolvedValueOnce(null);
+
+      await expect(service.resolvePvpKnockout('u1', 'missing')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
 });
+

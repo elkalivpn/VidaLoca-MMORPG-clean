@@ -8,8 +8,24 @@ import {
   type MutableRefObject,
 } from 'react';
 import * as THREE from 'three';
-import type { PlayerMovePayload, SpatialPlayer } from '@/lib/socket';
+import {
+  emitCombatPvpHit,
+  emitCombatShot,
+  type CombatDamagedEvent,
+  type PlayerMovePayload,
+  type RemoteCombatShot,
+  type SpatialPlayer,
+} from '@/lib/socket';
 import type { PlayerAppearance3D, VehicleClass3D } from '@/lib/appearance3d';
+import {
+  playCrashSfx,
+  playEnginePulseSfx,
+  playGunshotSfx,
+  playHeartbeatSfx,
+  playImpactBloodSfx,
+  playPoliceSirenSfx,
+  playTireScreechSfx,
+} from '@/lib/sfx';
 
 export type DistrictAction = {
   id: string;
@@ -42,6 +58,15 @@ export interface DistrictPoi {
   hex: number;
 }
 
+export type CombatHitResult = {
+  won?: boolean;
+  eurosDelta?: number;
+  xpDelta?: number;
+  heatDelta?: number;
+  damageTaken?: number;
+  narrative?: string;
+};
+
 export interface District3DProps {
   zoneName: string;
   vibe: string;
@@ -57,6 +82,17 @@ export interface District3DProps {
   onSetLifestyle: (lifestyle: string) => Promise<void> | void;
   onSwitchClassic?: () => void;
   onNavigateTab?: (tab: 'vehiculos' | 'propiedades' | 'misiones') => void;
+  onCombatHit?: (
+    targetType: 'THUG' | 'ENFORCER' | 'RIVAL_CAR',
+    weaponUsed?: string,
+  ) => Promise<CombatHitResult | void> | void;
+  remoteShotsRef?: MutableRefObject<RemoteCombatShot[]>;
+  onSubscribeCombatShot?: (cb: (shot: RemoteCombatShot) => void) => () => void;
+  onSubscribeCombatDamaged?: (
+    cb: (ev: CombatDamagedEvent) => void,
+  ) => () => void;
+  onRefreshPlayer?: () => Promise<void> | void;
+  onChanged?: () => void;
 }
 
 type VibeTheme = {
@@ -200,10 +236,19 @@ type AvatarRig = {
 
 type RemoteAvatarEntry = {
   rig: AvatarRig;
+  vehicleRig?: VehicleRig;
+  vehicleClass?: VehicleClass3D;
   targetPos: THREE.Vector3;
   targetRotY: number;
   isMoving: boolean;
+  isDriving: boolean;
+  isDrifting: boolean;
   displayName: string;
+  hp: number;
+  hudGroup: THREE.Group;
+  hpBarContainer: THREE.Group;
+  hpBarFill: THREE.Mesh;
+  hpBarMat: THREE.MeshBasicMaterial;
   labelSprite: THREE.Sprite;
 };
 
@@ -226,6 +271,63 @@ type SmokeParticle = {
   vx: number;
   vy: number;
   vz: number;
+};
+
+type BurstParticle = {
+  mesh: THREE.Mesh;
+  life: number;
+  maxLife: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  gravity: number;
+};
+
+type BulletProjectile = {
+  mesh: THREE.Mesh;
+  x: number;
+  y: number;
+  z: number;
+  dx: number;
+  dz: number;
+  speed: number;
+  life: number;
+  isEnemy: boolean;
+  isRemote: boolean;
+  weaponType: string;
+};
+
+type EnemyThug = {
+  id: number;
+  rig: AvatarRig;
+  hpBarFill: THREE.Mesh;
+  hpBarMat: THREE.MeshBasicMaterial;
+  hp: number;
+  maxHp: number;
+  alive: boolean;
+  respawnTimer: number;
+  aggro: boolean;
+  shootCooldown: number;
+  patrolPoints: Array<[number, number]>;
+  patrolIndex: number;
+};
+
+type TrafficCar = {
+  group: THREE.Group;
+  brakeMat: THREE.MeshStandardMaterial;
+  axis: 'x' | 'z';
+  dir: 1 | -1;
+  laneCoord: number;
+  posCoord: number;
+  baseSpeed: number;
+  currentSpeed: number;
+};
+
+type AmbientPedestrian = {
+  rig: AvatarRig;
+  waypoints: Array<[number, number]>;
+  wpIndex: number;
+  speed: number;
 };
 
 type CombatPulseEffect = {
@@ -284,24 +386,24 @@ function createWindowTexture(
 
 function createNameLabelSprite(name: string, accent = '#f59e0b'): THREE.Sprite {
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
+  canvas.width = 384;
   canvas.height = 64;
   const ctx = canvas.getContext('2d');
   if (ctx) {
-    ctx.clearRect(0, 0, 256, 64);
-    ctx.fillStyle = 'rgba(9, 9, 11, 0.78)';
+    ctx.clearRect(0, 0, 384, 64);
+    ctx.fillStyle = 'rgba(9, 9, 11, 0.8)';
     ctx.beginPath();
-    ctx.roundRect(16, 12, 224, 38, 12);
+    ctx.roundRect(10, 12, 364, 38, 12);
     ctx.fill();
     ctx.strokeStyle = accent;
     ctx.lineWidth = 2;
     ctx.stroke();
 
     ctx.fillStyle = '#fafafa';
-    ctx.font = 'bold 21px sans-serif';
+    ctx.font = 'bold 20px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(name.slice(0, 16), 128, 32);
+    ctx.fillText(name.slice(0, 28), 192, 32);
   }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -311,7 +413,7 @@ function createNameLabelSprite(name: string, accent = '#f59e0b'): THREE.Sprite {
     depthTest: false,
   });
   const sprite = new THREE.Sprite(mat);
-  sprite.scale.set(2.8, 0.7, 1);
+  sprite.scale.set(4.1, 0.68, 1);
   sprite.position.set(0, 2.45, 0);
   return sprite;
 }
@@ -478,8 +580,13 @@ function disposeObject3D(root: THREE.Object3D) {
 
   for (const mat of materials) {
     for (const val of Object.values(mat) as unknown[]) {
-      if (val instanceof THREE.Texture) {
-        textures.add(val);
+      const isTex =
+        typeof val === 'object' &&
+        val !== null &&
+        'isTexture' in val &&
+        (val as { isTexture?: boolean }).isTexture === true;
+      if (isTex) {
+        textures.add(val as THREE.Texture);
       }
     }
     mat.dispose();
@@ -1175,6 +1282,12 @@ export default function District3D({
   onSetLifestyle,
   onSwitchClassic,
   onNavigateTab,
+  onCombatHit,
+  remoteShotsRef,
+  onSubscribeCombatShot,
+  onSubscribeCombatDamaged,
+  onRefreshPlayer,
+  onChanged,
 }: District3DProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const radarCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1195,8 +1308,20 @@ export default function District3D({
     x: 0,
     y: 0,
   });
+  const [rainEnabled, setRainEnabled] = useState(
+    vibe === 'street' || vibe === 'nightlife',
+  );
+  const [hp, setHp] = useState(100);
+  const [armor, setArmor] = useState(40);
+  const [adrenaline, setAdrenaline] = useState(0);
+  const [driftCombo, setDriftCombo] = useState<{
+    meters: number;
+    points: number;
+  }>({ meters: 0, points: 0 });
+  const [combatPopup, setCombatPopup] = useState<string | null>(null);
+  const [hitFlash, setHitFlash] = useState(0);
 
-  // Input refs (no React re-render per key press)
+  // Input & simulation refs (no React re-render per key press)
   const keysRef = useRef<Record<string, boolean>>({});
   const touchDirRef = useRef<{ x: number; z: number }>({ x: 0, z: 0 });
   const touchThrottleRef = useRef(false);
@@ -1205,14 +1330,23 @@ export default function District3D({
   const sprintTouchRef = useRef(false);
   const driftTouchRef = useRef(false);
   const inVehicleRef = useRef(false);
+  const rainEnabledRef = useRef(rainEnabled);
   const toggleVehicleFnRef = useRef<(() => void) | null>(null);
   const triggerPulseFnRef = useRef<(() => void) | null>(null);
+  const triggerMeleeFnRef = useRef<(() => void) | null>(null);
   const rebuildLocalRigsFnRef = useRef<(() => void) | null>(null);
   const nearbyPoiRef = useRef<DistrictPoi | null>(null);
   const activePoiRef = useRef<DistrictPoi | null>(null);
   const emitMoveRef = useRef(emitMove);
+  const onCombatHitRef = useRef(onCombatHit);
+  const onSubscribeCombatShotRef = useRef(onSubscribeCombatShot);
+  const onSubscribeCombatDamagedRef = useRef(onSubscribeCombatDamaged);
+  const onRefreshPlayerRef = useRef(onRefreshPlayer);
+  const onChangedRef = useRef(onChanged);
+  const remoteShotsPropRef = useRef(remoteShotsRef);
   const locationIdRef = useRef(player.locationId);
   const localIdRef = useRef(localPlayerId || player.id || '');
+  const playerHeatRef = useRef(player.heat || 0);
   const appearanceRef = useRef<PlayerAppearance3D | undefined>(
     player.appearance,
   );
@@ -1228,10 +1362,35 @@ export default function District3D({
   const camOrbitYawRef = useRef(0);
   const camOrbitPitchRef = useRef(0.18);
   const camZoomRef = useRef(1);
+  const popupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     emitMoveRef.current = emitMove;
   }, [emitMove]);
+
+  useEffect(() => {
+    onCombatHitRef.current = onCombatHit;
+  }, [onCombatHit]);
+
+  useEffect(() => {
+    onSubscribeCombatShotRef.current = onSubscribeCombatShot;
+  }, [onSubscribeCombatShot]);
+
+  useEffect(() => {
+    onSubscribeCombatDamagedRef.current = onSubscribeCombatDamaged;
+  }, [onSubscribeCombatDamaged]);
+
+  useEffect(() => {
+    onRefreshPlayerRef.current = onRefreshPlayer;
+  }, [onRefreshPlayer]);
+
+  useEffect(() => {
+    onChangedRef.current = onChanged;
+  }, [onChanged]);
+
+  useEffect(() => {
+    remoteShotsPropRef.current = remoteShotsRef;
+  }, [remoteShotsRef]);
 
   useEffect(() => {
     locationIdRef.current = player.locationId;
@@ -1242,8 +1401,32 @@ export default function District3D({
   }, [localPlayerId, player.id]);
 
   useEffect(() => {
+    playerHeatRef.current = player.heat || 0;
+  }, [player.heat]);
+
+  useEffect(() => {
     activePoiRef.current = activePoi;
   }, [activePoi]);
+
+  useEffect(() => {
+    rainEnabledRef.current = rainEnabled;
+  }, [rainEnabled]);
+
+  useEffect(() => {
+    setRainEnabled(vibe === 'street' || vibe === 'nightlife');
+  }, [vibe]);
+
+  useEffect(() => {
+    return () => {
+      if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+    };
+  }, []);
+
+  const showPopup = useCallback((msg: string) => {
+    setCombatPopup(msg);
+    if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+    popupTimerRef.current = setTimeout(() => setCombatPopup(null), 2400);
+  }, []);
 
   const lastBuiltKeyRef = useRef<string | undefined>(undefined);
 
@@ -1319,6 +1502,10 @@ export default function District3D({
 
   const handleCombatPulse = useCallback(() => {
     triggerPulseFnRef.current?.();
+  }, []);
+
+  const handleMeleeAttack = useCallback(() => {
+    triggerMeleeFnRef.current?.();
   }, []);
 
   const handleInteract = useCallback(() => {
@@ -1409,7 +1596,8 @@ export default function District3D({
     const groundGeo = new THREE.PlaneGeometry(110, 110);
     const groundMat = new THREE.MeshStandardMaterial({
       color: theme.ground,
-      roughness: 0.95,
+      roughness: rainEnabledRef.current ? 0.45 : 0.95,
+      metalness: rainEnabledRef.current ? 0.15 : 0,
     });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
@@ -1418,7 +1606,8 @@ export default function District3D({
     // Streets (crossroads + perimeter ring)
     const asphaltMat = new THREE.MeshStandardMaterial({
       color: theme.asphalt,
-      roughness: 0.85,
+      roughness: rainEnabledRef.current ? 0.22 : 0.85,
+      metalness: rainEnabledRef.current ? 0.35 : 0.05,
     });
     const roadNS = new THREE.Mesh(new THREE.PlaneGeometry(11, 92), asphaltMat);
     roadNS.rotation.x = -Math.PI / 2;
@@ -1720,12 +1909,538 @@ export default function District3D({
       p.mat.opacity = 0.52;
     };
 
-    // Combat Pulse Effects [Q]
+    // Persistent Skidmarks Circular Pool
+    const skidGeo = new THREE.PlaneGeometry(0.28, 0.92);
+    const skidMat = new THREE.MeshBasicMaterial({
+      color: 0x050507,
+      transparent: true,
+      opacity: 0.48,
+      depthWrite: false,
+    });
+    const skidPool: THREE.Mesh[] = [];
+    for (let i = 0; i < 96; i++) {
+      const m = new THREE.Mesh(skidGeo, skidMat);
+      m.rotation.order = 'YXZ';
+      m.rotation.x = -Math.PI / 2;
+      m.visible = false;
+      scene.add(m);
+      skidPool.push(m);
+    }
+    let skidCursor = 0;
+    let lastSkidMs = 0;
+    const spawnSkidmark = (wx: number, wz: number, heading: number) => {
+      const m = skidPool[skidCursor];
+      skidCursor = (skidCursor + 1) % skidPool.length;
+      m.visible = true;
+      m.position.set(wx, 0.024, wz);
+      m.rotation.set(-Math.PI / 2, heading, 0);
+    };
+
+    // Exhaust Boost Flame & Collision Spark Pools
+    const flameGeo = new THREE.SphereGeometry(0.16, 6, 6);
+    const flameBlueMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const flameAmberMat = new THREE.MeshBasicMaterial({
+      color: 0xf59e0b,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const exhaustPool: BurstParticle[] = [];
+    for (let i = 0; i < 28; i++) {
+      const m = new THREE.Mesh(
+        flameGeo,
+        i % 2 === 0 ? flameBlueMat : flameAmberMat,
+      );
+      m.visible = false;
+      scene.add(m);
+      exhaustPool.push({
+        mesh: m,
+        life: 0,
+        maxLife: 0.18,
+        vx: 0,
+        vy: 0,
+        vz: 0,
+        gravity: 0,
+      });
+    }
+    let exhaustCursor = 0;
+    const spawnExhaustFlame = (
+      wx: number,
+      wy: number,
+      wz: number,
+      fx: number,
+      fz: number,
+    ) => {
+      const p = exhaustPool[exhaustCursor];
+      exhaustCursor = (exhaustCursor + 1) % exhaustPool.length;
+      p.mesh.visible = true;
+      p.mesh.position.set(wx, wy, wz);
+      p.mesh.scale.setScalar(1.1);
+      p.life = 0.17;
+      p.maxLife = 0.17;
+      p.vx = -fx * 8 + (Math.random() - 0.5) * 1.2;
+      p.vy = 0.35 + Math.random() * 0.6;
+      p.vz = -fz * 8 + (Math.random() - 0.5) * 1.2;
+    };
+
+    const sparkGeo = new THREE.BoxGeometry(0.11, 0.11, 0.24);
+    const sparkMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+    const sparkPool: BurstParticle[] = [];
+    for (let i = 0; i < 36; i++) {
+      const m = new THREE.Mesh(sparkGeo, sparkMat);
+      m.visible = false;
+      scene.add(m);
+      sparkPool.push({
+        mesh: m,
+        life: 0,
+        maxLife: 0.35,
+        vx: 0,
+        vy: 0,
+        vz: 0,
+        gravity: 14,
+      });
+    }
+    let sparkCursor = 0;
+    const spawnSparks = (wx: number, wy: number, wz: number, count = 8) => {
+      for (let i = 0; i < count; i++) {
+        const p = sparkPool[sparkCursor];
+        sparkCursor = (sparkCursor + 1) % sparkPool.length;
+        p.mesh.visible = true;
+        p.mesh.position.set(wx, wy, wz);
+        p.mesh.scale.setScalar(1);
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 4 + Math.random() * 7;
+        p.vx = Math.cos(ang) * spd;
+        p.vy = 2.5 + Math.random() * 4.5;
+        p.vz = Math.sin(ang) * spd;
+        p.life = 0.32;
+        p.maxLife = 0.32;
+      }
+    };
+
+    // 3D Blood Droplets & Persistent Blood Decals
+    const bloodGeo = new THREE.SphereGeometry(0.11, 5, 5);
+    const bloodMat = new THREE.MeshBasicMaterial({ color: 0xb91c1c });
+    const bloodPool: BurstParticle[] = [];
+    for (let i = 0; i < 48; i++) {
+      const m = new THREE.Mesh(bloodGeo, bloodMat);
+      m.visible = false;
+      scene.add(m);
+      bloodPool.push({
+        mesh: m,
+        life: 0,
+        maxLife: 0.48,
+        vx: 0,
+        vy: 0,
+        vz: 0,
+        gravity: 16,
+      });
+    }
+    let bloodCursor = 0;
+    const spawnBloodBurst = (
+      wx: number,
+      wy: number,
+      wz: number,
+      count = 12,
+    ) => {
+      for (let i = 0; i < count; i++) {
+        const p = bloodPool[bloodCursor];
+        bloodCursor = (bloodCursor + 1) % bloodPool.length;
+        p.mesh.visible = true;
+        p.mesh.position.set(wx, wy, wz);
+        p.mesh.scale.setScalar(0.8 + Math.random() * 0.6);
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 2.2 + Math.random() * 4.8;
+        p.vx = Math.cos(ang) * spd;
+        p.vy = 2.0 + Math.random() * 3.8;
+        p.vz = Math.sin(ang) * spd;
+        p.life = 0.45;
+        p.maxLife = 0.45;
+      }
+    };
+
+    const bloodDecalGeo = new THREE.CircleGeometry(0.65, 12);
+    const bloodDecalMat = new THREE.MeshBasicMaterial({
+      color: 0x7f1d1d,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+    });
+    const bloodDecalPool: THREE.Mesh[] = [];
+    for (let i = 0; i < 28; i++) {
+      const m = new THREE.Mesh(bloodDecalGeo, bloodDecalMat);
+      m.rotation.x = -Math.PI / 2;
+      m.visible = false;
+      scene.add(m);
+      bloodDecalPool.push(m);
+    }
+    let bloodDecalCursor = 0;
+    const spawnBloodDecal = (wx: number, wz: number, scale = 1) => {
+      const m = bloodDecalPool[bloodDecalCursor];
+      bloodDecalCursor = (bloodDecalCursor + 1) % bloodDecalPool.length;
+      m.visible = true;
+      m.position.set(wx, 0.027, wz);
+      m.rotation.z = Math.random() * Math.PI * 2;
+      m.scale.setScalar(scale * (0.75 + Math.random() * 0.55));
+    };
+
+    // Night Rain Weather System (420 streaks in one BufferGeometry)
+    const RAIN_COUNT = 420;
+    const rainPositions = new Float32Array(RAIN_COUNT * 6);
+    const rainOffsets = new Float32Array(RAIN_COUNT * 3);
+    for (let i = 0; i < RAIN_COUNT; i++) {
+      const rx = (Math.random() - 0.5) * 54;
+      const ry = Math.random() * 20;
+      const rz = (Math.random() - 0.5) * 54;
+      rainOffsets[i * 3] = rx;
+      rainOffsets[i * 3 + 1] = ry;
+      rainOffsets[i * 3 + 2] = rz;
+    }
+    const rainGeo = new THREE.BufferGeometry();
+    rainGeo.setAttribute(
+      'position',
+      new THREE.BufferAttribute(rainPositions, 3),
+    );
+    const rainMat = new THREE.LineBasicMaterial({
+      color: 0x93c5fd,
+      transparent: true,
+      opacity: 0.42,
+    });
+    const rainLines = new THREE.LineSegments(rainGeo, rainMat);
+    rainLines.visible = rainEnabledRef.current;
+    rainLines.frustumCulled = false;
+    scene.add(rainLines);
+
+    // 5 Hostile Street Thugs ("Matón · Rival")
+    const thugConfigs: Array<Array<[number, number]>> = [
+      [
+        [-14, -12],
+        [-14, -27],
+        [-27, -27],
+      ],
+      [
+        [14, -12],
+        [27, -12],
+        [27, -27],
+      ],
+      [
+        [-14, 13],
+        [-27, 13],
+        [-27, 27],
+      ],
+      [
+        [14, 13],
+        [14, 27],
+        [27, 27],
+      ],
+      [
+        [-6, -24],
+        [6, -24],
+        [6, -15],
+      ],
+    ];
+    const hpBgGeo = new THREE.PlaneGeometry(1.1, 0.14);
+    const hpBgMat = new THREE.MeshBasicMaterial({
+      color: 0x09090b,
+      side: THREE.DoubleSide,
+    });
+    const hpFillGeo = new THREE.PlaneGeometry(1.04, 0.1);
+
+    const thugs: EnemyThug[] = thugConfigs.map((pts, idx) => {
+      const rig = createAvatarRig(0x450a0a, 0xef4444);
+      rig.group.position.set(pts[0][0], 0.16, pts[0][1]);
+      const tag = createNameLabelSprite('Matón · Rival', '#ef4444');
+      tag.position.set(0, 2.55, 0);
+      rig.group.add(tag);
+
+      const hpBg = new THREE.Mesh(hpBgGeo, hpBgMat);
+      hpBg.position.set(0, 2.15, 0);
+      rig.group.add(hpBg);
+
+      const hpBarMat = new THREE.MeshBasicMaterial({
+        color: 0xef4444,
+        side: THREE.DoubleSide,
+      });
+      const hpBarFill = new THREE.Mesh(hpFillGeo, hpBarMat);
+      hpBarFill.position.set(0, 2.15, 0.02);
+      rig.group.add(hpBarFill);
+
+      scene.add(rig.group);
+      return {
+        id: idx,
+        rig,
+        hpBarFill,
+        hpBarMat,
+        hp: 100,
+        maxHp: 100,
+        alive: true,
+        respawnTimer: 0,
+        aggro: false,
+        shootCooldown: 1.2 + Math.random() * 1.2,
+        patrolPoints: pts,
+        patrolIndex: 1,
+      };
+    });
+
+    // 4 Autonomous AI Traffic Cars
+    const trafficSpecs: Array<{
+      axis: 'x' | 'z';
+      dir: 1 | -1;
+      laneCoord: number;
+      startCoord: number;
+      color: number;
+      speed: number;
+    }> = [
+      {
+        axis: 'z',
+        dir: 1,
+        laneCoord: 2.65,
+        startCoord: -28,
+        color: 0xeab308,
+        speed: 11.5,
+      },
+      {
+        axis: 'z',
+        dir: -1,
+        laneCoord: -2.65,
+        startCoord: 26,
+        color: 0x94a3b8,
+        speed: 12.2,
+      },
+      {
+        axis: 'x',
+        dir: 1,
+        laneCoord: -2.65,
+        startCoord: -32,
+        color: 0x1e3a8a,
+        speed: 10.8,
+      },
+      {
+        axis: 'x',
+        dir: -1,
+        laneCoord: 2.65,
+        startCoord: 30,
+        color: 0x991b1b,
+        speed: 12.6,
+      },
+    ];
+    const trafficBodyGeo = new THREE.BoxGeometry(1.75, 0.62, 3.85);
+    const trafficCabGeo = new THREE.BoxGeometry(1.45, 0.45, 1.9);
+    const trafficLightGeo = new THREE.BoxGeometry(0.45, 0.14, 0.08);
+    const trafficGlassMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      metalness: 0.85,
+      roughness: 0.15,
+    });
+    const trafficHeadMat = new THREE.MeshStandardMaterial({
+      color: 0xfef9c3,
+      emissive: 0xfef08a,
+      emissiveIntensity: 2.2,
+    });
+
+    const trafficCars: TrafficCar[] = trafficSpecs.map((spec) => {
+      const g = new THREE.Group();
+      const bMat = new THREE.MeshStandardMaterial({
+        color: spec.color,
+        metalness: 0.65,
+        roughness: 0.28,
+      });
+      const brakeMat = new THREE.MeshStandardMaterial({
+        color: 0xef4444,
+        emissive: 0xef4444,
+        emissiveIntensity: 0.8,
+      });
+      const body = new THREE.Mesh(trafficBodyGeo, bMat);
+      body.position.y = 0.52;
+      const cab = new THREE.Mesh(trafficCabGeo, trafficGlassMat);
+      cab.position.set(0, 0.98, -0.15);
+      const headL = new THREE.Mesh(trafficLightGeo, trafficHeadMat);
+      headL.position.set(-0.52, 0.55, 1.94);
+      const headR = new THREE.Mesh(trafficLightGeo, trafficHeadMat);
+      headR.position.set(0.52, 0.55, 1.94);
+      const tailL = new THREE.Mesh(trafficLightGeo, brakeMat);
+      tailL.position.set(-0.52, 0.55, -1.94);
+      const tailR = new THREE.Mesh(trafficLightGeo, brakeMat);
+      tailR.position.set(0.52, 0.55, -1.94);
+      g.add(body, cab, headL, headR, tailL, tailR);
+
+      if (spec.axis === 'z') {
+        g.position.set(spec.laneCoord, 0, spec.startCoord);
+        g.rotation.y = spec.dir > 0 ? 0 : Math.PI;
+      } else {
+        g.position.set(spec.startCoord, 0, spec.laneCoord);
+        g.rotation.y = spec.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+      }
+      scene.add(g);
+      return {
+        group: g,
+        brakeMat,
+        axis: spec.axis,
+        dir: spec.dir,
+        laneCoord: spec.laneCoord,
+        posCoord: spec.startCoord,
+        baseSpeed: spec.speed,
+        currentSpeed: spec.speed,
+      };
+    });
+
+    // 6 Ambient Pedestrians on Sidewalks
+    const pedConfigs: Array<{
+      color: number;
+      accent: number;
+      waypoints: Array<[number, number]>;
+    }> = [
+      {
+        color: 0x334155,
+        accent: 0x38bdf8,
+        waypoints: [
+          [-9, -9],
+          [-9, -28],
+        ],
+      },
+      {
+        color: 0x475569,
+        accent: 0xf472b6,
+        waypoints: [
+          [9, -9],
+          [28, -9],
+        ],
+      },
+      {
+        color: 0x3f3f46,
+        accent: 0xfbbf24,
+        waypoints: [
+          [-9, 9],
+          [-28, 9],
+        ],
+      },
+      {
+        color: 0x1e293b,
+        accent: 0x34d399,
+        waypoints: [
+          [9, 9],
+          [9, 28],
+        ],
+      },
+      {
+        color: 0x52525b,
+        accent: 0xa855f7,
+        waypoints: [
+          [-26, -10],
+          [-10, -10],
+        ],
+      },
+      {
+        color: 0x27272a,
+        accent: 0xfb923c,
+        waypoints: [
+          [26, 10],
+          [10, 10],
+        ],
+      },
+    ];
+    const pedestrians: AmbientPedestrian[] = pedConfigs.map((cfg) => {
+      const rig = createAvatarRig(cfg.color, cfg.accent);
+      rig.group.position.set(cfg.waypoints[0][0], 0.16, cfg.waypoints[0][1]);
+      scene.add(rig.group);
+      return {
+        rig,
+        waypoints: cfg.waypoints,
+        wpIndex: 1,
+        speed: 2.2 + Math.random() * 0.9,
+      };
+    });
+
+    // Local Player Health, Armor, Adrenaline & Shake State
+    let localHp = 100;
+    let localArmor = 40;
+    let localAdrenaline = 0;
+    let lastDamageMs = 0;
+    let cameraShake = 0;
+    let driftMeters = 0;
+    let driftPoints = 0;
+    let driftGraceTimer = 0;
+
+    const applyLocalDamage = (amount: number) => {
+      if (amount <= 0) return;
+      lastDamageMs = performance.now();
+      let rem = amount;
+      if (localArmor > 0) {
+        const absorbed = Math.min(localArmor, rem * 0.7);
+        localArmor = Math.max(0, localArmor - absorbed);
+        rem -= absorbed;
+      }
+      localHp = Math.max(0, localHp - rem);
+      cameraShake = Math.max(cameraShake, Math.min(0.6, amount * 0.03));
+      setHitFlash(1);
+      setHp(Math.round(localHp));
+      setArmor(Math.round(localArmor));
+
+      if (localHp <= 0) {
+        localHp = 75;
+        localArmor = 20;
+        carVx = 0;
+        carVz = 0;
+        localRig.group.position.set(0, 0, 2);
+        carRig.group.position.set(3.5, 0, 4.5);
+        setHp(75);
+        setArmor(20);
+        showPopup('¡HERIDO! Reanimación táctica en zona segura');
+      }
+    };
+
+    // Active Ballistic Projectiles & Combat Pulse Effects [Q]
+    const bulletGeo = new THREE.BoxGeometry(0.11, 0.11, 0.95);
+    const playerBulletMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+    const remoteBulletMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    const enemyBulletMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e });
+    const activeBullets: BulletProjectile[] = [];
+
+    const spawnBullet = (
+      x: number,
+      y: number,
+      z: number,
+      dx: number,
+      dz: number,
+      options: {
+        isEnemy?: boolean;
+        isRemote?: boolean;
+        weaponType?: string;
+        speed?: number;
+      },
+    ) => {
+      const mat = options.isEnemy
+        ? enemyBulletMat
+        : options.isRemote
+          ? remoteBulletMat
+          : playerBulletMat;
+      const mesh = new THREE.Mesh(bulletGeo, mat);
+      mesh.position.set(x, y, z);
+      mesh.rotation.y = Math.atan2(dx, dz);
+      scene.add(mesh);
+      activeBullets.push({
+        mesh,
+        x,
+        y,
+        z,
+        dx,
+        dz,
+        speed: options.speed ?? (options.isEnemy ? 34 : 68),
+        life: options.isEnemy ? 0.95 : 0.72,
+        isEnemy: Boolean(options.isEnemy),
+        isRemote: Boolean(options.isRemote),
+        weaponType: options.weaponType ?? 'PISTOL',
+      });
+    };
+
     const pulseEffects: CombatPulseEffect[] = [];
     let lastPulseTime = 0;
     const triggerCombatPulse = () => {
       const nowMs = performance.now();
-      if (nowMs - lastPulseTime < 550) return;
+      if (nowMs - lastPulseTime < 260) return;
       lastPulseTime = nowMs;
 
       const origin = inVehicleRef.current
@@ -1734,7 +2449,36 @@ export default function District3D({
       const rot = inVehicleRef.current
         ? carRig.group.rotation.y
         : localRig.group.rotation.y;
+      const fx = Math.sin(rot);
+      const fz = Math.cos(rot);
+      const weaponType = inVehicleRef.current ? 'DRIVE_BY' : 'PISTOL';
 
+      // Real Ballistic Tracer + Muzzle Flash
+      const muzzleX = origin.x + fx * (inVehicleRef.current ? 2.1 : 0.7);
+      const muzzleY = inVehicleRef.current ? 0.95 : 1.18;
+      const muzzleZ = origin.z + fz * (inVehicleRef.current ? 2.1 : 0.7);
+      spawnBullet(muzzleX, muzzleY, muzzleZ, fx, fz, {
+        isEnemy: false,
+        weaponType,
+      });
+
+      // Audio & Shake & Network Emission
+      playGunshotSfx(1);
+      cameraShake = Math.max(cameraShake, 0.14);
+      localAdrenaline = Math.min(100, localAdrenaline + 6);
+      if (playerHeatRef.current >= 40) {
+        playPoliceSirenSfx();
+      }
+      emitCombatShot({
+        x: Number(muzzleX.toFixed(2)),
+        y: Number(muzzleY.toFixed(2)),
+        z: Number(muzzleZ.toFixed(2)),
+        dirX: Number(fx.toFixed(4)),
+        dirZ: Number(fz.toFixed(4)),
+        weaponType,
+      });
+
+      // Tactical Pulse Ring + Muzzle Glow (preserved compatibility)
       const ringMat = new THREE.MeshBasicMaterial({
         color: theme.accent,
         side: THREE.DoubleSide,
@@ -1755,17 +2499,15 @@ export default function District3D({
         opacity: 0.95,
       });
       const beam = new THREE.Mesh(
-        new THREE.BoxGeometry(0.14, 0.14, 5.5),
+        new THREE.BoxGeometry(0.16, 0.16, 1.4),
         beamMat,
       );
-      const fx = Math.sin(rot);
-      const fz = Math.cos(rot);
-      beam.position.set(origin.x + fx * 3.1, 1.15, origin.z + fz * 3.1);
+      beam.position.set(muzzleX + fx * 0.7, muzzleY, muzzleZ + fz * 0.7);
       beam.rotation.y = rot;
       scene.add(beam);
 
-      const light = new THREE.PointLight(theme.accent, 22, 16, 1.5);
-      light.position.set(origin.x + fx * 1.5, 1.4, origin.z + fz * 1.5);
+      const light = new THREE.PointLight(0xfbbf24, 26, 16, 1.5);
+      light.position.set(muzzleX + fx * 0.4, muzzleY + 0.2, muzzleZ + fz * 0.4);
       scene.add(light);
 
       pulseEffects.push({
@@ -1774,10 +2516,75 @@ export default function District3D({
         beam,
         beamMat,
         light,
-        life: 0.42,
-        maxLife: 0.42,
+        life: 0.28,
+        maxLife: 0.28,
       });
     };
+
+    // Subscribe to remote players' combat shots
+    const handledShotKeys = new Set<string>();
+    const renderRemoteShot = (shot: RemoteCombatShot) => {
+      if (!shot || shot.playerId === localIdRef.current) return;
+      const key = `${shot.playerId}:${shot.timestamp}:${shot.x}:${shot.z}`;
+      if (handledShotKeys.has(key)) return;
+      handledShotKeys.add(key);
+      if (handledShotKeys.size > 120) handledShotKeys.clear();
+
+      const dx = shot.dirX || 0;
+      const dz = shot.dirZ || 1;
+      const mag = Math.hypot(dx, dz) || 1;
+      spawnBullet(shot.x, shot.y || 1.15, shot.z, dx / mag, dz / mag, {
+        isRemote: true,
+        weaponType: shot.weaponType || 'PISTOL',
+      });
+      playGunshotSfx(0.55);
+
+      const muzzleLight = new THREE.PointLight(0x38bdf8, 16, 12, 1.5);
+      muzzleLight.position.set(shot.x, shot.y || 1.2, shot.z);
+      scene.add(muzzleLight);
+      const rRingMat = new THREE.MeshBasicMaterial({
+        color: 0x38bdf8,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.7,
+      });
+      const rRing = new THREE.Mesh(
+        new THREE.RingGeometry(0.25, 0.45, 16),
+        rRingMat,
+      );
+      rRing.rotation.x = -Math.PI / 2;
+      rRing.position.set(shot.x, 0.2, shot.z);
+      scene.add(rRing);
+      const rBeamMat = new THREE.MeshBasicMaterial({
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0.85,
+      });
+      const rBeam = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.12, 0.9),
+        rBeamMat,
+      );
+      rBeam.position.set(
+        shot.x + (dx / mag) * 0.5,
+        shot.y || 1.15,
+        shot.z + (dz / mag) * 0.5,
+      );
+      rBeam.rotation.y = Math.atan2(dx, dz);
+      scene.add(rBeam);
+      pulseEffects.push({
+        ring: rRing,
+        ringMat: rRingMat,
+        beam: rBeam,
+        beamMat: rBeamMat,
+        light: muzzleLight,
+        life: 0.22,
+        maxLife: 0.22,
+      });
+    };
+
+    const unsubscribeRemoteShots = onSubscribeCombatShotRef.current
+      ? onSubscribeCombatShotRef.current(renderRemoteShot)
+      : undefined;
 
     const toggleVehicleMode = () => {
       if (inVehicleRef.current) {
@@ -1830,6 +2637,236 @@ export default function District3D({
     // Remote Players Map managed by Three.js loop
     const remoteAvatars = new Map<string, RemoteAvatarEntry>();
 
+    const updateRemoteHpBar = (entry: RemoteAvatarEntry) => {
+      const clampedHp = THREE.MathUtils.clamp(entry.hp, 0, 100);
+      const ratio = clampedHp / 100;
+      entry.hpBarFill.scale.x = Math.max(0.001, ratio);
+      entry.hpBarFill.position.x = -0.52 * (1 - ratio);
+      if (clampedHp >= 65) {
+        entry.hpBarMat.color.setHex(0x22c55e);
+      } else if (clampedHp >= 35) {
+        entry.hpBarMat.color.setHex(0xf59e0b);
+      } else {
+        entry.hpBarMat.color.setHex(0xef4444);
+      }
+    };
+
+    // Melee Attack [V] / "👊 Pelear" (<= 3.6u vs remote players or hostile thugs)
+    let lastMeleeTime = 0;
+    let meleeAnimTimer = 0;
+    const triggerMeleeAttack = () => {
+      const nowMs = performance.now();
+      if (nowMs - lastMeleeTime < 380) return;
+      if (inVehicleRef.current) {
+        showPopup('Baja del vehículo [F] para pelear cuerpo a cuerpo');
+        return;
+      }
+      lastMeleeTime = nowMs;
+      meleeAnimTimer = 0.26;
+
+      const origin = localRig.group.position;
+      const rot = localRig.group.rotation.y;
+      const fx = Math.sin(rot);
+      const fz = Math.cos(rot);
+      const waveX = origin.x + fx * 1.1;
+      const waveZ = origin.z + fz * 1.1;
+
+      // Visual melee shockwave ring + punch arc
+      const mRingMat = new THREE.MeshBasicMaterial({
+        color: 0xf97316,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.9,
+      });
+      const mRing = new THREE.Mesh(
+        new THREE.RingGeometry(0.35, 0.75, 24),
+        mRingMat,
+      );
+      mRing.rotation.x = -Math.PI / 2;
+      mRing.position.set(waveX, 0.28, waveZ);
+      scene.add(mRing);
+
+      const mBeamMat = new THREE.MeshBasicMaterial({
+        color: 0xfef08a,
+        transparent: true,
+        opacity: 0.9,
+      });
+      const mBeam = new THREE.Mesh(
+        new THREE.BoxGeometry(0.65, 0.16, 0.45),
+        mBeamMat,
+      );
+      mBeam.position.set(waveX, 1.15, waveZ);
+      mBeam.rotation.y = rot;
+      scene.add(mBeam);
+
+      const mLight = new THREE.PointLight(0xf97316, 18, 10, 1.5);
+      mLight.position.set(waveX, 1.2, waveZ);
+      scene.add(mLight);
+
+      pulseEffects.push({
+        ring: mRing,
+        ringMat: mRingMat,
+        beam: mBeam,
+        beamMat: mBeamMat,
+        light: mLight,
+        life: 0.2,
+        maxLife: 0.2,
+      });
+
+      // Find closest target within 3.6u (remote player or hostile thug)
+      let bestRemote: {
+        id: string;
+        dist: number;
+        x: number;
+        z: number;
+      } | null = null;
+      for (const [targetPlayerId, entry] of remoteAvatars.entries()) {
+        if (targetPlayerId === localIdRef.current) continue;
+        const tPos =
+          entry.isDriving && entry.vehicleRig
+            ? entry.vehicleRig.group.position
+            : entry.rig.group.position;
+        const d = Math.hypot(tPos.x - origin.x, tPos.z - origin.z);
+        if (d <= 3.6 && (!bestRemote || d < bestRemote.dist)) {
+          bestRemote = { id: targetPlayerId, dist: d, x: tPos.x, z: tPos.z };
+        }
+      }
+
+      let bestThug: { thug: EnemyThug; dist: number } | null = null;
+      for (const thug of thugs) {
+        if (!thug.alive) continue;
+        const d = Math.hypot(
+          thug.rig.group.position.x - origin.x,
+          thug.rig.group.position.z - origin.z,
+        );
+        if (d <= 3.6 && (!bestThug || d < bestThug.dist)) {
+          bestThug = { thug, dist: d };
+        }
+      }
+
+      if (bestRemote && (!bestThug || bestRemote.dist <= bestThug.dist)) {
+        spawnBloodBurst(bestRemote.x, 1.15, bestRemote.z, 14);
+        spawnBloodDecal(bestRemote.x, bestRemote.z, 0.95);
+        playImpactBloodSfx();
+        cameraShake = Math.max(cameraShake, 0.18);
+        localAdrenaline = Math.min(100, localAdrenaline + 12);
+        emitCombatPvpHit({
+          targetPlayerId: bestRemote.id,
+          attackType: 'MELEE',
+          weaponType: 'FISTS',
+        });
+      } else if (bestThug) {
+        const thug = bestThug.thug;
+        thug.hp -= 50;
+        thug.aggro = true;
+        thug.hpBarFill.scale.x = Math.max(0.01, thug.hp / thug.maxHp);
+        spawnBloodBurst(
+          thug.rig.group.position.x,
+          1.1,
+          thug.rig.group.position.z,
+          14,
+        );
+        spawnBloodDecal(
+          thug.rig.group.position.x,
+          thug.rig.group.position.z,
+          thug.hp <= 0 ? 1.4 : 0.9,
+        );
+        playImpactBloodSfx();
+        cameraShake = Math.max(cameraShake, 0.16);
+        localAdrenaline = Math.min(100, localAdrenaline + 14);
+
+        if (thug.hp <= 0) {
+          thug.alive = false;
+          thug.rig.group.visible = false;
+          thug.respawnTimer = 11;
+          showPopup('+€ · ¡KO A PUÑOS!');
+          const combatHandler = onCombatHitRef.current;
+          if (combatHandler) {
+            void Promise.resolve(combatHandler('THUG', 'FISTS')).then((res) => {
+              if (res && typeof res.eurosDelta === 'number') {
+                const sign = res.eurosDelta >= 0 ? '+' : '';
+                showPopup(`${sign}${res.eurosDelta} € · ¡KO!`);
+              }
+            });
+          }
+        }
+      }
+    };
+    triggerMeleeFnRef.current = triggerMeleeAttack;
+
+    // Subscribe to real-time PvP damage / KO events
+    const handleCombatDamaged = (ev: CombatDamagedEvent) => {
+      if (!ev || !ev.targetPlayerId) return;
+      const localId = localIdRef.current;
+
+      if (ev.targetPlayerId !== localId) {
+        const entry = remoteAvatars.get(ev.targetPlayerId);
+        if (entry && typeof ev.remainingHp === 'number') {
+          entry.hp = THREE.MathUtils.clamp(ev.remainingHp, 0, 100);
+          updateRemoteHpBar(entry);
+        }
+      }
+
+      if (ev.targetPlayerId === localId) {
+        lastDamageMs = performance.now();
+        localHp = THREE.MathUtils.clamp(ev.remainingHp, 0, 100);
+        cameraShake = Math.max(
+          cameraShake,
+          Math.min(0.65, Math.max(12, ev.damage) * 0.03),
+        );
+        setHitFlash(1);
+        const lp = inVehicleRef.current
+          ? carRig.group.position
+          : localRig.group.position;
+        spawnBloodBurst(lp.x, 1.1, lp.z, 14);
+        spawnBloodDecal(lp.x, lp.z, ev.knockout ? 1.45 : 0.95);
+        playImpactBloodSfx();
+
+        if (ev.knockout) {
+          localHp = 100;
+          localArmor = 20;
+          carVx = 0;
+          carVz = 0;
+          localRig.group.position.set(0, 0, 2);
+          carRig.group.position.set(3.5, 0, 4.5);
+          setHp(100);
+          setArmor(20);
+          showPopup(
+            ev.lootEuros && ev.lootEuros > 0
+              ? `💀 ¡Noqueado! (-${ev.lootEuros} €)`
+              : '💀 ¡Noqueado!',
+          );
+          void onRefreshPlayerRef.current?.();
+          onChangedRef.current?.();
+        } else {
+          setHp(Math.round(localHp));
+          showPopup(`🩸 -${ev.damage} HP · ${ev.attackerName || 'Rival'}`);
+        }
+      } else if (ev.attackerId === localId) {
+        if (ev.knockout) {
+          showPopup(
+            typeof ev.lootEuros === 'number' && ev.lootEuros > 0
+              ? `💀 KO +${ev.lootEuros} €`
+              : `💀 ¡Noqueado! (${ev.targetName || 'Rival'})`,
+          );
+          if (ev.lootEuros && ev.lootEuros > 0) {
+            void onRefreshPlayerRef.current?.();
+            onChangedRef.current?.();
+          }
+        } else {
+          showPopup(`🩸 PvP -${ev.damage} HP`);
+        }
+      } else if (typeof ev.x === 'number' && typeof ev.z === 'number') {
+        spawnBloodBurst(ev.x, 1.1, ev.z, 10);
+        spawnBloodDecal(ev.x, ev.z, ev.knockout ? 1.3 : 0.85);
+        playImpactBloodSfx();
+      }
+    };
+
+    const unsubscribeCombatDamaged = onSubscribeCombatDamagedRef.current
+      ? onSubscribeCombatDamagedRef.current(handleCombatDamaged)
+      : undefined;
+
     // Keyboard listeners
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -1856,6 +2893,8 @@ export default function District3D({
         toggleVehicleMode();
       } else if (k === 'q' && !e.repeat) {
         triggerCombatPulse();
+      } else if (k === 'v' && !e.repeat) {
+        triggerMeleeAttack();
       } else if (k === 'e' && nearbyPoiRef.current) {
         if (activePoiRef.current?.id === nearbyPoiRef.current.id) {
           setActivePoi(null);
@@ -2019,6 +3058,17 @@ export default function District3D({
         ctx.fill();
       }
 
+      // Hostile street thugs (red blips)
+      ctx.fillStyle = '#ef4444';
+      for (const thug of thugs) {
+        if (!thug.alive) continue;
+        const rx = half + thug.rig.group.position.x * scale;
+        const ry = half + thug.rig.group.position.z * scale;
+        ctx.beginPath();
+        ctx.arc(rx, ry, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       // Local player
       const lx = half + px * scale;
       const ly = half + pz * scale;
@@ -2132,6 +3182,9 @@ export default function District3D({
       let isMoving = false;
       let currentSpeed = 0;
 
+      let driftingNow = false;
+      let boostingNow = false;
+
       if (inVehicleRef.current) {
         const appNow = appearanceRef.current;
         const speedStat = appNow?.vehicleSpeed ?? 75;
@@ -2170,6 +3223,7 @@ export default function District3D({
         const boost = Boolean(
           keys['shift'] || sprintTouchRef.current || gpBoost,
         );
+        boostingNow = boost;
 
         const fx = Math.sin(carHeading);
         const fz = Math.cos(carHeading);
@@ -2221,6 +3275,8 @@ export default function District3D({
 
         const curX = carRig.group.position.x;
         const curZ = carRig.group.position.z;
+        const impactSpeedPre = Math.hypot(carVx, carVz);
+        let collidedWithBuilding = false;
         const candX = THREE.MathUtils.clamp(
           curX + carVx * dt,
           -WORLD_LIMIT,
@@ -2230,6 +3286,7 @@ export default function District3D({
           carRig.group.position.x = candX;
         } else {
           carVx *= -0.35;
+          collidedWithBuilding = true;
         }
 
         const candZ = THREE.MathUtils.clamp(
@@ -2241,6 +3298,24 @@ export default function District3D({
           carRig.group.position.z = candZ;
         } else {
           carVz *= -0.35;
+          collidedWithBuilding = true;
+        }
+
+        if (collidedWithBuilding && impactSpeedPre > 5.5) {
+          spawnSparks(
+            carRig.group.position.x + nfx * 1.4,
+            0.55,
+            carRig.group.position.z + nfz * 1.4,
+            10,
+          );
+          cameraShake = Math.max(
+            cameraShake,
+            Math.min(0.55, impactSpeedPre * 0.022),
+          );
+          playCrashSfx(Math.min(1.5, impactSpeedPre / 18));
+          if (impactSpeedPre > 19) {
+            applyLocalDamage(6);
+          }
         }
 
         const targetAlt =
@@ -2297,29 +3372,81 @@ export default function District3D({
           throttleInput < -0.1 || handbrake || Math.abs(lateralSpeed) > 3.2;
         carRig.brakeMat.emissiveIntensity = brakingOrDrifting ? 4.0 : 0.9;
 
-        const driftingNow =
+        driftingNow =
           carRig.vehicleClass !== 'HELI' &&
           carRig.vehicleClass !== 'PLANE' &&
           ((handbrake && speedAbs > 4.5) || Math.abs(lateralSpeed) > 3.8);
 
-        if (driftingNow && Math.random() < 0.75) {
+        if (driftingNow) {
           const rearCx = carRig.group.position.x - nfx * 1.35;
           const rearCz = carRig.group.position.z - nfz * 1.35;
-          spawnSmoke(rearCx - nrx * 0.85, rearCz - nrz * 0.85, carVx, carVz);
-          spawnSmoke(rearCx + nrx * 0.85, rearCz + nrz * 0.85, carVx, carVz);
+          if (Math.random() < 0.78) {
+            spawnSmoke(rearCx - nrx * 0.85, rearCz - nrz * 0.85, carVx, carVz);
+            spawnSmoke(rearCx + nrx * 0.85, rearCz + nrz * 0.85, carVx, carVz);
+          }
+          if (now - lastSkidMs > 36) {
+            lastSkidMs = now;
+            spawnSkidmark(rearCx - nrx * 0.85, rearCz - nrz * 0.85, carHeading);
+            spawnSkidmark(rearCx + nrx * 0.85, rearCz + nrz * 0.85, carHeading);
+          }
+          playTireScreechSfx();
+          const frameMeters = Math.hypot(carVx, carVz) * dt;
+          driftMeters += frameMeters;
+          driftPoints += Math.round(
+            frameMeters * 22 + Math.abs(lateralSpeed) * dt * 16,
+          );
+          driftGraceTimer = 1.4;
+          localAdrenaline = Math.min(100, localAdrenaline + dt * 28);
+        } else if (driftGraceTimer > 0) {
+          driftGraceTimer -= dt;
+          if (driftGraceTimer <= 0) {
+            driftMeters = 0;
+            driftPoints = 0;
+          }
+        }
+
+        // Exhaust nitro flames when boosting
+        if (boost && forwardSpeed > 4 && Math.random() < 0.85) {
+          const exX = carRig.group.position.x - nfx * 2.05;
+          const exY = carRig.group.position.y + 0.36;
+          const exZ = carRig.group.position.z - nfz * 2.05;
+          spawnExhaustFlame(exX - nrx * 0.45, exY, exZ - nrz * 0.45, nfx, nfz);
+          if (carRig.vehicleClass !== 'MOTO') {
+            spawnExhaustFlame(
+              exX + nrx * 0.45,
+              exY,
+              exZ + nrz * 0.45,
+              nfx,
+              nfz,
+            );
+          }
+          localAdrenaline = Math.min(100, localAdrenaline + dt * 16);
         }
 
         currentSpeed = Math.hypot(carVx, carVz);
         isMoving = currentSpeed > 0.35;
+        if (isMoving) {
+          playEnginePulseSfx(currentSpeed * 5.2, boost);
+        }
 
         if (now - lastHudSync > 70) {
           lastHudSync = now;
           setSpeedKmh(Math.round(currentSpeed * 5.2));
           setIsDrifting(driftingNow);
+          setDriftCombo({
+            meters: Math.round(driftMeters),
+            points: driftPoints,
+          });
         }
       } else {
         if (carRig.group.position.y > 0.01) {
           carRig.group.position.y *= Math.max(0, 1 - dt * 6);
+        }
+        if (driftGraceTimer > 0) {
+          driftGraceTimer = 0;
+          driftMeters = 0;
+          driftPoints = 0;
+          setDriftCombo({ meters: 0, points: 0 });
         }
         let moveX = touchDirRef.current.x + gpMoveX;
         let moveZ = touchDirRef.current.z + gpMoveZ;
@@ -2378,6 +3505,361 @@ export default function District3D({
         }
 
         animateAvatarRig(localRig, isMoving, isSprinting, dt);
+        if (meleeAnimTimer > 0) {
+          meleeAnimTimer = Math.max(0, meleeAnimTimer - dt);
+          const swing = Math.sin((meleeAnimTimer / 0.26) * Math.PI);
+          localRig.rightArm.rotation.x = -swing * 1.65;
+          localRig.rightArm.position.z = swing * 0.28;
+          localRig.leftArm.rotation.x = swing * 0.45;
+        } else if (localRig.rightArm.position.z !== 0) {
+          localRig.rightArm.position.z = 0;
+        }
+      }
+
+      const activePlayerPos = inVehicleRef.current
+        ? carRig.group.position
+        : localRig.group.position;
+
+      // Update Rain Weather & Wet Asphalt Specular
+      const rainActive = rainEnabledRef.current;
+      if (rainLines.visible !== rainActive) {
+        rainLines.visible = rainActive;
+        asphaltMat.roughness = rainActive ? 0.22 : 0.85;
+        asphaltMat.metalness = rainActive ? 0.35 : 0.05;
+        groundMat.roughness = rainActive ? 0.45 : 0.95;
+      }
+      if (rainActive) {
+        const posAttr = rainGeo.getAttribute(
+          'position',
+        ) as THREE.BufferAttribute;
+        const arr = posAttr.array as Float32Array;
+        const cx = activePlayerPos.x;
+        const cz = activePlayerPos.z;
+        for (let i = 0; i < RAIN_COUNT; i++) {
+          let ry = rainOffsets[i * 3 + 1] - 26 * dt;
+          if (ry < 0) ry += 20;
+          rainOffsets[i * 3 + 1] = ry;
+          const rx = cx + rainOffsets[i * 3];
+          const rz = cz + rainOffsets[i * 3 + 2];
+          const base = i * 6;
+          arr[base] = rx;
+          arr[base + 1] = ry;
+          arr[base + 2] = rz;
+          arr[base + 3] = rx - 0.14;
+          arr[base + 4] = ry - 0.85;
+          arr[base + 5] = rz - 0.08;
+        }
+        posAttr.needsUpdate = true;
+      }
+
+      // Update Autonomous AI Traffic Cars & Player Collisions
+      for (const tc of trafficCars) {
+        const tx = tc.group.position.x;
+        const tz = tc.group.position.z;
+        const fwdX = tc.axis === 'x' ? tc.dir : 0;
+        const fwdZ = tc.axis === 'z' ? tc.dir : 0;
+        const toPlayerX = activePlayerPos.x - tx;
+        const toPlayerZ = activePlayerPos.z - tz;
+        const aheadDist = toPlayerX * fwdX + toPlayerZ * fwdZ;
+        const sideDist = Math.abs(toPlayerX * fwdZ - toPlayerZ * fwdX);
+        const shouldBrake = aheadDist > 0 && aheadDist < 7.5 && sideDist < 2.3;
+
+        const targetSpd = shouldBrake ? 0 : tc.baseSpeed;
+        tc.currentSpeed += (targetSpd - tc.currentSpeed) * Math.min(1, dt * 6);
+        tc.brakeMat.emissiveIntensity = shouldBrake ? 4.0 : 0.8;
+
+        tc.posCoord += tc.dir * tc.currentSpeed * dt;
+        if (tc.posCoord > 42) tc.posCoord = -42;
+        if (tc.posCoord < -42) tc.posCoord = 42;
+        if (tc.axis === 'z') {
+          tc.group.position.set(tc.laneCoord, 0, tc.posCoord);
+        } else {
+          tc.group.position.set(tc.posCoord, 0, tc.laneCoord);
+        }
+
+        // Player vs Traffic collision
+        const hitDist = Math.hypot(
+          activePlayerPos.x - tc.group.position.x,
+          activePlayerPos.z - tc.group.position.z,
+        );
+        if (
+          inVehicleRef.current &&
+          hitDist < 2.4 &&
+          carRig.group.position.y < 1
+        ) {
+          const pushX = carRig.group.position.x - tc.group.position.x || 0.2;
+          const pushZ = carRig.group.position.z - tc.group.position.z || 0.2;
+          const pMag = Math.hypot(pushX, pushZ) || 1;
+          carRig.group.position.x += (pushX / pMag) * (2.45 - hitDist);
+          carRig.group.position.z += (pushZ / pMag) * (2.45 - hitDist);
+          const relSpeed = Math.hypot(carVx, carVz);
+          carVx *= -0.4;
+          carVz *= -0.4;
+          if (relSpeed > 5) {
+            spawnSparks(
+              (carRig.group.position.x + tc.group.position.x) * 0.5,
+              0.6,
+              (carRig.group.position.z + tc.group.position.z) * 0.5,
+              12,
+            );
+            playCrashSfx(Math.min(1.5, relSpeed / 16));
+            cameraShake = Math.max(cameraShake, 0.42);
+            if (relSpeed > 15) applyLocalDamage(8);
+          }
+        }
+      }
+
+      // Update Ambient Pedestrians
+      for (const ped of pedestrians) {
+        const [wx, wz] = ped.waypoints[ped.wpIndex];
+        const dx = wx - ped.rig.group.position.x;
+        const dz = wz - ped.rig.group.position.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 0.5) {
+          ped.wpIndex = (ped.wpIndex + 1) % ped.waypoints.length;
+        } else {
+          const nx = dx / dist;
+          const nz = dz / dist;
+          ped.rig.group.position.x += nx * ped.speed * dt;
+          ped.rig.group.position.z += nz * ped.speed * dt;
+          ped.rig.group.rotation.y = Math.atan2(nx, nz);
+        }
+        animateAvatarRig(ped.rig, true, false, dt);
+      }
+
+      // Update Hostile Street Thugs ("Matón · Rival")
+      for (const thug of thugs) {
+        if (!thug.alive) {
+          thug.respawnTimer -= dt;
+          if (thug.respawnTimer <= 0) {
+            thug.alive = true;
+            thug.hp = thug.maxHp;
+            thug.aggro = false;
+            thug.hpBarFill.scale.x = 1;
+            const spawnPt = thug.patrolPoints[0];
+            thug.rig.group.position.set(spawnPt[0], 0.16, spawnPt[1]);
+            thug.rig.group.visible = true;
+          }
+          continue;
+        }
+
+        thug.shootCooldown = Math.max(0, thug.shootCooldown - dt);
+        const dxP = activePlayerPos.x - thug.rig.group.position.x;
+        const dzP = activePlayerPos.z - thug.rig.group.position.z;
+        const distP = Math.hypot(dxP, dzP);
+
+        if (distP < 9.5 || (thug.aggro && distP < 20)) {
+          thug.aggro = true;
+          const nx = dxP / (distP || 1);
+          const nz = dzP / (distP || 1);
+          thug.rig.group.rotation.y = Math.atan2(nx, nz);
+
+          let thugMoving = false;
+          if (distP > 6.5) {
+            const stepX = thug.rig.group.position.x + nx * 3.4 * dt;
+            const stepZ = thug.rig.group.position.z + nz * 3.4 * dt;
+            if (!collidesWithBuilding(stepX, thug.rig.group.position.z)) {
+              thug.rig.group.position.x = stepX;
+              thugMoving = true;
+            }
+            if (!collidesWithBuilding(thug.rig.group.position.x, stepZ)) {
+              thug.rig.group.position.z = stepZ;
+              thugMoving = true;
+            }
+          }
+          animateAvatarRig(thug.rig, thugMoving, thugMoving, dt);
+
+          if (thug.shootCooldown <= 0 && distP < 17) {
+            thug.shootCooldown = 1.75 + Math.random() * 1.1;
+            spawnBullet(
+              thug.rig.group.position.x + nx * 0.6,
+              1.18,
+              thug.rig.group.position.z + nz * 0.6,
+              nx,
+              nz,
+              { isEnemy: true, weaponType: 'THUG_PISTOL', speed: 32 },
+            );
+            playGunshotSfx(0.45);
+          }
+        } else {
+          thug.aggro = false;
+          const [tx, tz] = thug.patrolPoints[thug.patrolIndex];
+          const dx = tx - thug.rig.group.position.x;
+          const dz = tz - thug.rig.group.position.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist < 0.6) {
+            thug.patrolIndex =
+              (thug.patrolIndex + 1) % thug.patrolPoints.length;
+          } else {
+            const nx = dx / dist;
+            const nz = dz / dist;
+            thug.rig.group.position.x += nx * 2.4 * dt;
+            thug.rig.group.position.z += nz * 2.4 * dt;
+            thug.rig.group.rotation.y = Math.atan2(nx, nz);
+          }
+          animateAvatarRig(thug.rig, true, false, dt);
+        }
+      }
+
+      // Update Active Ballistic Bullets & Hit Detection
+      for (let i = activeBullets.length - 1; i >= 0; i--) {
+        const b = activeBullets[i];
+        b.life -= dt;
+        b.x += b.dx * b.speed * dt;
+        b.z += b.dz * b.speed * dt;
+        b.mesh.position.set(b.x, b.y, b.z);
+
+        let removeBullet =
+          b.life <= 0 || Math.abs(b.x) > 45 || Math.abs(b.z) > 45;
+        if (!removeBullet && collidesWithBuilding(b.x, b.z)) {
+          spawnSparks(b.x, b.y, b.z, 5);
+          removeBullet = true;
+        }
+
+        if (!removeBullet && !b.isEnemy) {
+          if (!b.isRemote) {
+            for (const [targetPlayerId, entry] of remoteAvatars.entries()) {
+              if (targetPlayerId === localIdRef.current) continue;
+              const tPos =
+                entry.isDriving && entry.vehicleRig
+                  ? entry.vehicleRig.group.position
+                  : entry.rig.group.position;
+              const hitR = entry.isDriving ? 1.65 : 0.95;
+              const dPvp = Math.hypot(b.x - tPos.x, b.z - tPos.z);
+              if (dPvp < hitR) {
+                removeBullet = true;
+                spawnBloodBurst(tPos.x, 1.15, tPos.z, 14);
+                spawnBloodDecal(tPos.x, tPos.z, 0.95);
+                playImpactBloodSfx();
+                localAdrenaline = Math.min(100, localAdrenaline + 14);
+                emitCombatPvpHit({
+                  targetPlayerId,
+                  attackType: 'SHOT',
+                  weaponType: 'PISTOL',
+                });
+                break;
+              }
+            }
+          }
+
+          if (!removeBullet) {
+            for (const thug of thugs) {
+              if (!thug.alive) continue;
+              const dHit = Math.hypot(
+                b.x - thug.rig.group.position.x,
+                b.z - thug.rig.group.position.z,
+              );
+              if (dHit < 1.05) {
+                removeBullet = true;
+                thug.hp -= 38;
+                thug.aggro = true;
+                thug.hpBarFill.scale.x = Math.max(0.01, thug.hp / thug.maxHp);
+                spawnBloodBurst(
+                  thug.rig.group.position.x,
+                  1.1,
+                  thug.rig.group.position.z,
+                  14,
+                );
+                spawnBloodDecal(
+                  thug.rig.group.position.x,
+                  thug.rig.group.position.z,
+                  thug.hp <= 0 ? 1.4 : 0.85,
+                );
+                playImpactBloodSfx();
+                localAdrenaline = Math.min(100, localAdrenaline + 16);
+
+                if (thug.hp <= 0) {
+                  thug.alive = false;
+                  thug.rig.group.visible = false;
+                  thug.respawnTimer = 11;
+                  showPopup('+€ · ¡MATÓN ABATIDO!');
+                  const combatHandler = onCombatHitRef.current;
+                  if (combatHandler) {
+                    void Promise.resolve(
+                      combatHandler('THUG', b.weaponType),
+                    ).then((res) => {
+                      if (res && typeof res.eurosDelta === 'number') {
+                        const sign = res.eurosDelta >= 0 ? '+' : '';
+                        showPopup(`${sign}${res.eurosDelta} € · ¡ABATIDO!`);
+                      }
+                    });
+                  }
+                }
+                break;
+              }
+            }
+          }
+        } else if (!removeBullet && b.isEnemy) {
+          const hitRadius = inVehicleRef.current ? 1.55 : 0.78;
+          const dPlayer = Math.hypot(
+            b.x - activePlayerPos.x,
+            b.z - activePlayerPos.z,
+          );
+          if (dPlayer < hitRadius) {
+            removeBullet = true;
+            spawnBloodBurst(activePlayerPos.x, 1.1, activePlayerPos.z, 8);
+            playImpactBloodSfx();
+            applyLocalDamage(inVehicleRef.current ? 6 : 12);
+          }
+        }
+
+        if (removeBullet) {
+          scene.remove(b.mesh);
+          activeBullets.splice(i, 1);
+        }
+      }
+
+      // Check incoming remoteShotsRef fallback if no subscriber callback was wired
+      if (!onSubscribeCombatShotRef.current && remoteShotsPropRef.current) {
+        const pendingShots = remoteShotsPropRef.current.current;
+        for (const s of pendingShots) {
+          renderRemoteShot(s);
+        }
+      }
+
+      // Update Burst Particle Pools (Exhaust, Sparks, Blood)
+      const updateBurstPool = (pool: BurstParticle[], fadeScale = true) => {
+        for (const p of pool) {
+          if (p.life <= 0) continue;
+          p.life -= dt;
+          if (p.life <= 0) {
+            p.mesh.visible = false;
+          } else {
+            p.vy -= p.gravity * dt;
+            p.mesh.position.x += p.vx * dt;
+            p.mesh.position.y = Math.max(0.05, p.mesh.position.y + p.vy * dt);
+            p.mesh.position.z += p.vz * dt;
+            if (fadeScale) {
+              p.mesh.scale.setScalar(Math.max(0.1, p.life / p.maxLife));
+            }
+          }
+        }
+      };
+      updateBurstPool(exhaustPool);
+      updateBurstPool(sparkPool);
+      updateBurstPool(bloodPool);
+
+      // Health Regen, Critical Heartbeat & Adrenaline Decay
+      if (now - lastDamageMs > 4500 && localHp < 100) {
+        localHp = Math.min(100, localHp + dt * 3.5);
+      }
+      if (localHp < 35) {
+        playHeartbeatSfx();
+      }
+      localAdrenaline = Math.max(0, localAdrenaline - dt * 6);
+      cameraShake = Math.max(0, cameraShake - dt * 2.4);
+
+      if (now - lastHudSync > 80 && !inVehicleRef.current) {
+        lastHudSync = now;
+        setHp(Math.round(localHp));
+        setArmor(Math.round(localArmor));
+        setAdrenaline(Math.round(localAdrenaline));
+        setHitFlash((prev) => (prev > 0.05 ? prev * 0.72 : 0));
+      } else if (inVehicleRef.current && now - lastHudSync <= 70) {
+        setHp(Math.round(localHp));
+        setArmor(Math.round(localArmor));
+        setAdrenaline(Math.round(localAdrenaline));
+        setHitFlash((prev) => (prev > 0.05 ? prev * 0.72 : 0));
       }
 
       // Update Smoke Particles
@@ -2420,7 +3902,7 @@ export default function District3D({
         }
       }
 
-      // 2. Emit player:move throttled (~16 Hz)
+      // 2. Emit player:move throttled (~16 Hz) including vehicleClass & isDrifting
       if ((isMoving && now - lastEmitTime > 60) || (!isMoving && wasMoving)) {
         lastEmitTime = now;
         const sprinting = Boolean(
@@ -2438,11 +3920,20 @@ export default function District3D({
               : sprinting
                 ? 'run'
                 : 'walk',
+          vehicleClass: inVehicleRef.current
+            ? (appearanceRef.current?.vehicleClass ?? 'SUPERCAR')
+            : undefined,
+          isDrifting: inVehicleRef.current ? driftingNow : false,
         });
       }
       wasMoving = isMoving;
 
-      // 3. Smooth Dynamic Camera (Orbit + Zoom + Speed-reactive Chase Cam)
+      // 3. Smooth Dynamic Camera (Orbit + Zoom + Speed-reactive Chase Cam + Shake)
+      const shakeX =
+        cameraShake > 0.01 ? (Math.random() - 0.5) * cameraShake : 0;
+      const shakeY =
+        cameraShake > 0.01 ? (Math.random() - 0.5) * cameraShake * 0.7 : 0;
+
       if (inVehicleRef.current) {
         const speedRatio = THREE.MathUtils.clamp(currentSpeed / 34, 0, 1);
         const fx = Math.sin(carHeading);
@@ -2454,8 +3945,8 @@ export default function District3D({
           (3.6 + camOrbitPitchRef.current * 4.5 + speedRatio * 0.7) *
             camZoomRef.current;
         desiredCamPos.set(
-          carRig.group.position.x - Math.sin(orbitHeading) * camDist,
-          camHeight,
+          carRig.group.position.x - Math.sin(orbitHeading) * camDist + shakeX,
+          camHeight + shakeY,
           carRig.group.position.z - Math.cos(orbitHeading) * camDist,
         );
         camera.position.lerp(desiredCamPos, Math.min(1, dt * 8));
@@ -2467,7 +3958,7 @@ export default function District3D({
         lookAtPos.lerp(camTarget, Math.min(1, dt * 12));
         camera.lookAt(lookAtPos);
 
-        const targetFov = 60 + speedRatio * 16;
+        const targetFov = 60 + speedRatio * 16 + (boostingNow ? 4 : 0);
         if (Math.abs(camera.fov - targetFov) > 0.05) {
           camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 6);
           camera.updateProjectionMatrix();
@@ -2478,8 +3969,8 @@ export default function District3D({
         const camHeight =
           (5.8 + camOrbitPitchRef.current * 5.0) * camZoomRef.current;
         desiredCamPos.set(
-          localRig.group.position.x + Math.sin(yaw) * camDist,
-          localRig.group.position.y + camHeight,
+          localRig.group.position.x + Math.sin(yaw) * camDist + shakeX,
+          localRig.group.position.y + camHeight + shakeY,
           localRig.group.position.z + Math.cos(yaw) * camDist,
         );
         camera.position.lerp(desiredCamPos, Math.min(1, dt * 6));
@@ -2518,7 +4009,7 @@ export default function District3D({
         setNearbyPoi(closestPoi);
       }
 
-      // 5. Remote players sync & smooth lerp (zero React re-renders)
+      // 5. Remote players sync (On-foot OR 3D Vehicle + Drift Smoke)
       const snapshotMap = remotePlayersRef.current;
       for (const [id, remote] of snapshotMap.entries()) {
         if (id === localIdRef.current) continue;
@@ -2529,17 +4020,52 @@ export default function District3D({
         const remoteMoving = remote.anim
           ? remote.anim !== 'idle'
           : Boolean(remote.isMoving);
+        const remoteDriving = remote.anim === 'drive';
+        const remoteDrifting = Boolean(remote.isDrifting);
+        const remoteVehClass =
+          (remote.vehicleClass as VehicleClass3D | undefined) ?? 'SUPERCAR';
+
         let entry = remoteAvatars.get(id);
         if (!entry) {
           const rig = createAvatarRig(0x1e293b, 0x38bdf8);
           rig.group.position.set(remote.x || 0, remote.y || 0, remote.z || 0);
           rig.group.rotation.y = remoteRotY;
+          scene.add(rig.group);
+
+          const hudGroup = new THREE.Group();
+          hudGroup.position.set(remote.x || 0, remote.y || 0, remote.z || 0);
+
           const labelSprite = createNameLabelSprite(
             remote.displayName || 'Jugador',
             '#38bdf8',
           );
-          rig.group.add(labelSprite);
-          scene.add(rig.group);
+          labelSprite.position.set(0, 2.55, 0);
+          hudGroup.add(labelSprite);
+
+          const hpBarContainer = new THREE.Group();
+          hpBarContainer.position.set(0, 2.15, 0);
+          const rHpBg = new THREE.Mesh(
+            new THREE.PlaneGeometry(1.1, 0.14),
+            new THREE.MeshBasicMaterial({
+              color: 0x09090b,
+              side: THREE.DoubleSide,
+              transparent: true,
+              opacity: 0.85,
+            }),
+          );
+          const hpBarMat = new THREE.MeshBasicMaterial({
+            color: 0x22c55e,
+            side: THREE.DoubleSide,
+          });
+          const hpBarFill = new THREE.Mesh(
+            new THREE.PlaneGeometry(1.04, 0.1),
+            hpBarMat,
+          );
+          hpBarFill.position.set(0, 0, 0.02);
+          hpBarContainer.add(rHpBg, hpBarFill);
+          hudGroup.add(hpBarContainer);
+          scene.add(hudGroup);
+
           entry = {
             rig,
             targetPos: new THREE.Vector3(
@@ -2549,14 +4075,55 @@ export default function District3D({
             ),
             targetRotY: remoteRotY,
             isMoving: remoteMoving,
+            isDriving: remoteDriving,
+            isDrifting: remoteDrifting,
+            vehicleClass: remoteVehClass,
             displayName: remote.displayName,
+            hp: typeof remote.hp === 'number' ? remote.hp : 100,
+            hudGroup,
+            hpBarContainer,
+            hpBarFill,
+            hpBarMat,
             labelSprite,
           };
+          updateRemoteHpBar(entry);
           remoteAvatars.set(id, entry);
         } else {
           entry.targetPos.set(remote.x || 0, remote.y || 0, remote.z || 0);
           entry.targetRotY = remoteRotY;
           entry.isMoving = remoteMoving;
+          entry.isDriving = remoteDriving;
+          entry.isDrifting = remoteDrifting;
+          if (typeof remote.hp === 'number') {
+            entry.hp = remote.hp;
+            updateRemoteHpBar(entry);
+          }
+        }
+
+        if (remoteDriving) {
+          if (!entry.vehicleRig || entry.vehicleClass !== remoteVehClass) {
+            if (entry.vehicleRig) {
+              scene.remove(entry.vehicleRig.group);
+              disposeObject3D(entry.vehicleRig.group);
+            }
+            entry.vehicleRig = createVehicleRig(0x38bdf8, {
+              bodyColor: 0x0f172a,
+              underglowColor: 0x38bdf8,
+              underglowOpacity: 0.3,
+              vehicleClass: remoteVehClass,
+            });
+            entry.vehicleRig.group.position.copy(entry.targetPos);
+            entry.vehicleRig.group.rotation.y = remoteRotY;
+            scene.add(entry.vehicleRig.group);
+            entry.vehicleClass = remoteVehClass;
+          }
+          entry.vehicleRig.group.visible = true;
+          entry.rig.group.visible = false;
+        } else {
+          entry.rig.group.visible = true;
+          if (entry.vehicleRig) {
+            entry.vehicleRig.group.visible = false;
+          }
         }
       }
 
@@ -2569,6 +4136,12 @@ export default function District3D({
         ) {
           scene.remove(entry.rig.group);
           disposeObject3D(entry.rig.group);
+          scene.remove(entry.hudGroup);
+          disposeObject3D(entry.hudGroup);
+          if (entry.vehicleRig) {
+            scene.remove(entry.vehicleRig.group);
+            disposeObject3D(entry.vehicleRig.group);
+          }
           remoteAvatars.delete(id);
           continue;
         }
@@ -2578,12 +4151,42 @@ export default function District3D({
         while (rDiff < -Math.PI) rDiff += Math.PI * 2;
         entry.rig.group.rotation.y += rDiff * Math.min(1, dt * 10);
         const movingDist = entry.rig.group.position.distanceTo(entry.targetPos);
-        animateAvatarRig(
-          entry.rig,
-          entry.isMoving || movingDist > 0.08,
-          false,
-          dt,
-        );
+
+        if (entry.isDriving && entry.vehicleRig) {
+          entry.vehicleRig.group.position.lerp(
+            entry.targetPos,
+            Math.min(1, dt * 10),
+          );
+          entry.vehicleRig.group.rotation.y = entry.rig.group.rotation.y;
+          const vSpin = entry.isMoving ? dt * 14 : 0;
+          for (const fw of entry.vehicleRig.frontWheels) fw.rotation.x += vSpin;
+          for (const rw of entry.vehicleRig.rearWheels) rw.rotation.x += vSpin;
+          for (const rot of entry.vehicleRig.rotors) {
+            rot.obj.rotation[rot.axis] += dt * 18;
+          }
+          if (entry.isDrifting && Math.random() < 0.5) {
+            spawnSmoke(
+              entry.vehicleRig.group.position.x,
+              entry.vehicleRig.group.position.z,
+              0,
+              0,
+            );
+          }
+          entry.hudGroup.position.set(
+            entry.vehicleRig.group.position.x,
+            entry.vehicleRig.group.position.y + 0.4,
+            entry.vehicleRig.group.position.z,
+          );
+        } else {
+          animateAvatarRig(
+            entry.rig,
+            entry.isMoving || movingDist > 0.08,
+            false,
+            dt,
+          );
+          entry.hudGroup.position.copy(entry.rig.group.position);
+        }
+        entry.hpBarContainer.quaternion.copy(camera.quaternion);
       }
 
       if (now - lastCountSync > 1000) {
@@ -2631,6 +4234,9 @@ export default function District3D({
         inVehicle: inVehicleRef.current,
       };
       rebuildLocalRigsFnRef.current = null;
+      triggerMeleeFnRef.current = null;
+      unsubscribeRemoteShots?.();
+      unsubscribeCombatDamaged?.();
       cancelAnimationFrame(animId);
       resizeObserver.disconnect();
       window.removeEventListener('keydown', onKeyDown);
@@ -2648,7 +4254,7 @@ export default function District3D({
       windowTex.dispose();
       renderer.dispose();
     };
-  }, [vibe, remotePlayersRef]);
+  }, [vibe, remotePlayersRef, showPopup]);
 
   const heatStars = Math.min(5, Math.ceil((player.heat || 0) / 20));
   const app = player.appearance;
@@ -2672,25 +4278,58 @@ export default function District3D({
   }
 
   return (
-    <div className="relative w-full h-[540px] md:h-[620px] rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 select-none">
+    <div className="relative w-full h-[500px] sm:h-[540px] md:h-[clamp(440px,calc(100vh-225px),620px)] rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 select-none">
       {/* Three.js Canvas Mount */}
       <div ref={mountRef} className="w-full h-full" />
 
-      {/* Top-Left HUD: District, Heat Stars & Lifestyle */}
-      <div className="absolute top-3 left-3 z-10 flex flex-col gap-2 max-w-[285px] pointer-events-auto">
-        <div className="rounded-xl bg-zinc-950/80 backdrop-blur-md border border-zinc-800/90 px-3 py-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] uppercase tracking-widest text-amber-400 font-semibold">
+      {/* Tactical Forward Aiming Reticle on Foot */}
+      {!inVehicle && !activePoi && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex items-center justify-center"
+        >
+          <span className="h-5 w-5 rounded-full border border-amber-400/35 flex items-center justify-center">
+            <span className="h-1 w-1 rounded-full bg-amber-300/80 shadow-[0_0_6px_rgba(251,191,36,0.9)]" />
+          </span>
+        </div>
+      )}
+
+      {/* Blood Vignette & Low HP Critical Pulse Overlay */}
+      {(hitFlash > 0.04 || hp < 35) && (
+        <div
+          className={`pointer-events-none absolute inset-0 z-20 transition-opacity duration-100 ${
+            hp < 35 ? 'animate-pulse' : ''
+          }`}
+          style={{
+            opacity: Math.max(hitFlash * 0.85, hp < 35 ? 0.45 : 0),
+            background:
+              'radial-gradient(circle at center, transparent 48%, rgba(185, 28, 28, 0.72) 100%)',
+          }}
+        />
+      )}
+
+      {/* Combat / Takedown Floating Popup */}
+      {combatPopup && (
+        <div className="pointer-events-none absolute top-16 left-1/2 -translate-x-1/2 z-30 max-w-[90%] truncate rounded-xl border border-amber-400/70 bg-zinc-950/90 px-4 py-1.5 text-xs font-black tracking-wide text-amber-300 shadow-[0_0_24px_rgba(245,158,11,0.4)] animate-bounce">
+          {combatPopup}
+        </div>
+      )}
+
+      {/* Top-Left HUD: District, Health, Heat Stars & Lifestyle */}
+      <div className="absolute top-2.5 left-2.5 sm:top-3 sm:left-3 z-10 flex flex-col gap-1.5 sm:gap-2 max-w-[218px] sm:max-w-[295px] pointer-events-auto">
+        <div className="rounded-xl bg-zinc-950/80 backdrop-blur-md border border-zinc-800/90 px-2.5 py-1.5 sm:px-3 sm:py-2">
+          <div className="flex items-center justify-between gap-1.5 sm:gap-2">
+            <span className="text-[10px] uppercase tracking-widest text-amber-400 font-semibold truncate">
               {zoneName}
             </span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               {gamepadName && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/20 border border-violet-400/40 text-violet-200 font-semibold">
+                <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded bg-violet-500/20 border border-violet-400/40 text-violet-200 font-semibold">
                   🎮 {gamepadName}
                 </span>
               )}
               <span
-                className={`text-[10px] px-1.5 py-0.5 rounded ${
+                className={`text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap ${
                   connected
                     ? 'bg-emerald-500/15 text-emerald-400'
                     : 'bg-zinc-800 text-zinc-400'
@@ -2707,6 +4346,56 @@ export default function District3D({
               {Math.floor(player.euros).toLocaleString('es-ES')} €
             </span>
             <span className="text-zinc-400">Rep {player.reputation}</span>
+          </div>
+
+          {/* Health, Armor & Adrenaline Bars */}
+          <div className="mt-1.5 sm:mt-2 space-y-1">
+            <div className="flex items-center gap-1.5 text-[10px]">
+              <span className="w-7 sm:w-8 font-bold text-rose-300">HP</span>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className={`h-full transition-all duration-100 ${
+                    hp < 35
+                      ? 'bg-red-500'
+                      : hp < 65
+                        ? 'bg-amber-400'
+                        : 'bg-emerald-400'
+                  }`}
+                  style={{ width: `${hp}%` }}
+                />
+              </div>
+              <span className="w-6 sm:w-7 text-right tabular-nums text-zinc-300">
+                {hp}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[10px]">
+              <span className="w-7 sm:w-8 font-bold text-sky-300">BLD</span>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="h-full bg-sky-400 transition-all duration-100"
+                  style={{
+                    width: `${Math.min(100, Math.round((armor / 40) * 100))}%`,
+                  }}
+                />
+              </div>
+              <span className="w-6 sm:w-7 text-right tabular-nums text-zinc-400">
+                {armor}
+              </span>
+            </div>
+            {adrenaline > 0 && (
+              <div className="flex items-center gap-1.5 text-[10px]">
+                <span className="w-7 sm:w-8 font-bold text-amber-300">ADR</span>
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-400 to-rose-500 transition-all duration-100"
+                    style={{ width: `${adrenaline}%` }}
+                  />
+                </div>
+                <span className="w-6 sm:w-7 text-right tabular-nums text-amber-300">
+                  {adrenaline}%
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Police Heat Stars */}
@@ -2736,7 +4425,7 @@ export default function District3D({
             app?.clothingName ||
             app?.cosmeticName ||
             app?.vehicleName) && (
-            <div className="mt-1.5 flex flex-wrap gap-1 border-t border-zinc-800/80 pt-1.5 text-[10px]">
+            <div className="mt-1.5 hidden sm:flex flex-wrap gap-1 border-t border-zinc-800/80 pt-1.5 text-[10px]">
               {app.isVip && (
                 <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-bold text-amber-300">
                   👑 VIP
@@ -2776,7 +4465,7 @@ export default function District3D({
               onClick={() => {
                 void onSetLifestyle(l);
               }}
-              className={`flex-1 text-[11px] py-1 px-2 rounded-lg font-medium transition ${
+              className={`flex-1 text-[10px] sm:text-[11px] py-1 px-1.5 sm:px-2 rounded-lg font-medium transition ${
                 player.lifestyle === l
                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -2788,32 +4477,45 @@ export default function District3D({
         </div>
       </div>
 
-      {/* Top-Right HUD: Live Radar Minimap */}
-      <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2">
+      {/* Top-Right HUD: Live Radar Minimap & Weather Toggle */}
+      <div className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 z-10 flex flex-col items-end gap-1.5 sm:gap-2">
         <canvas
           ref={radarCanvasRef}
           width={128}
           height={128}
-          className="rounded-full shadow-lg shadow-black/60"
+          className="w-20 h-20 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-full shadow-lg shadow-black/60"
         />
-        {onSwitchClassic && (
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-1.5">
           <button
             type="button"
-            onClick={onSwitchClassic}
-            className="text-[11px] px-2.5 py-1 rounded-lg bg-zinc-950/85 border border-zinc-700 text-zinc-200 hover:border-amber-500/60 backdrop-blur-md"
+            onClick={() => setRainEnabled((v) => !v)}
+            className={`text-[10px] sm:text-[11px] px-2 py-1 sm:px-2.5 rounded-lg border backdrop-blur-md transition whitespace-nowrap ${
+              rainEnabled
+                ? 'bg-sky-500/20 border-sky-400/50 text-sky-200'
+                : 'bg-zinc-950/85 border-zinc-700 text-zinc-300 hover:border-zinc-500'
+            }`}
           >
-            Vista Clásica
+            {rainEnabled ? '🌧️ Lluvia' : '☀️ Despejado'}
           </button>
-        )}
+          {onSwitchClassic && (
+            <button
+              type="button"
+              onClick={onSwitchClassic}
+              className="text-[10px] sm:text-[11px] px-2 py-1 sm:px-2.5 rounded-lg bg-zinc-950/85 border border-zinc-700 text-zinc-200 hover:border-amber-500/60 backdrop-blur-md whitespace-nowrap"
+            >
+              Vista Clásica
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Proximity [E] Prompt */}
       {nearbyPoi && !activePoi && (
-        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20">
+        <div className="absolute bottom-[172px] md:bottom-28 left-1/2 -translate-x-1/2 z-20">
           <button
             type="button"
             onClick={handleInteract}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-950/90 border border-amber-500/70 text-zinc-100 shadow-lg shadow-amber-500/10 hover:bg-zinc-900 transition"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-950/90 border border-amber-500/70 text-zinc-100 shadow-lg shadow-amber-500/10 hover:bg-zinc-900 transition whitespace-nowrap"
           >
             <span className="px-1.5 py-0.5 rounded bg-amber-500 text-zinc-950 font-black text-xs">
               E
@@ -2836,7 +4538,7 @@ export default function District3D({
 
       {/* Universal Virtual Analog Thumbstick (Mobile, Tablets, iPad, Switch Touch) */}
       <div
-        className={`absolute bottom-3 left-3 z-10 ${
+        className={`absolute bottom-2.5 left-2.5 sm:bottom-3 sm:left-3 z-10 ${
           isTouchDevice ? 'flex' : 'flex md:hidden'
         } items-center`}
       >
@@ -2864,11 +4566,11 @@ export default function District3D({
             }
           }}
           onPointerCancel={resetStick}
-          className="relative w-28 h-28 rounded-full bg-zinc-950/70 border border-zinc-700/80 backdrop-blur-md flex items-center justify-center shadow-lg"
+          className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-zinc-950/70 border border-zinc-700/80 backdrop-blur-md flex items-center justify-center shadow-lg"
         >
-          <div className="w-16 h-16 rounded-full border border-zinc-800/90 pointer-events-none" />
+          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border border-zinc-800/90 pointer-events-none" />
           <div
-            className="absolute w-11 h-11 rounded-full bg-amber-500/80 border-2 border-amber-200/80 shadow-md pointer-events-none transition-transform duration-75"
+            className="absolute w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-amber-500/80 border-2 border-amber-200/80 shadow-md pointer-events-none transition-transform duration-75"
             style={{
               transform: `translate(${stickOffset.x}px, ${stickOffset.y}px)`,
             }}
@@ -2876,47 +4578,64 @@ export default function District3D({
         </div>
       </div>
 
-      {/* Speedometer & Drift HUD when in Vehicle */}
+      {/* Speedometer & Drift Combo HUD when in Vehicle */}
       {inVehicle && (
-        <div className="absolute bottom-14 md:bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 rounded-2xl border border-zinc-700/80 bg-zinc-950/85 px-4 py-2 backdrop-blur-md shadow-xl">
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black tabular-nums tracking-tight text-white">
-              {speedKmh}
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-              km/h
-            </span>
-          </div>
-          <div className="h-2 w-24 overflow-hidden rounded-full bg-zinc-800">
-            <div
-              className={`h-full transition-all duration-75 ${
-                isDrifting ? 'bg-rose-500' : 'bg-amber-400'
-              }`}
-              style={{
-                width: `${Math.min(100, Math.round((speedKmh / 190) * 100))}%`,
-              }}
-            />
-          </div>
-          {isDrifting && (
-            <span className="animate-pulse rounded-md bg-rose-500/20 border border-rose-500/60 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-rose-300">
-              DRIFT
-            </span>
+        <div className="pointer-events-none absolute bottom-[114px] md:bottom-14 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1.5">
+          {driftCombo.points > 0 && (
+            <div className="rounded-full border border-rose-500/60 bg-rose-950/85 px-3 py-0.5 sm:px-3.5 sm:py-1 text-[10px] sm:text-[11px] font-black tracking-wider text-rose-200 shadow-lg backdrop-blur-md whitespace-nowrap">
+              🔥 DRIFT COMBO · {driftCombo.meters}m ·{' '}
+              {driftCombo.points.toLocaleString('es-ES')} pts
+            </div>
           )}
+          <div className="flex items-center gap-2.5 sm:gap-3 rounded-2xl border border-zinc-700/80 bg-zinc-950/85 px-3 py-1.5 sm:px-4 sm:py-2 backdrop-blur-md shadow-xl">
+            <div className="flex items-baseline gap-1">
+              <span className="text-xl sm:text-2xl font-black tabular-nums tracking-tight text-white">
+                {speedKmh}
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                km/h
+              </span>
+            </div>
+            <div className="h-2 w-16 sm:w-24 overflow-hidden rounded-full bg-zinc-800">
+              <div
+                className={`h-full transition-all duration-75 ${
+                  isDrifting ? 'bg-rose-500' : 'bg-amber-400'
+                }`}
+                style={{
+                  width: `${Math.min(100, Math.round((speedKmh / 190) * 100))}%`,
+                }}
+              />
+            </div>
+            {isDrifting && (
+              <span className="animate-pulse rounded-md bg-rose-500/20 border border-rose-500/60 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-rose-300">
+                DRIFT
+              </span>
+            )}
+          </div>
         </div>
       )}
 
-      <div className="absolute bottom-3 right-3 z-10 flex flex-wrap items-center justify-end gap-2 max-w-[260px]">
+      <div className="absolute bottom-2.5 right-2.5 sm:bottom-3 sm:right-3 z-20 flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 max-w-[242px] sm:max-w-[330px] md:max-w-none">
+        {!inVehicle && (
+          <button
+            type="button"
+            onClick={handleMeleeAttack}
+            className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold border bg-zinc-900/85 border-amber-500/50 text-amber-200 hover:bg-amber-500/20 backdrop-blur-md"
+          >
+            [V] 👊 Pelear
+          </button>
+        )}
         <button
           type="button"
           onClick={handleCombatPulse}
-          className="px-3 py-2 rounded-xl text-xs font-bold border bg-zinc-900/85 border-rose-500/50 text-rose-300 hover:bg-rose-500/20 backdrop-blur-md"
+          className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold border bg-zinc-900/85 border-rose-500/50 text-rose-300 hover:bg-rose-500/20 backdrop-blur-md"
         >
-          [Q] Pulso
+          [Q] Disparar
         </button>
         <button
           type="button"
           onClick={handleToggleVehicle}
-          className={`px-3 py-2 rounded-xl text-xs font-bold border backdrop-blur-md ${
+          className={`px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold border backdrop-blur-md ${
             inVehicle
               ? 'bg-sky-500/25 border-sky-400 text-sky-200'
               : 'bg-zinc-900/85 border-zinc-700 text-zinc-200 hover:border-amber-500/60'
@@ -2940,7 +4659,7 @@ export default function District3D({
               }}
               className={`${
                 isTouchDevice ? 'inline-flex' : 'md:hidden inline-flex'
-              } px-3 py-2 rounded-xl text-xs font-bold border bg-zinc-900/85 border-zinc-700 text-zinc-200 active:bg-red-500/30`}
+              } px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold border bg-zinc-900/85 border-zinc-700 text-zinc-200 active:bg-red-500/30`}
             >
               Freno
             </button>
@@ -2958,7 +4677,7 @@ export default function District3D({
               }}
               className={`${
                 isTouchDevice ? 'inline-flex' : 'md:hidden inline-flex'
-              } px-3 py-2 rounded-xl text-xs font-bold border bg-emerald-500/20 border-emerald-500/60 text-emerald-200 active:bg-emerald-500/40`}
+              } px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold border bg-emerald-500/20 border-emerald-500/60 text-emerald-200 active:bg-emerald-500/40`}
             >
               Acel
             </button>
@@ -2967,7 +4686,7 @@ export default function District3D({
               onClick={toggleDriftTouch}
               className={`${
                 isTouchDevice ? 'inline-flex' : 'md:hidden inline-flex'
-              } px-3 py-2 rounded-xl text-xs font-bold border ${
+              } px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold border ${
                 driftTouch
                   ? 'bg-rose-500/30 border-rose-400 text-rose-200'
                   : 'bg-zinc-900/80 border-zinc-700 text-zinc-300'
@@ -2982,7 +4701,7 @@ export default function District3D({
           onClick={toggleSprintTouch}
           className={`${
             isTouchDevice ? 'inline-flex' : 'md:hidden inline-flex'
-          } px-3 py-2 rounded-xl text-xs font-bold border ${
+          } px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold border ${
             sprintTouch
               ? 'bg-amber-500/25 border-amber-500 text-amber-300'
               : 'bg-zinc-900/80 border-zinc-700 text-zinc-300'
@@ -2996,7 +4715,7 @@ export default function District3D({
             onClick={handleInteract}
             className={`${
               isTouchDevice ? 'inline-flex' : 'md:hidden inline-flex'
-            } px-3 py-2 rounded-xl text-xs font-bold bg-amber-500 text-zinc-950`}
+            } px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold bg-amber-500 text-zinc-950`}
           >
             [E] Usar
           </button>
@@ -3005,18 +4724,23 @@ export default function District3D({
 
       {/* Desktop / Controller Hint */}
       {!isTouchDevice && (
-        <div className="hidden md:flex absolute bottom-3 left-3 z-10 items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950/75 border border-zinc-800 text-[11px] text-zinc-400 backdrop-blur-md">
-          <span>WASD / Stick: Mover</span>
+        <div
+          data-testid="desktop-shortcut-bar"
+          className="hidden md:flex absolute bottom-3 left-3 z-10 items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-950/80 border border-zinc-800 text-[10.5px] text-zinc-400 backdrop-blur-md max-w-[calc(100%-355px)] overflow-hidden whitespace-nowrap"
+        >
+          <span>WASD/Stick: Mover</span>
           <span>·</span>
-          <span>Arrastrar/Rueda: Cámara</span>
+          <span>Rueda: Cámara</span>
           <span>·</span>
-          <span>F / △: Vehículo</span>
+          <span>F: Auto</span>
           <span>·</span>
           <span>Espacio: Drift</span>
           <span>·</span>
-          <span>Q / □: Pulso</span>
+          <span>Shift: Turbo</span>
           <span>·</span>
-          <span>E / ✕: POI</span>
+          <span>Q/V: Combate</span>
+          <span>·</span>
+          <span>E: POI</span>
         </div>
       )}
 

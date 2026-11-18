@@ -298,8 +298,10 @@ export default function FactionsPanel({
     setMsg(null);
     try {
       const res = await api.joinFaction(factionId);
+      const factionLabel =
+        factions.find((f) => f.id === factionId)?.name ?? factionId;
       setMsg({
-        text: res?.message || `Te has unido a ${factionId}`,
+        text: res?.message || `Te has unido a ${factionLabel}`,
         tone: 'ok',
       });
       await Promise.all([refreshPlayer(), loadData()]);

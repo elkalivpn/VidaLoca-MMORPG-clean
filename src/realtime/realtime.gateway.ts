@@ -14,6 +14,8 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ChatMessageDto,
+  CombatFireDto,
+  CombatPvpHitDto,
   JoinZoneDto,
   PlayerAnim,
   PlayerMoveDto,
@@ -21,6 +23,7 @@ import {
 import { isValidZoneId, ZONES_BY_ID } from '../common/constants/zones';
 import { AntiCheatService } from '../security/anti-cheat.service';
 import { AntiPromptInjectionService } from '../security/anti-prompt-injection.service';
+import { WorldService } from '../world/world.service';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -40,7 +43,10 @@ export interface PresenceEntry {
   z: number;
   rotY: number;
   anim: PlayerAnim;
+  hp: number;
   vehicleId?: string;
+  vehicleClass?: string;
+  isDrifting?: boolean;
   lastMoveAt: number;
 }
 
@@ -87,6 +93,8 @@ export class RealtimeGateway
   private readonly logger = new Logger(RealtimeGateway.name);
   private readonly MOVE_RATE_LIMIT_MS = 40;
   private readonly CHAT_RATE_LIMIT_MS = 500;
+  private readonly COMBAT_FIRE_RATE_LIMIT_MS = 180;
+  private readonly COMBAT_PVP_RATE_LIMIT_MS = 350;
   private readonly MAX_SPEED_UNITS_PER_SEC = 60;
   private readonly TICK_INTERVAL_MS = 100;
 
@@ -94,6 +102,10 @@ export class RealtimeGateway
   private presence = new Map<string, PresenceEntry>();
   /** socketId → last chat timestamp (ms) */
   private lastChatAt = new Map<string, number>();
+  /** socketId → last combat:fire timestamp (ms) */
+  private lastCombatFireAt = new Map<string, number>();
+  /** socketId → last combat:pvp-hit timestamp (ms) */
+  private lastCombatPvpAt = new Map<string, number>();
   /** Zonas con movimiento pendiente de emitir en el siguiente tick */
   private dirtyZones = new Set<string>();
   private worldEventTimer?: ReturnType<typeof setInterval>;
@@ -151,6 +163,7 @@ export class RealtimeGateway
     private prisma: PrismaService,
     @Optional() private readonly antiCheat?: AntiCheatService,
     @Optional() private readonly antiPromptInjection?: AntiPromptInjectionService,
+    @Optional() private readonly worldService?: WorldService,
   ) {}
 
   // ─── Connection lifecycle ────────────────────────────────────────────
@@ -230,6 +243,7 @@ export class RealtimeGateway
         z: 0,
         rotY: 0,
         anim: 'idle',
+        hp: 100,
         vehicleId: undefined,
         lastMoveAt: 0,
       });
@@ -273,6 +287,8 @@ export class RealtimeGateway
 
   async handleDisconnect(client: AuthenticatedSocket) {
     this.lastChatAt.delete(client.id);
+    this.lastCombatFireAt.delete(client.id);
+    this.lastCombatPvpAt.delete(client.id);
     const entry = this.presence.get(client.id);
     if (!entry) return;
 
@@ -382,6 +398,8 @@ export class RealtimeGateway
       entry.rotY = 0;
       entry.anim = 'idle';
       entry.vehicleId = undefined;
+      entry.vehicleClass = undefined;
+      entry.isDrifting = undefined;
       entry.lastMoveAt = 0;
     }
     this.dirtyZones.add(nextZone);
@@ -638,6 +656,8 @@ export class RealtimeGateway
     entry.rotY = body.rotY;
     entry.anim = body.anim ?? 'idle';
     entry.vehicleId = body.vehicleId;
+    entry.vehicleClass = body.vehicleClass;
+    entry.isDrifting = body.isDrifting;
     entry.lastMoveAt = now;
 
     this.dirtyZones.add(entry.locationId);
@@ -645,15 +665,214 @@ export class RealtimeGateway
     return { ok: true };
   }
 
+  // ─── Combat sync ─────────────────────────────────────────────────────
+
+  @SubscribeMessage('combat:fire')
+  handleCombatFire(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() body: CombatFireDto,
+  ) {
+    if (!client.userId || !client.playerId) {
+      return { ok: false, error: 'Not authenticated' };
+    }
+
+    const entry = this.presence.get(client.id);
+    if (!entry) {
+      return { ok: false, error: 'Presence not found' };
+    }
+
+    if (
+      !body ||
+      !Number.isFinite(body.x) ||
+      !Number.isFinite(body.y) ||
+      !Number.isFinite(body.z) ||
+      !Number.isFinite(body.dirX) ||
+      !Number.isFinite(body.dirZ)
+    ) {
+      return { ok: false, error: 'Invalid coordinates' };
+    }
+
+    const now = Date.now();
+    const lastFire = this.lastCombatFireAt.get(client.id) ?? 0;
+    if (lastFire > 0 && now - lastFire < this.COMBAT_FIRE_RATE_LIMIT_MS) {
+      return { ok: false, reason: 'rate_limited' };
+    }
+    this.lastCombatFireAt.set(client.id, now);
+
+    const payload = {
+      playerId: client.playerId,
+      displayName: client.displayName,
+      x: body.x,
+      y: body.y,
+      z: body.z,
+      dirX: body.dirX,
+      dirZ: body.dirZ,
+      weaponType: body.weaponType || 'PISTOL',
+      timestamp: new Date().toISOString(),
+    };
+
+    this.server
+      .to(`zone:${client.locationId || 'madrid_centro'}`)
+      .emit('combat:shot', payload);
+
+    return { ok: true, ...payload };
+  }
+
+  @SubscribeMessage('combat:pvp-hit')
+  async handleCombatPvpHit(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() body: CombatPvpHitDto,
+  ) {
+    if (!client.userId || !client.playerId) {
+      return { ok: false, error: 'Not authenticated' };
+    }
+
+    const entry = this.presence.get(client.id);
+    if (!entry) {
+      return { ok: false, error: 'Presence not found' };
+    }
+
+    if (
+      !body ||
+      typeof body.targetPlayerId !== 'string' ||
+      !body.targetPlayerId.trim() ||
+      (body.attackType !== 'SHOT' && body.attackType !== 'MELEE')
+    ) {
+      return { ok: false, error: 'Invalid PvP hit payload' };
+    }
+
+    if (body.targetPlayerId === client.playerId) {
+      return { ok: false, error: 'Cannot target yourself' };
+    }
+
+    const targetEntry = [...this.presence.values()].find(
+      (p) => p.playerId === body.targetPlayerId,
+    );
+    if (!targetEntry) {
+      return { ok: false, error: 'Target player not found' };
+    }
+
+    if (targetEntry.locationId !== entry.locationId) {
+      return { ok: false, error: 'Target player is in a different zone' };
+    }
+
+    const hasAttackerCoords =
+      Number.isFinite(entry.x) && Number.isFinite(entry.z);
+    const hasTargetCoords =
+      Number.isFinite(targetEntry.x) && Number.isFinite(targetEntry.z);
+    if (hasAttackerCoords && hasTargetCoords) {
+      const dy =
+        Number.isFinite(entry.y) && Number.isFinite(targetEntry.y)
+          ? targetEntry.y - entry.y
+          : 0;
+      const distance = Math.hypot(
+        targetEntry.x - entry.x,
+        dy,
+        targetEntry.z - entry.z,
+      );
+      const maxRange = body.attackType === 'MELEE' ? 6.5 : 65;
+      if (distance > maxRange) {
+        return { ok: false, reason: 'out_of_range' };
+      }
+    }
+
+    const now = Date.now();
+    const lastPvp = this.lastCombatPvpAt.get(client.id) ?? 0;
+    if (lastPvp > 0 && now - lastPvp < this.COMBAT_PVP_RATE_LIMIT_MS) {
+      return { ok: false, reason: 'rate_limited' };
+    }
+    this.lastCombatPvpAt.set(client.id, now);
+
+    const damage =
+      body.attackType === 'MELEE'
+        ? 18 + Math.floor(Math.random() * 11)
+        : 24 + Math.floor(Math.random() * 13);
+
+    const currentHp = Number.isFinite(targetEntry.hp) ? targetEntry.hp : 100;
+    targetEntry.hp = Math.max(0, currentHp - damage);
+
+    let knockout = false;
+    let lootEuros = 0;
+    let attackerStats: Record<string, unknown> | undefined;
+
+    if (targetEntry.hp <= 0) {
+      knockout = true;
+      targetEntry.hp = 100;
+      if (this.worldService) {
+        try {
+          const koRes = await this.worldService.resolvePvpKnockout(
+            entry.userId,
+            targetEntry.userId,
+          );
+          lootEuros = koRes?.lootEuros ?? 0;
+          attackerStats = koRes?.attackerStats;
+        } catch (err: any) {
+          this.logger.warn(
+            `Error resolving PvP knockout (${entry.userId} -> ${targetEntry.userId}): ${err?.message || err}`,
+          );
+        }
+      }
+    }
+
+    this.dirtyZones.add(entry.locationId);
+
+    const timestamp = new Date().toISOString();
+    const narrative = knockout
+      ? `${entry.displayName} deja KO a ${targetEntry.displayName}${lootEuros > 0 ? ` y le roba ${lootEuros}€` : ''}.`
+      : `${entry.displayName} golpea a ${targetEntry.displayName} (${body.attackType === 'MELEE' ? 'cuerpo a cuerpo' : body.weaponType || 'PISTOL'}) por ${damage} de daño.`;
+
+    const damagePayload = {
+      attackerId: entry.playerId,
+      attackerName: entry.displayName,
+      targetPlayerId: targetEntry.playerId,
+      targetName: targetEntry.displayName,
+      attackType: body.attackType,
+      damage,
+      remainingHp: targetEntry.hp,
+      knockout,
+      lootEuros,
+      narrative,
+      x: targetEntry.x,
+      z: targetEntry.z,
+      timestamp,
+    };
+
+    this.server
+      .to(`zone:${entry.locationId}`)
+      .emit('combat:damaged', damagePayload);
+
+    if (knockout) {
+      this.server.to(`zone:${entry.locationId}`).emit('world:event', {
+        type: 'pvp_ko',
+        title: 'KO en la calle',
+        message: narrative,
+        zone: entry.locationId,
+        attackerId: entry.playerId,
+        attackerName: entry.displayName,
+        targetPlayerId: targetEntry.playerId,
+        targetName: targetEntry.displayName,
+        lootEuros,
+        severity: 'medium',
+        timestamp,
+      });
+    }
+
+    return {
+      ok: true,
+      ...damagePayload,
+      ...(attackerStats ? { attackerStats } : {}),
+    };
+  }
+
   // ─── Helpers (callable from other services) ──────────────────────────
 
   onModuleInit() {
-    // Evento de mundo cada 3 minutos (demo); en prod ajustar
+    // Eventos dinámicos de mundo cada 3 minutos en producción
     this.worldEventTimer = setInterval(
       () => this.broadcastRandomWorldEvent(),
       3 * 60 * 1000,
     );
-    // Primer evento a los 45s para que se note en pruebas
+    // Primer evento dinámico a los 45s tras el arranque
     this.worldEventInitialTimer = setTimeout(
       () => this.broadcastRandomWorldEvent(),
       45_000,
@@ -745,20 +964,31 @@ export class RealtimeGateway
     });
   }
 
+  private getUniqueZoneEntries(locationId: string): PresenceEntry[] {
+    const byPlayer = new Map<string, PresenceEntry>();
+    for (const p of this.presence.values()) {
+      if (p.locationId !== locationId) continue;
+      const existing = byPlayer.get(p.playerId);
+      if (!existing || p.lastMoveAt >= existing.lastMoveAt) {
+        byPlayer.set(p.playerId, p);
+      }
+    }
+    return [...byPlayer.values()];
+  }
+
   private getZonePresence(locationId: string) {
-    return [...this.presence.values()]
-      .filter((p) => p.locationId === locationId)
-      .map(({ playerId, displayName, locationId: loc }) => ({
+    return this.getUniqueZoneEntries(locationId).map(
+      ({ playerId, displayName, locationId: loc }) => ({
         playerId,
         displayName,
         locationId: loc,
-      }));
+      }),
+    );
   }
 
   private getZoneSnapshotPlayers(locationId: string) {
-    return [...this.presence.values()]
-      .filter((p) => p.locationId === locationId)
-      .map(({ playerId, displayName, x, y, z, rotY, anim, vehicleId }) => ({
+    return this.getUniqueZoneEntries(locationId).map(
+      ({
         playerId,
         displayName,
         x,
@@ -766,7 +996,23 @@ export class RealtimeGateway
         z,
         rotY,
         anim,
+        hp,
         vehicleId,
-      }));
+        vehicleClass,
+        isDrifting,
+      }) => ({
+        playerId,
+        displayName,
+        x,
+        y,
+        z,
+        rotY,
+        anim,
+        hp,
+        vehicleId,
+        vehicleClass,
+        isDrifting,
+      }),
+    );
   }
 }

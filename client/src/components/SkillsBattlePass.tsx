@@ -20,6 +20,15 @@ export default function SkillsBattlePass() {
   const [myAchievements, setMyAchievements] = useState<PlayerAchievement[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
+  const [trainCooldownSec, setTrainCooldownSec] = useState(0);
+
+  useEffect(() => {
+    if (trainCooldownSec <= 0) return;
+    const t = window.setInterval(() => {
+      setTrainCooldownSec((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => window.clearInterval(t);
+  }, [trainCooldownSec]);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -53,10 +62,15 @@ export default function SkillsBattlePass() {
     setMsg('');
     try {
       await api.trainSkill(skillId);
+      setTrainCooldownSec(30);
       setMsg('Skill entrenada (+50 XP)');
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : 'Error');
+      const errTxt = e instanceof Error ? e.message : 'Error';
+      setMsg(errTxt);
+      if (errTxt.toLowerCase().includes('descansar')) {
+        setTrainCooldownSec((prev) => (prev > 0 ? prev : 15));
+      }
     } finally {
       setBusy(null);
     }
@@ -298,13 +312,15 @@ export default function SkillsBattlePass() {
                 {level < s.maxLevel && (
                   <button
                     type="button"
-                    disabled={busy === s.id}
+                    disabled={busy === s.id || trainCooldownSec > 0}
                     onClick={() => {
                       void train(s.id);
                     }}
-                    className="text-xs text-amber-400 underline disabled:opacity-50"
+                    className="text-xs text-amber-400 underline disabled:opacity-50 disabled:no-underline tabular-nums shrink-0"
                   >
-                    Entrenar
+                    {trainCooldownSec > 0
+                      ? `Espera ${trainCooldownSec}s`
+                      : 'Entrenar'}
                   </button>
                 )}
               </li>
