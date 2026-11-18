@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SkillsService } from './skills.service';
 import { CreateSkillDto, TrainSkillDto } from './dto/skills.dto';
@@ -37,10 +30,7 @@ export class SkillsController {
   }
 
   @Post('train')
-  async train(
-    @CurrentUser('id') userId: string,
-    @Body() dto: TrainSkillDto,
-  ) {
+  async train(@CurrentUser('id') userId: string, @Body() dto: TrainSkillDto) {
     return this.skillsService.trainSkill(
       userId,
       dto.skillId,

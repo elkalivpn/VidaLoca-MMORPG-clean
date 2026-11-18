@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { MissionStatus, Difficulty, MissionMode } from '@prisma/client';
+import { MissionStatus, Difficulty, MissionMode, Prisma } from '@prisma/client';
 import { CreateMissionTemplateDto } from './dto/missions.dto';
 import { calculateLevelFromXp } from '../common/utils/level.util';
 import { isPlayerVipActive } from '../common/utils/vip.util';
@@ -67,7 +67,8 @@ export class MissionsService {
         rewardReputation: dto.rewardReputation ?? 0,
         rewardItemName: dto.rewardItemName ?? null,
         unlockBenefit: dto.unlockBenefit ?? null,
-        requirement: (dto.requirement as any) ?? undefined,
+        requirement:
+          (dto.requirement as Prisma.InputJsonValue | undefined) ?? undefined,
       },
     });
   }
@@ -215,7 +216,7 @@ export class MissionsService {
         status: MissionStatus.IN_PROGRESS,
         progress: 0,
         squadCode,
-        coOpParticipants: coOpParticipants as any,
+        coOpParticipants: coOpParticipants as unknown as Prisma.InputJsonValue,
       },
       include: { template: true },
     });
@@ -312,7 +313,9 @@ export class MissionsService {
 
     return this.prisma.playerMission.update({
       where: { id: mission.id },
-      data: { coOpParticipants: nextParticipants as any },
+      data: {
+        coOpParticipants: nextParticipants as unknown as Prisma.InputJsonValue,
+      },
       include: { template: true },
     });
   }
@@ -354,7 +357,9 @@ export class MissionsService {
     const remaining = participants.filter((p) => p.playerId !== player.id);
     await this.prisma.playerMission.update({
       where: { id: mission.id },
-      data: { coOpParticipants: remaining as any },
+      data: {
+        coOpParticipants: remaining as unknown as Prisma.InputJsonValue,
+      },
     });
 
     return {
@@ -606,9 +611,7 @@ export class MissionsService {
       tpl.mode === MissionMode.ONLINE_COOP && participants.length > 1;
     const bonusMultiplier = isTeamBonus ? 1.2 : 1.0;
 
-    const isVipActive = isPlayerVipActive(
-      player as { isVip?: boolean; vipExpiresAt?: Date | null },
-    );
+    const isVipActive = isPlayerVipActive(player);
     const eurosMultiplier = bonusMultiplier * (isVipActive ? 1.05 : 1.0);
     const xpMultiplier = bonusMultiplier * (isVipActive ? 1.15 : 1.0);
 
@@ -700,8 +703,13 @@ export class MissionsService {
         await grantBattlePassXpTx(tx, dbPlayer.id, battlePassXpGain);
 
         // Direct item unlock benefit
-        if (tpl.rewardItemName && (tx as any).itemTemplate?.findFirst) {
-          const itemTpl = await tx.itemTemplate.findFirst({
+        const itemTemplateDelegate = (
+          tx as unknown as {
+            itemTemplate?: { findFirst?: typeof tx.itemTemplate.findFirst };
+          }
+        ).itemTemplate;
+        if (tpl.rewardItemName && itemTemplateDelegate?.findFirst) {
+          const itemTpl = await itemTemplateDelegate.findFirst({
             where: { name: tpl.rewardItemName },
           });
           if (itemTpl) {
@@ -807,7 +815,7 @@ export class MissionsService {
       (item): item is CoopParticipant =>
         Boolean(item) &&
         typeof item === 'object' &&
-        typeof (item as any).playerId === 'string',
+        typeof (item as { playerId?: unknown }).playerId === 'string',
     );
   }
 }

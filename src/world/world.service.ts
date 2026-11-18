@@ -224,7 +224,8 @@ const ACTIONS: ActionDef[] = [
   {
     id: 'amenaza',
     label: 'Cobro de deuda',
-    description: 'Alguien debe. Tú cobras. La reputación de calle sube… o te partes la cara.',
+    description:
+      'Alguien debe. Tú cobras. La reputación de calle sube… o te partes la cara.',
     lifestyle: 'STREET',
     minLevel: 3,
     risk: 0.35,
@@ -287,7 +288,8 @@ const ACTIONS: ActionDef[] = [
   {
     id: 'ajuste_cuentas',
     label: 'Ajuste de cuentas armado (+18)',
-    description: 'Tiroteo rápido contra rivales del distrito. Alto calor policial.',
+    description:
+      'Tiroteo rápido contra rivales del distrito. Alto calor policial.',
     lifestyle: 'STREET',
     minLevel: 2,
     risk: 0.42,
@@ -303,7 +305,10 @@ const AVATARS = [
 
 @Injectable()
 export class WorldService {
-  private readonly marketCargo = new Map<string, Record<MarketGoodId, number>>();
+  private readonly marketCargo = new Map<
+    string,
+    Record<MarketGoodId, number>
+  >();
 
   constructor(
     private prisma: PrismaService,
@@ -429,7 +434,8 @@ export class WorldService {
       };
 
       const tollMultiplier = player.faction === 'NIGHT_RACING' ? 0.65 : 1;
-      const effectiveToll = Math.round(route.tollEuros * tollMultiplier * 100) / 100;
+      const effectiveToll =
+        Math.round(route.tollEuros * tollMultiplier * 100) / 100;
 
       if (primaryVehicle) {
         const speed = Math.max(20, primaryVehicle.template.speed);
@@ -474,10 +480,7 @@ export class WorldService {
         };
       } else {
         if (route.isIntercity) {
-          durationSec = Math.max(
-            15,
-            Math.round((route.distanceKm / 80) * 60),
-          );
+          durationSec = Math.max(15, Math.round((route.distanceKm / 80) * 60));
           baseCostEuros = Math.max(
             15,
             Math.round(route.distanceKm * 0.18 * 100) / 100,
@@ -511,8 +514,12 @@ export class WorldService {
       ];
 
       if (route.isIntercity && newHeat >= 50) {
-        const evasionSpeedThreshold = player.faction === 'NIGHT_RACING' ? 70 : 80;
-        if (primaryVehicle && primaryVehicle.template.speed >= evasionSpeedThreshold) {
+        const evasionSpeedThreshold =
+          player.faction === 'NIGHT_RACING' ? 70 : 80;
+        if (
+          primaryVehicle &&
+          primaryVehicle.template.speed >= evasionSpeedThreshold
+        ) {
           narrativeParts.push(
             `Control de la Guardia Civil en la ${route.highway}, pero tu ${primaryVehicle.template.name} acelera a fondo y logras evadirlo sin consecuencias.`,
           );
@@ -545,7 +552,10 @@ export class WorldService {
         where: { userId },
         data: {
           locationId: destinationId,
-          euros: Math.max(0, Math.round((player.euros - totalCost) * 100) / 100),
+          euros: Math.max(
+            0,
+            Math.round((player.euros - totalCost) * 100) / 100,
+          ),
           heat: newHeat,
           wantedLevel: newWantedLevel,
         },
@@ -574,7 +584,9 @@ export class WorldService {
       };
     });
     if (this.engagementService) {
-      await this.engagementService.recordProgress(result.player.id, 'travel').catch(() => undefined);
+      await this.engagementService
+        .recordProgress(result.player.id, 'travel')
+        .catch(() => undefined);
     }
     return result;
   }
@@ -638,7 +650,9 @@ export class WorldService {
           heatDelta = Math.max(4, Math.round(heatDelta * 0.7));
         }
         eurosDelta =
-          action.lifestyle === 'STREET' ? -Math.floor(20 + Math.random() * 80) : 0;
+          action.lifestyle === 'STREET'
+            ? -Math.floor(20 + Math.random() * 80)
+            : 0;
         narrative = `La movida "${action.label}" se torció. El barrio te mira.`;
         xpDelta = 3;
       } else {
@@ -646,7 +660,10 @@ export class WorldService {
         let factionMultiplier = 1;
         if (p.faction === 'SYNDICATE' && action.lifestyle === 'STREET') {
           factionMultiplier = 1.15;
-        } else if (p.faction === 'ENTREPRENEUR' && action.lifestyle === 'LEGAL') {
+        } else if (
+          p.faction === 'ENTREPRENEUR' &&
+          action.lifestyle === 'LEGAL'
+        ) {
           factionMultiplier = 1.15;
         } else if (
           p.faction === 'CYBER_HACKER' &&
@@ -717,7 +734,12 @@ export class WorldService {
         failed,
         actionId,
         narrative,
-        deltas: { euros: eurosDelta, xp: xpDelta, reputation: repDelta, heat: heatDelta },
+        deltas: {
+          euros: eurosDelta,
+          xp: xpDelta,
+          reputation: repDelta,
+          heat: heatDelta,
+        },
         player: {
           level: updated.level,
           xp: updated.xp,
@@ -729,12 +751,19 @@ export class WorldService {
       };
     });
 
-    if (!result.failed && actionId !== 'huir_calor' && actorPlayerId && this.engagementService) {
+    if (
+      !result.failed &&
+      actionId !== 'huir_calor' &&
+      actorPlayerId &&
+      this.engagementService
+    ) {
       await this.engagementService
         .recordProgress(actorPlayerId, 'action')
         .catch(() => undefined);
     }
-    await this.achievementsService?.checkAndUnlock(userId).catch(() => undefined);
+    await this.achievementsService
+      ?.checkAndUnlock(userId)
+      .catch(() => undefined);
     return result;
   }
 
@@ -987,7 +1016,8 @@ export class WorldService {
           typeof updatedAttacker?.euros === 'number'
             ? updatedAttacker.euros
             : fallbackEuros,
-        reputation: updatedAttacker?.reputation ?? (attacker.reputation ?? 0) + 10,
+        reputation:
+          updatedAttacker?.reputation ?? (attacker.reputation ?? 0) + 10,
         heat: updatedAttacker?.heat ?? newHeat,
         wantedLevel: updatedAttacker?.wantedLevel ?? newWantedLevel,
       };
@@ -1085,7 +1115,9 @@ export class WorldService {
     const currentCity = zone.city;
     const now = Date.now();
     const hourBucket = this.getHourWindowBucket(now);
-    const windowExpiresAt = new Date((hourBucket + 1) * 60 * 60 * 1000).toISOString();
+    const windowExpiresAt = new Date(
+      (hourBucket + 1) * 60 * 60 * 1000,
+    ).toISOString();
     const cargo = this.extractCargo(p.id, p.marketCargo);
 
     const goods = MARKET_GOODS.map((good) => {

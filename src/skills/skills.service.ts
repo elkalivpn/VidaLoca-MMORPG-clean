@@ -48,7 +48,9 @@ export class SkillsService {
       'Debes descansar antes de volver a entrenar una habilidad',
     );
 
-    const skill = await this.prisma.skill.findUnique({ where: { id: skillId } });
+    const skill = await this.prisma.skill.findUnique({
+      where: { id: skillId },
+    });
 
     if (!skill) throw new NotFoundException('Skill not found');
 

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { ItemType, SkillCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateLevelFromXp } from '../common/utils/level.util';
@@ -62,14 +66,14 @@ export class InventoryService {
 
     if (currency === 'VIDACOIN') {
       if (!hasVida) {
-        throw new BadRequestException(
-          'Este artículo no se vende en VidaCoins',
-        );
+        throw new BadRequestException('Este artículo no se vende en VidaCoins');
       }
       useEuros = false;
     } else if (currency === 'EUR') {
       if (!hasEuros) {
-        throw new BadRequestException('Este artículo solo se vende en VidaCoins');
+        throw new BadRequestException(
+          'Este artículo solo se vende en VidaCoins',
+        );
       }
       useEuros = true;
     } else {
@@ -111,7 +115,11 @@ export class InventoryService {
       }
 
       const existingStack = await tx.inventoryItem.findFirst({
-        where: { playerId: player.id, templateId: template.id, equipped: false },
+        where: {
+          playerId: player.id,
+          templateId: template.id,
+          equipped: false,
+        },
       });
 
       const item = existingStack
@@ -142,7 +150,8 @@ export class InventoryService {
               name: template.name,
               damage: typeof stats.damage === 'number' ? stats.damage : 30,
               range: typeof stats.range === 'number' ? stats.range : 40,
-              accuracy: typeof stats.accuracy === 'number' ? stats.accuracy : 75,
+              accuracy:
+                typeof stats.accuracy === 'number' ? stats.accuracy : 75,
               equipped: false,
             },
           });
@@ -177,7 +186,9 @@ export class InventoryService {
     targetPlayerId?: string,
   ) {
     if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 1000) {
-      throw new BadRequestException('Quantity must be a positive integer (1..1000)');
+      throw new BadRequestException(
+        'Quantity must be a positive integer (1..1000)',
+      );
     }
 
     const player = targetPlayerId
@@ -216,9 +227,15 @@ export class InventoryService {
     });
   }
 
-  async removeItemFromInventory(userId: string, itemId: string, quantity: number = 1) {
+  async removeItemFromInventory(
+    userId: string,
+    itemId: string,
+    quantity: number = 1,
+  ) {
     if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 1000) {
-      throw new BadRequestException('Quantity must be a positive integer (1..1000)');
+      throw new BadRequestException(
+        'Quantity must be a positive integer (1..1000)',
+      );
     }
 
     const player = await this.prisma.player.findUnique({ where: { userId } });
@@ -418,7 +435,9 @@ export class InventoryService {
             },
           });
           const skillXpGain =
-            typeof stats.xpGrant === 'number' ? Math.round(stats.xpGrant * 0.25) : 100;
+            typeof stats.xpGrant === 'number'
+              ? Math.round(stats.xpGrant * 0.25)
+              : 100;
           if (!existingSkill) {
             await tx.playerSkill.create({
               data: {
@@ -435,7 +454,10 @@ export class InventoryService {
             await tx.playerSkill.update({
               where: { id: existingSkill.id },
               data: {
-                level: Math.min(skill.maxLevel, existingSkill.level + levelGain),
+                level: Math.min(
+                  skill.maxLevel,
+                  existingSkill.level + levelGain,
+                ),
                 xp: levelGain > 0 ? totalSkillXp - threshold : totalSkillXp,
               },
             });

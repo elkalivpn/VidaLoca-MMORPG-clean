@@ -146,7 +146,9 @@ export class PlayersService {
         take: limit,
         include: {
           user: { select: { username: true } },
-          clanMember: { include: { clan: { select: { name: true, tag: true } } } },
+          clanMember: {
+            include: { clan: { select: { name: true, tag: true } } },
+          },
         },
         orderBy: { level: 'desc' },
       }),

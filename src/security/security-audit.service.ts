@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { Prisma } from '@prisma/client';
 import { createHash, createHmac } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -12,6 +13,25 @@ export interface SecurityAuditEntryInput {
   target?: string;
   ip?: string;
   details?: Record<string, unknown>;
+}
+
+interface SecurityAuditDelegate {
+  create?: (args: {
+    data: {
+      actorId: string | null;
+      eventType: string;
+      severity: string;
+      target: string | null;
+      ipHash: string | null;
+      details?: Prisma.InputJsonValue;
+      prevHash: string;
+      entryHash: string;
+    };
+  }) => Promise<unknown>;
+  findFirst?: (args: {
+    orderBy: { createdAt: 'desc' };
+    select: { entryHash: true };
+  }) => Promise<{ entryHash: string } | null>;
 }
 
 @Injectable()
@@ -41,18 +61,23 @@ export class SecurityAuditService {
 
   async logEvent(input: SecurityAuditEntryInput): Promise<void> {
     try {
-      const repo = (this.prisma as unknown as { securityAuditLog?: any })
-        ?.securityAuditLog;
+      const repo = (
+        this.prisma as unknown as {
+          securityAuditLog?: SecurityAuditDelegate;
+        }
+      )?.securityAuditLog;
       if (!repo?.create) {
         return;
       }
 
-      const latest = await repo
-        .findFirst?.({
-          orderBy: { createdAt: 'desc' },
-          select: { entryHash: true },
-        })
-        .catch(() => null);
+      const latest = repo.findFirst
+        ? await repo
+            .findFirst({
+              orderBy: { createdAt: 'desc' },
+              select: { entryHash: true },
+            })
+            .catch(() => null)
+        : null;
 
       const prevHash = latest?.entryHash || this.lastEntryHash;
       const timestamp = new Date().toISOString();
@@ -80,7 +105,7 @@ export class SecurityAuditService {
           severity,
           target: input.target ?? null,
           ipHash,
-          details: (input.details ?? undefined) as any,
+          details: input.details as Prisma.InputJsonValue | undefined,
           prevHash,
           entryHash,
         },

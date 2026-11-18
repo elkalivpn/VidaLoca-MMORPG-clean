@@ -9,7 +9,12 @@ export class EconomyService {
     private transactionsService: TransactionsService,
   ) {}
 
-  async addEuros(userId: string, amount: number, reason: string, reference?: string) {
+  async addEuros(
+    userId: string,
+    amount: number,
+    reason: string,
+    reference?: string,
+  ) {
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new BadRequestException('Amount must be a finite positive number');
     }
@@ -25,13 +30,26 @@ export class EconomyService {
         data: { euros: { increment: amount } },
       });
 
-      await this.transactionsService.logTransaction(tx, player.id, 'EARN', amount, 'EUR', reason, reference);
+      await this.transactionsService.logTransaction(
+        tx,
+        player.id,
+        'EARN',
+        amount,
+        'EUR',
+        reason,
+        reference,
+      );
 
       return player;
     });
   }
 
-  async spendEuros(userId: string, amount: number, reason: string, reference?: string) {
+  async spendEuros(
+    userId: string,
+    amount: number,
+    reason: string,
+    reference?: string,
+  ) {
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new BadRequestException('Amount must be a finite positive number');
     }
@@ -51,13 +69,26 @@ export class EconomyService {
         throw new BadRequestException('Player not found');
       }
 
-      await this.transactionsService.logTransaction(tx, updatedPlayer.id, 'SPEND', amount, 'EUR', reason, reference);
+      await this.transactionsService.logTransaction(
+        tx,
+        updatedPlayer.id,
+        'SPEND',
+        amount,
+        'EUR',
+        reason,
+        reference,
+      );
 
       return updatedPlayer;
     });
   }
 
-  async addVidaCoins(userId: string, amount: number, reason: string, reference?: string) {
+  async addVidaCoins(
+    userId: string,
+    amount: number,
+    reason: string,
+    reference?: string,
+  ) {
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new BadRequestException('Amount must be a finite positive number');
     }
@@ -73,13 +104,26 @@ export class EconomyService {
         data: { vidaCoins: { increment: amount } },
       });
 
-      await this.transactionsService.logTransaction(tx, player.id, 'EARN', amount, 'VIDACOIN', reason, reference);
+      await this.transactionsService.logTransaction(
+        tx,
+        player.id,
+        'EARN',
+        amount,
+        'VIDACOIN',
+        reason,
+        reference,
+      );
 
       return player;
     });
   }
 
-  async spendVidaCoins(userId: string, amount: number, reason: string, reference?: string) {
+  async spendVidaCoins(
+    userId: string,
+    amount: number,
+    reason: string,
+    reference?: string,
+  ) {
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new BadRequestException('Amount must be a finite positive number');
     }
@@ -99,7 +143,15 @@ export class EconomyService {
         throw new BadRequestException('Player not found');
       }
 
-      await this.transactionsService.logTransaction(tx, updatedPlayer.id, 'SPEND', amount, 'VIDACOIN', reason, reference);
+      await this.transactionsService.logTransaction(
+        tx,
+        updatedPlayer.id,
+        'SPEND',
+        amount,
+        'VIDACOIN',
+        reason,
+        reference,
+      );
 
       return updatedPlayer;
     });
@@ -119,10 +171,20 @@ export class EconomyService {
   }
 
   async purchaseWithVidaCoins(userId: string, amount: number, item: string) {
-    return this.spendVidaCoins(userId, amount, `Purchase: ${item}`, `purchase_${Date.now()}`);
+    return this.spendVidaCoins(
+      userId,
+      amount,
+      `Purchase: ${item}`,
+      `purchase_${Date.now()}`,
+    );
   }
 
   async purchaseWithEuros(userId: string, amount: number, item: string) {
-    return this.spendEuros(userId, amount, `Purchase: ${item}`, `purchase_${Date.now()}`);
+    return this.spendEuros(
+      userId,
+      amount,
+      `Purchase: ${item}`,
+      `purchase_${Date.now()}`,
+    );
   }
 }

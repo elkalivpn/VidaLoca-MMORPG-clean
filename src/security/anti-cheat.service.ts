@@ -33,8 +33,17 @@ export class AntiCheatService {
     private readonly auditService: SecurityAuditService,
   ) {}
 
-  assertFinitePositive(value: unknown, fieldName = 'amount', max = 1_000_000_000): number {
-    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > max) {
+  assertFinitePositive(
+    value: unknown,
+    fieldName = 'amount',
+    max = 1_000_000_000,
+  ): number {
+    if (
+      typeof value !== 'number' ||
+      !Number.isFinite(value) ||
+      value <= 0 ||
+      value > max
+    ) {
       throw new BadRequestException(
         `${fieldName} debe ser un número finito positivo (<= ${max})`,
       );
@@ -65,10 +74,7 @@ export class AntiCheatService {
     const MIN_Y = -20;
     const MAX_Y = 500;
     return (
-      Math.abs(x) <= MAX_XZ &&
-      Math.abs(z) <= MAX_XZ &&
-      y >= MIN_Y &&
-      y <= MAX_Y
+      Math.abs(x) <= MAX_XZ && Math.abs(z) <= MAX_XZ && y >= MIN_Y && y <= MAX_Y
     );
   }
 
@@ -96,8 +102,15 @@ export class AntiCheatService {
     );
 
     try {
-      const repo = (this.prisma as unknown as { antiCheatIncident?: any })
-        ?.antiCheatIncident;
+      const repo = (
+        this.prisma as unknown as {
+          antiCheatIncident?: {
+            create?: (args: {
+              data: Record<string, unknown>;
+            }) => Promise<unknown>;
+          };
+        }
+      )?.antiCheatIncident;
       if (repo?.create) {
         await repo.create({
           data: {
@@ -107,7 +120,7 @@ export class AntiCheatService {
             severity: params.severity ?? (shouldDisconnect ? 'HIGH' : 'MEDIUM'),
             strikes: strikesInWindow,
             blocked: params.blocked ?? true,
-            evidence: (params.evidence ?? undefined) as any,
+            evidence: params.evidence ?? undefined,
           },
         });
       }

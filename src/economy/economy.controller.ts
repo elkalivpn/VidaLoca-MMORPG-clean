@@ -1,7 +1,14 @@
 import { Controller, Get, Post, Body, UseGuards, Req } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { UserRole } from '@prisma/client';
-import { IsNotEmpty, IsNumber, IsString, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { EconomyService } from './economy.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -43,34 +50,68 @@ export class EconomyController {
   @Post('euros/add')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  async addEuros(@Req() req: { user: { id: string } }, @Body() dto: AmountReasonDto) {
+  async addEuros(
+    @Req() req: { user: { id: string } },
+    @Body() dto: AmountReasonDto,
+  ) {
     return this.economyService.addEuros(req.user.id, dto.amount, dto.reason);
   }
 
   @Post('euros/spend')
-  async spendEuros(@Req() req: { user: { id: string } }, @Body() dto: AmountReasonDto) {
+  async spendEuros(
+    @Req() req: { user: { id: string } },
+    @Body() dto: AmountReasonDto,
+  ) {
     return this.economyService.spendEuros(req.user.id, dto.amount, dto.reason);
   }
 
   @Post('vidacoins/add')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  async addVidaCoins(@Req() req: { user: { id: string } }, @Body() dto: AmountReasonDto) {
-    return this.economyService.addVidaCoins(req.user.id, dto.amount, dto.reason);
+  async addVidaCoins(
+    @Req() req: { user: { id: string } },
+    @Body() dto: AmountReasonDto,
+  ) {
+    return this.economyService.addVidaCoins(
+      req.user.id,
+      dto.amount,
+      dto.reason,
+    );
   }
 
   @Post('vidacoins/spend')
-  async spendVidaCoins(@Req() req: { user: { id: string } }, @Body() dto: AmountReasonDto) {
-    return this.economyService.spendVidaCoins(req.user.id, dto.amount, dto.reason);
+  async spendVidaCoins(
+    @Req() req: { user: { id: string } },
+    @Body() dto: AmountReasonDto,
+  ) {
+    return this.economyService.spendVidaCoins(
+      req.user.id,
+      dto.amount,
+      dto.reason,
+    );
   }
 
   @Post('purchase/vida')
-  async purchaseWithVidaCoins(@Req() req: { user: { id: string } }, @Body() dto: PurchaseItemDto) {
-    return this.economyService.purchaseWithVidaCoins(req.user.id, dto.amount, dto.item);
+  async purchaseWithVidaCoins(
+    @Req() req: { user: { id: string } },
+    @Body() dto: PurchaseItemDto,
+  ) {
+    return this.economyService.purchaseWithVidaCoins(
+      req.user.id,
+      dto.amount,
+      dto.item,
+    );
   }
 
   @Post('purchase/euros')
-  async purchaseWithEuros(@Req() req: { user: { id: string } }, @Body() dto: PurchaseItemDto) {
-    return this.economyService.purchaseWithEuros(req.user.id, dto.amount, dto.item);
+  async purchaseWithEuros(
+    @Req() req: { user: { id: string } },
+    @Body() dto: PurchaseItemDto,
+  ) {
+    return this.economyService.purchaseWithEuros(
+      req.user.id,
+      dto.amount,
+      dto.item,
+    );
   }
 }

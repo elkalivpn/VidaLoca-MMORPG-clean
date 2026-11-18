@@ -476,10 +476,13 @@ export class AuthService {
   async refreshTokens(refreshToken: string, ip?: string) {
     const tokenHash = this.hashToken(refreshToken);
 
-    let payload: any;
+    let payload: { tokenType?: string; sub?: string };
     try {
       const secret = this.configService.getOrThrow<string>('JWT_SECRET');
-      payload = this.jwtService.verify(refreshToken, { secret });
+      payload = this.jwtService.verify<{ tokenType?: string; sub?: string }>(
+        refreshToken,
+        { secret },
+      );
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
@@ -517,7 +520,9 @@ export class AuthService {
         severity: 'CRITICAL',
         ip,
       });
-      throw new UnauthorizedException('Refresh token reuse detected; all sessions revoked');
+      throw new UnauthorizedException(
+        'Refresh token reuse detected; all sessions revoked',
+      );
     }
 
     if (tokenRecord.user.isBanned) {

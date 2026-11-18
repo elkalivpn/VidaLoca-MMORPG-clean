@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Param,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { HeistsService } from './heists.service';
 import { CreateHeistDto, JoinHeistDto } from './dto/heists.dto';
@@ -22,10 +15,7 @@ export class HeistsController {
   }
 
   @Post('create')
-  createLobby(
-    @CurrentUser('id') userId: string,
-    @Body() dto: CreateHeistDto,
-  ) {
+  createLobby(@CurrentUser('id') userId: string, @Body() dto: CreateHeistDto) {
     return this.heistsService.createLobby(userId, dto);
   }
 

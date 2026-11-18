@@ -19,7 +19,9 @@ describe('VehiclesService', () => {
       vehicleTemplate: { findUnique: jest.fn(), findMany: jest.fn() },
       playerVehicle: { create: jest.fn() },
       transactionLog: { create: jest.fn() },
-      $transaction: jest.fn(async (cb: (tx: any) => any) => cb(prisma)),
+      $transaction: jest.fn((cb: (tx: any) => any) =>
+        Promise.resolve(cb(prisma)),
+      ),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -122,16 +124,20 @@ describe('VehiclesService', () => {
       isVipOnly: false,
     });
     prisma.player.updateMany.mockResolvedValue({ count: 1 });
-    prisma.playerVehicle.create.mockImplementation(async ({ data }: any) => ({
-      id: 'pv-first',
-      ...data,
-    }));
+    prisma.playerVehicle.create.mockImplementation(({ data }: any) =>
+      Promise.resolve({
+        id: 'pv-first',
+        ...data,
+      }),
+    );
     prisma.transactionLog.create.mockResolvedValue({});
 
     const first = await service.buyVehicle('u1', { templateId: 'vespa-1' });
     expect(first.isPrimary).toBe(true);
 
-    (prisma.playerVehicle as any).findFirst.mockResolvedValue({ id: 'pv-first' });
+    (prisma.playerVehicle as any).findFirst.mockResolvedValue({
+      id: 'pv-first',
+    });
     const second = await service.buyVehicle('u1', { templateId: 'vespa-1' });
     expect(second.isPrimary).toBe(false);
   });

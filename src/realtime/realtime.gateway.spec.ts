@@ -15,6 +15,7 @@ describe('RealtimeGateway', () => {
   let configService: { getOrThrow: jest.Mock };
   let roomEmitMock: jest.Mock;
   let serverEmitMock: jest.Mock;
+  let serverToMock: jest.Mock;
 
   beforeEach(async () => {
     prisma = {
@@ -43,14 +44,15 @@ describe('RealtimeGateway', () => {
 
     roomEmitMock = jest.fn();
     serverEmitMock = jest.fn();
+    serverToMock = jest.fn().mockReturnValue({ emit: roomEmitMock });
     gateway.server = {
-      to: jest.fn().mockReturnValue({ emit: roomEmitMock }),
+      to: serverToMock,
       emit: serverEmitMock,
     } as any;
   });
 
-  afterEach(() => {
-    gateway.onModuleDestroy();
+  afterEach(async () => {
+    await gateway.onModuleDestroy();
     jest.useRealTimers();
     jest.restoreAllMocks();
   });
@@ -111,7 +113,7 @@ describe('RealtimeGateway', () => {
 
       gateway.flushWorldSnapshots();
 
-      expect(gateway.server.to).toHaveBeenCalledWith('zone:madrid_centro');
+      expect(serverToMock).toHaveBeenCalledWith('zone:madrid_centro');
       expect(roomEmitMock).toHaveBeenCalledWith(
         'world:snapshot',
         expect.objectContaining({
@@ -277,7 +279,9 @@ describe('RealtimeGateway', () => {
       const blocked = await gateway.handleJoinZone(client, {
         locationId: 'barcelona_ramblas',
       });
-      expect(blocked).toEqual({ error: 'Intercity travel requires /world/travel' });
+      expect(blocked).toEqual({
+        error: 'Intercity travel requires /world/travel',
+      });
 
       // When /world/travel already updated DB locationId, zone:join succeeds
       prisma.player.findUnique.mockResolvedValue({
@@ -334,7 +338,7 @@ describe('RealtimeGateway', () => {
         error: 'Presence not found',
       });
 
-      gateway.onModuleDestroy();
+      await gateway.onModuleDestroy();
       expect((gateway as any).tickTimer).toBeUndefined();
       expect((gateway as any).worldEventTimer).toBeUndefined();
     });
@@ -349,7 +353,9 @@ describe('RealtimeGateway', () => {
       roomEmitMock.mockClear();
 
       const first = await gateway.handleZoneChat(client, { message: 'Hola!' });
-      expect(first).toEqual(expect.objectContaining({ ok: true, message: 'Hola!' }));
+      expect(first).toEqual(
+        expect.objectContaining({ ok: true, message: 'Hola!' }),
+      );
       expect(roomEmitMock).toHaveBeenCalledTimes(1);
 
       jest.advanceTimersByTime(250);
@@ -456,7 +462,7 @@ describe('RealtimeGateway', () => {
           z: 4,
         }),
       );
-      expect(gateway.server.to).toHaveBeenCalledWith('zone:madrid_centro');
+      expect(serverToMock).toHaveBeenCalledWith('zone:madrid_centro');
       expect(roomEmitMock).toHaveBeenCalledWith(
         'combat:damaged',
         expect.objectContaining({
@@ -680,15 +686,27 @@ describe('RealtimeGateway', () => {
         }),
       );
 
-      pvpGateway.onModuleDestroy();
+      await pvpGateway.onModuleDestroy();
     });
 
     it('deduplicates same playerId when connected via multiple sockets in world:snapshot', async () => {
       jest.useFakeTimers();
       jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
 
-      await connectPlayer('sock-dup-1', 'user-dup', 'player-dup', 'Dupli', 'madrid_centro');
-      await connectPlayer('sock-dup-2', 'user-dup', 'player-dup', 'Dupli', 'madrid_centro');
+      await connectPlayer(
+        'sock-dup-1',
+        'user-dup',
+        'player-dup',
+        'Dupli',
+        'madrid_centro',
+      );
+      await connectPlayer(
+        'sock-dup-2',
+        'user-dup',
+        'player-dup',
+        'Dupli',
+        'madrid_centro',
+      );
 
       roomEmitMock.mockClear();
       gateway.flushWorldSnapshots();
@@ -707,4 +725,3 @@ describe('RealtimeGateway', () => {
     });
   });
 });
-

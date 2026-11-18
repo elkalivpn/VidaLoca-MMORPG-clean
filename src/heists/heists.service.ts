@@ -457,7 +457,9 @@ export class HeistsService {
       throw new NotFoundException('Lobby de golpe no encontrado');
     }
     if (lobby.status !== 'OPEN') {
-      throw new BadRequestException('Este golpe ya ha sido ejecutado o está en curso');
+      throw new BadRequestException(
+        'Este golpe ya ha sido ejecutado o está en curso',
+      );
     }
 
     const heist = HEIST_CATALOG.find((h) => h.id === lobby.heistId);
@@ -481,9 +483,7 @@ export class HeistsService {
         (p) => p.playerId === caller.id,
       );
       if (!isParticipant) {
-        throw new ForbiddenException(
-          'No formas parte de este lobby de golpe',
-        );
+        throw new ForbiddenException('No formas parte de este lobby de golpe');
       }
 
       if (lobby.participants.length < heist.minCrew) {

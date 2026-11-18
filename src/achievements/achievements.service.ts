@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -33,8 +29,7 @@ export class AchievementsService {
     });
     const unlockedIds = new Set(unlocked.map((u) => u.achievementId));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const newlyUnlocked: any[] = [];
+    const newlyUnlocked: Array<Record<string, unknown>> = [];
 
     let cachedCompletedCount: number | null = null;
     let cachedVehicleCount: number | null = null;
@@ -123,8 +118,12 @@ export class AchievementsService {
           });
 
           newlyUnlocked.push(result);
-        } catch (err: any) {
-          if (err?.code !== 'P2002') {
+        } catch (err: unknown) {
+          const code =
+            typeof err === 'object' && err !== null && 'code' in err
+              ? (err as { code?: string }).code
+              : undefined;
+          if (code !== 'P2002') {
             throw err;
           }
         }

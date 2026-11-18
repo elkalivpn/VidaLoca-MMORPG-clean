@@ -117,7 +117,9 @@ describe('MissionsService (Story, Online Solo, Online Co-op & Optional Choice)',
         create: jest.fn().mockResolvedValue({}),
         update: jest.fn().mockResolvedValue({}),
       },
-      $transaction: jest.fn(async (cb: (tx: any) => any) => cb(prisma)),
+      $transaction: jest.fn((cb: (tx: any) => any) =>
+        Promise.resolve(cb(prisma)),
+      ),
     };
 
     antiCheat = {
@@ -196,11 +198,13 @@ describe('MissionsService (Story, Online Solo, Online Co-op & Optional Choice)',
     prisma.player.findUnique.mockResolvedValue(playerOne);
     prisma.playerMission.findFirst.mockResolvedValue(null);
     prisma.completedMission.findFirst.mockResolvedValue(null);
-    prisma.playerMission.create.mockImplementation(async ({ data }: any) => ({
-      id: 'pm-coop-1',
-      ...data,
-      template: coopTemplate,
-    }));
+    prisma.playerMission.create.mockImplementation(({ data }: any) =>
+      Promise.resolve({
+        id: 'pm-coop-1',
+        ...data,
+        template: coopTemplate,
+      }),
+    );
 
     const created = await service.createCoopSquad('user-1', coopTemplate.id);
     expect(created.squadCode).toMatch(/^VL-[A-F0-9]{6}$/);
@@ -208,10 +212,12 @@ describe('MissionsService (Story, Online Solo, Online Co-op & Optional Choice)',
     // Join with friend playerTwo
     prisma.player.findUnique.mockResolvedValue(playerTwo);
     prisma.playerMission.findFirst.mockResolvedValue(created);
-    prisma.playerMission.update.mockImplementation(async ({ data }: any) => ({
-      ...created,
-      coOpParticipants: data.coOpParticipants,
-    }));
+    prisma.playerMission.update.mockImplementation(({ data }: any) =>
+      Promise.resolve({
+        ...created,
+        coOpParticipants: data.coOpParticipants,
+      }),
+    );
 
     const joined = await service.joinCoopSquad('user-2', created.squadCode!);
     expect(joined.coOpParticipants).toHaveLength(2);
@@ -271,14 +277,16 @@ describe('MissionsService (Story, Online Solo, Online Co-op & Optional Choice)',
     prisma.playerMission.findUnique.mockResolvedValue(completedCoopMission);
     prisma.completedMission.findFirst.mockResolvedValue(null);
     prisma.playerMission.updateMany.mockResolvedValue({ count: 1 });
-    prisma.player.update.mockImplementation(async ({ where, data }: any) => ({
-      ...(where.id === playerOne.id ? playerOne : playerTwo),
-      euros: 3000,
-      xp: data.xp,
-      level: data.level,
-      vidaCoins: 10,
-      reputation: 75,
-    }));
+    prisma.player.update.mockImplementation(({ where, data }: any) =>
+      Promise.resolve({
+        ...(where.id === playerOne.id ? playerOne : playerTwo),
+        euros: 3000,
+        xp: data.xp,
+        level: data.level,
+        vidaCoins: 10,
+        reputation: 75,
+      }),
+    );
 
     const claimed = await service.claimReward('user-1', 'pm-coop-done');
 

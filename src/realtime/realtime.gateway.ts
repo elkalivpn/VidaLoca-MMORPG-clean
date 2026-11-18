@@ -189,9 +189,16 @@ export class RealtimeGateway
 
   async handleConnection(client: AuthenticatedSocket) {
     try {
+      const authPayload = client.handshake.auth as
+        { token?: unknown } | undefined;
+      const authHeader = client.handshake.headers?.authorization;
       const token =
-        client.handshake.auth?.token ||
-        client.handshake.headers?.authorization?.replace('Bearer ', '');
+        (typeof authPayload?.token === 'string'
+          ? authPayload.token
+          : undefined) ||
+        (typeof authHeader === 'string'
+          ? authHeader.replace('Bearer ', '')
+          : undefined);
 
       if (!token) {
         this.logger.warn(`Client ${client.id} rejected: no token`);
@@ -201,13 +208,17 @@ export class RealtimeGateway
       }
 
       const secret = this.configService.getOrThrow<string>('JWT_SECRET');
-      const payload = this.jwtService.verify(token, { secret });
+      const payload = this.jwtService.verify<{
+        sub: string;
+        tokenType?: string;
+        tv?: number;
+      }>(token, { secret });
       if (payload?.tokenType && payload.tokenType !== 'access') {
         client.emit('error', { message: 'Invalid token type' });
         client.disconnect(true);
         return;
       }
-      const userId = payload.sub as string;
+      const userId = payload.sub;
 
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
@@ -248,8 +259,8 @@ export class RealtimeGateway
       });
 
       // Join personal room + zone room
-      client.join(`user:${userId}`);
-      client.join(`zone:${client.locationId}`);
+      void client.join(`user:${userId}`);
+      void client.join(`zone:${client.locationId}`);
 
       this.presence.set(client.id, {
         userId,
@@ -297,8 +308,9 @@ export class RealtimeGateway
       this.logger.log(
         `${user.player.displayName} connected → zone ${client.locationId}`,
       );
-    } catch (err: any) {
-      this.logger.warn(`Auth failed for ${client.id}: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Auth failed for ${client.id}: ${msg}`);
       client.emit('error', { message: 'Invalid token' });
       client.disconnect(true);
     }
@@ -398,7 +410,7 @@ export class RealtimeGateway
 
     // Leave old zone room
     if (prevZone) {
-      client.leave(`zone:${prevZone}`);
+      void client.leave(`zone:${prevZone}`);
       client.to(`zone:${prevZone}`).emit('player:left', {
         playerId: client.playerId,
         displayName: client.displayName,
@@ -407,7 +419,7 @@ export class RealtimeGateway
     }
 
     // Join new zone
-    client.join(`zone:${nextZone}`);
+    void client.join(`zone:${nextZone}`);
     client.locationId = nextZone;
 
     const entry = this.presence.get(client.id);
@@ -835,9 +847,10 @@ export class RealtimeGateway
           );
           lootEuros = koRes?.lootEuros ?? 0;
           attackerStats = koRes?.attackerStats;
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
           this.logger.warn(
-            `Error resolving PvP knockout (${entry.userId} -> ${targetEntry.userId}): ${err?.message || err}`,
+            `Error resolving PvP knockout (${entry.userId} -> ${targetEntry.userId}): ${msg}`,
           );
         }
       }

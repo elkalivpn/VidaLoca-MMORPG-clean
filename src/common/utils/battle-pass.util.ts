@@ -1,3 +1,5 @@
+import type { BattlePassProgress, Prisma } from '@prisma/client';
+
 export const BATTLE_PASS_XP_PER_LEVEL = 200;
 export const BATTLE_PASS_MAX_LEVEL = 100;
 export const BATTLE_PASS_PREMIUM_PRICE_VC = 200;
@@ -16,11 +18,12 @@ export function calculateBattlePassReward(level: number, isPremium: boolean) {
 }
 
 export async function grantBattlePassXpTx(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  tx: any,
+  tx: Partial<
+    Pick<Prisma.TransactionClient, 'battlePassProgress' | 'battlePassSeason'>
+  >,
   playerId: string,
   amount: number,
-) {
+): Promise<BattlePassProgress | null> {
   if (!tx?.battlePassProgress || amount <= 0) return null;
 
   let progress = await tx.battlePassProgress.findUnique({

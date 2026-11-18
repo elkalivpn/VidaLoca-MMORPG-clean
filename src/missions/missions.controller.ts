@@ -131,11 +131,7 @@ export class MissionsController {
     @Param('missionId') missionId: string,
     @Body() dto: UpdateMissionProgressDto,
   ) {
-    return this.missionsService.updateProgress(
-      userId,
-      missionId,
-      dto.progress,
-    );
+    return this.missionsService.updateProgress(userId, missionId, dto.progress);
   }
 
   @Post('claim')

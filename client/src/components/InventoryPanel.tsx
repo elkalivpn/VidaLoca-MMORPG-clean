@@ -82,7 +82,7 @@ export default function InventoryPanel() {
     }
   }
 
-  async function useItem(itemId: string) {
+  async function consumeItem(itemId: string) {
     setBusyId(`use:${itemId}`);
     setMsg(null);
     try {
@@ -291,7 +291,7 @@ export default function InventoryPanel() {
                             type="button"
                             disabled={!!busyId}
                             onClick={() => {
-                              void useItem(it.id);
+                              void consumeItem(it.id);
                             }}
                             className="rounded border border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
                           >

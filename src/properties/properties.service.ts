@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Optional,
 } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isPlayerVipActive } from '../common/utils/vip.util';
 import { BuyPropertyDto } from './dto/properties.dto';
@@ -59,8 +60,8 @@ export class PropertiesService {
     }
 
     const property = await this.prisma.$transaction(async (tx) => {
-      const whereClause: any = { id: player.id };
-      const updateData: any = {};
+      const whereClause: Prisma.PlayerWhereInput = { id: player.id };
+      const updateData: Prisma.PlayerUpdateManyMutationInput = {};
       if (template.priceEuros > 0) {
         whereClause.euros = { gte: template.priceEuros };
         updateData.euros = { decrement: template.priceEuros };
@@ -384,7 +385,9 @@ export class PropertiesService {
         };
       }
 
-      throw new BadRequestException(`Tipo de propiedad no soportado: ${type}`);
+      throw new BadRequestException(
+        `Tipo de propiedad no soportado: ${String(type)}`,
+      );
     });
   }
 

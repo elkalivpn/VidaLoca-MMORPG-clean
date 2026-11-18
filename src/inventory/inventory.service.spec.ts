@@ -17,14 +17,22 @@ describe('InventoryService', () => {
     };
     playerWeapon: { findFirst: jest.Mock; create: jest.Mock };
     skill: { findFirst: jest.Mock };
-    playerSkill: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
+    playerSkill: {
+      findUnique: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
     transactionLog: { create: jest.Mock };
     $transaction: jest.Mock;
   };
 
   beforeEach(async () => {
     prisma = {
-      player: { findUnique: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
+      player: {
+        findUnique: jest.fn(),
+        updateMany: jest.fn(),
+        update: jest.fn(),
+      },
       itemTemplate: { findMany: jest.fn(), findUnique: jest.fn() },
       inventoryItem: {
         findFirst: jest.fn(),
@@ -35,9 +43,15 @@ describe('InventoryService', () => {
       },
       playerWeapon: { findFirst: jest.fn(), create: jest.fn() },
       skill: { findFirst: jest.fn() },
-      playerSkill: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+      playerSkill: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
       transactionLog: { create: jest.fn() },
-      $transaction: jest.fn(async (cb: (tx: any) => any) => cb(prisma)),
+      $transaction: jest.fn((cb: (tx: any) => any) =>
+        Promise.resolve(cb(prisma)),
+      ),
     };
 
     const module: TestingModule = await Test.createTestingModule({

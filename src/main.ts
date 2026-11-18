@@ -37,7 +37,7 @@ async function bootstrap() {
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
 
   // Hardening: remove Express fingerprint & enforce strict security headers
-  const expressApp = app.getHttpAdapter().getInstance();
+  const expressApp = app.getHttpAdapter().getInstance() as express.Express;
   expressApp.disable('x-powered-by');
   app.use(
     helmet({
@@ -70,7 +70,10 @@ async function bootstrap() {
 
   app.enableCors({
     origin: isProduction
-      ? (origin, callback) => {
+      ? (
+          origin: string | undefined,
+          callback: (err: Error | null, allow?: boolean) => void,
+        ) => {
           if (
             !origin ||
             frontendOrigins.includes(origin) ||

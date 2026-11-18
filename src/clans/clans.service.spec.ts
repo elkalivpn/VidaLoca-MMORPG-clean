@@ -18,8 +18,16 @@ describe('ClansService (Donations, Turf Shield, Territory Tax & Leadership)', ()
       updateMany: jest.Mock;
       delete: jest.Mock;
     };
-    territory: { findUnique: jest.Mock; updateMany: jest.Mock; update: jest.Mock };
-    clanTerritory: { findUnique: jest.Mock; deleteMany: jest.Mock; create: jest.Mock };
+    territory: {
+      findUnique: jest.Mock;
+      updateMany: jest.Mock;
+      update: jest.Mock;
+    };
+    clanTerritory: {
+      findUnique: jest.Mock;
+      deleteMany: jest.Mock;
+      create: jest.Mock;
+    };
     transactionLog: { create: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -39,8 +47,16 @@ describe('ClansService (Donations, Turf Shield, Territory Tax & Leadership)', ()
         updateMany: jest.fn(),
         delete: jest.fn(),
       },
-      territory: { findUnique: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
-      clanTerritory: { findUnique: jest.fn(), deleteMany: jest.fn(), create: jest.fn() },
+      territory: {
+        findUnique: jest.fn(),
+        updateMany: jest.fn(),
+        update: jest.fn(),
+      },
+      clanTerritory: {
+        findUnique: jest.fn(),
+        deleteMany: jest.fn(),
+        create: jest.fn(),
+      },
       transactionLog: { create: jest.fn() },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
@@ -49,9 +65,17 @@ describe('ClansService (Donations, Turf Shield, Territory Tax & Leadership)', ()
 
   it('donateToClan atomically transfers euros from player to clan funds', async () => {
     prisma.player.findUnique.mockResolvedValue({ id: 'p-1', euros: 2000 });
-    prisma.clanMember.findUnique.mockResolvedValue({ playerId: 'p-1', clanId: 'c-1', role: 'MEMBER' });
+    prisma.clanMember.findUnique.mockResolvedValue({
+      playerId: 'p-1',
+      clanId: 'c-1',
+      role: 'MEMBER',
+    });
     prisma.player.updateMany.mockResolvedValue({ count: 1 });
-    prisma.clan.update.mockResolvedValue({ id: 'c-1', tag: 'MAD', funds: 5500 });
+    prisma.clan.update.mockResolvedValue({
+      id: 'c-1',
+      tag: 'MAD',
+      funds: 5500,
+    });
 
     const res = await service.donateToClan('u-1', 500);
     expect(res).toEqual({ donated: 500, clanFunds: 5500 });
@@ -60,8 +84,15 @@ describe('ClansService (Donations, Turf Shield, Territory Tax & Leadership)', ()
 
   it('claimTerritory blocks conquest during 2-hour post-capture protection shield', async () => {
     prisma.player.findUnique.mockResolvedValue({ id: 'p-1' });
-    prisma.clanMember.findUnique.mockResolvedValue({ playerId: 'p-1', clanId: 'c-1', role: 'LEADER' });
-    prisma.territory.findUnique.mockResolvedValue({ id: 't-1', controllerId: 'c-2' });
+    prisma.clanMember.findUnique.mockResolvedValue({
+      playerId: 'p-1',
+      clanId: 'c-1',
+      role: 'LEADER',
+    });
+    prisma.territory.findUnique.mockResolvedValue({
+      id: 't-1',
+      controllerId: 'c-2',
+    });
     prisma.clan.findUnique.mockResolvedValue({ id: 'c-1', funds: 10000 });
     prisma.clanTerritory.findUnique.mockResolvedValue({
       territoryId: 't-1',
@@ -76,7 +107,11 @@ describe('ClansService (Donations, Turf Shield, Territory Tax & Leadership)', ()
 
   it('collectTerritoryTax deposits incomeRate * 2 into clan funds and respects 4h cooldown', async () => {
     prisma.player.findUnique.mockResolvedValue({ id: 'p-1' });
-    prisma.clanMember.findUnique.mockResolvedValue({ playerId: 'p-1', clanId: 'c-1', role: 'OFFICER' });
+    prisma.clanMember.findUnique.mockResolvedValue({
+      playerId: 'p-1',
+      clanId: 'c-1',
+      role: 'OFFICER',
+    });
     prisma.territory.findUnique.mockResolvedValue({
       id: 't-1',
       name: 'Puerto Banús',
@@ -102,7 +137,12 @@ describe('ClansService (Donations, Turf Shield, Territory Tax & Leadership)', ()
   it('transfers clan leadership, kicks members, and disbands clan cleanly', async () => {
     prisma.player.findUnique.mockResolvedValue({ id: 'p-leader' });
     prisma.clanMember.findUnique
-      .mockResolvedValueOnce({ id: 'm-1', playerId: 'p-leader', clanId: 'c-1', role: 'LEADER' })
+      .mockResolvedValueOnce({
+        id: 'm-1',
+        playerId: 'p-leader',
+        clanId: 'c-1',
+        role: 'LEADER',
+      })
       .mockResolvedValueOnce({
         id: 'm-2',
         playerId: 'p-member',
@@ -111,7 +151,10 @@ describe('ClansService (Donations, Turf Shield, Territory Tax & Leadership)', ()
         player: { displayName: 'Socio' },
       });
 
-    const transferred = await service.transferLeadership('u-leader', 'p-member');
+    const transferred = await service.transferLeadership(
+      'u-leader',
+      'p-member',
+    );
     expect(transferred).toEqual({
       transferred: true,
       newLeaderPlayerId: 'p-member',
@@ -123,7 +166,12 @@ describe('ClansService (Donations, Turf Shield, Territory Tax & Leadership)', ()
     });
 
     prisma.clanMember.findUnique
-      .mockResolvedValueOnce({ id: 'm-1', playerId: 'p-leader', clanId: 'c-1', role: 'LEADER' })
+      .mockResolvedValueOnce({
+        id: 'm-1',
+        playerId: 'p-leader',
+        clanId: 'c-1',
+        role: 'LEADER',
+      })
       .mockResolvedValueOnce({
         id: 'm-3',
         playerId: 'p-recruit',
@@ -133,7 +181,9 @@ describe('ClansService (Donations, Turf Shield, Territory Tax & Leadership)', ()
       });
     const kicked = await service.kickMember('u-leader', 'p-recruit');
     expect(kicked.kicked).toBe(true);
-    expect(prisma.clanMember.delete).toHaveBeenCalledWith({ where: { id: 'm-3' } });
+    expect(prisma.clanMember.delete).toHaveBeenCalledWith({
+      where: { id: 'm-3' },
+    });
 
     prisma.clanMember.findUnique.mockResolvedValueOnce({
       id: 'm-1',

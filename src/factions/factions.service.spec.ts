@@ -37,8 +37,8 @@ describe('FactionsService', () => {
       $transaction: jest.fn(),
     };
 
-    prisma.$transaction.mockImplementation(async (cb: (tx: any) => any) =>
-      cb(prisma),
+    prisma.$transaction.mockImplementation((cb: (tx: any) => any) =>
+      Promise.resolve(cb(prisma)),
     );
 
     realtimeGateway = {

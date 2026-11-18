@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TransactionType, Currency } from '@prisma/client';
+import { Prisma, TransactionType, Currency } from '@prisma/client';
 
 @Injectable()
 export class TransactionsService {
   constructor(private prisma: PrismaService) {}
 
-  async logTransaction(
-    tx: any,
+  logTransaction(
+    tx: Prisma.TransactionClient,
     playerId: string,
     type: TransactionType,
     amount: number,
@@ -27,7 +27,11 @@ export class TransactionsService {
     });
   }
 
-  async getPlayerTransactions(userId: string, page: number = 1, limit: number = 20) {
+  async getPlayerTransactions(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+  ) {
     const player = await this.prisma.player.findUnique({ where: { userId } });
 
     if (!player) {
@@ -55,7 +59,7 @@ export class TransactionsService {
       throw new Error('Player not found');
     }
 
-    const where: any = { playerId: player.id };
+    const where: Prisma.TransactionLogWhereInput = { playerId: player.id };
     if (currency) {
       where.currency = currency;
     }

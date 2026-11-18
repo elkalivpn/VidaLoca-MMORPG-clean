@@ -28,7 +28,10 @@ export interface CardValidationResult {
 @Injectable()
 export class VaultCryptoService {
   private readonly logger = new Logger(VaultCryptoService.name);
-  private readonly AAD_PAYLOAD = Buffer.from('vidaloca-vault-payload-v1', 'utf8');
+  private readonly AAD_PAYLOAD = Buffer.from(
+    'vidaloca-vault-payload-v1',
+    'utf8',
+  );
   private readonly AAD_DEK = Buffer.from('vidaloca-vault-dek-wrap-v1', 'utf8');
   readonly currentKeyVersion = 1;
 
@@ -201,7 +204,9 @@ export class VaultCryptoService {
     }
 
     if (!this.passesLuhn(normalizedPan)) {
-      throw new BadRequestException('Número de tarjeta no supera verificación Luhn');
+      throw new BadRequestException(
+        'Número de tarjeta no supera verificación Luhn',
+      );
     }
 
     const now = new Date();
@@ -217,7 +222,11 @@ export class VaultCryptoService {
     let brand: CardValidationResult['brand'] = 'OTHER';
     if (/^4\d{12}(\d{3})?(\d{3})?$/.test(normalizedPan)) {
       brand = 'VISA';
-    } else if (/^(5[1-5]\d{14}|2(2[2-9]\d{12}|[3-6]\d{13}|7[01]\d{12}|720\d{12}))$/.test(normalizedPan)) {
+    } else if (
+      /^(5[1-5]\d{14}|2(2[2-9]\d{12}|[3-6]\d{13}|7[01]\d{12}|720\d{12}))$/.test(
+        normalizedPan,
+      )
+    ) {
       brand = 'MASTERCARD';
     } else if (/^3[47]\d{13}$/.test(normalizedPan)) {
       brand = 'AMEX';

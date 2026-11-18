@@ -57,9 +57,10 @@ export class RedisIoAdapter extends IoAdapter {
       this.subClient = subClient;
       this.adapterConstructor = createAdapter(pubClient, subClient);
       this.logger.log('Socket.IO Redis adapter connected');
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(
-        `Failed to connect Socket.IO Redis adapter (${err?.message ?? err}) — falling back to in-memory adapter`,
+        `Failed to connect Socket.IO Redis adapter (${msg}) — falling back to in-memory adapter`,
       );
       await Promise.allSettled([
         pubClient.quit().catch(() => pubClient.disconnect()),
@@ -71,7 +72,7 @@ export class RedisIoAdapter extends IoAdapter {
     }
   }
 
-  createIOServer(port: number, options?: ServerOptions): any {
+  createIOServer(port: number, options?: ServerOptions) {
     const isProduction =
       this.configService.get<string>('NODE_ENV') === 'production';
     const allowedOrigins = [
@@ -115,8 +116,10 @@ export class RedisIoAdapter extends IoAdapter {
       },
     };
 
-    const server = super.createIOServer(port, mergedOptions);
-    if (this.adapterConstructor) {
+    const server = super.createIOServer(port, mergedOptions) as {
+      adapter?: (fn: unknown) => void;
+    };
+    if (this.adapterConstructor && typeof server.adapter === 'function') {
       server.adapter(this.adapterConstructor);
     }
     return server;

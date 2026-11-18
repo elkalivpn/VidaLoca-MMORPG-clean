@@ -33,15 +33,12 @@ describe('WorldService', () => {
       $transaction: jest.fn(),
     };
 
-    prisma.$transaction.mockImplementation(async (cb: (tx: any) => any) =>
-      cb(prisma),
+    prisma.$transaction.mockImplementation((cb: (tx: any) => any) =>
+      Promise.resolve(cb(prisma)),
     );
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        WorldService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: [WorldService, { provide: PrismaService, useValue: prisma }],
     }).compile();
 
     service = module.get<WorldService>(WorldService);
@@ -113,9 +110,9 @@ describe('WorldService', () => {
     it('throws BadRequestException when already in destination zone', async () => {
       prisma.player.findUnique.mockResolvedValue(basePlayer);
 
-      await expect(
-        service.travel('user-1', 'madrid_centro'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.travel('user-1', 'madrid_centro')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('travels within the same city using haversine distance and primary vehicle', async () => {
@@ -131,10 +128,12 @@ describe('WorldService', () => {
           speed: 75,
         },
       });
-      prisma.player.update.mockImplementation(async ({ data }: any) => ({
-        ...basePlayer,
-        ...data,
-      }));
+      prisma.player.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({
+          ...basePlayer,
+          ...data,
+        }),
+      );
 
       const result = await service.travel('user-1', 'malasana');
 
@@ -154,10 +153,12 @@ describe('WorldService', () => {
     it('travels intercity via highway graph using public transport when no vehicle exists', async () => {
       prisma.player.findUnique.mockResolvedValue(basePlayer);
       prisma.playerVehicle.findFirst.mockResolvedValue(null);
-      prisma.player.update.mockImplementation(async ({ data }: any) => ({
-        ...basePlayer,
-        ...data,
-      }));
+      prisma.player.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({
+          ...basePlayer,
+          ...data,
+        }),
+      );
 
       const result = await service.travel('user-1', 'barcelona_ramblas');
 
@@ -174,10 +175,12 @@ describe('WorldService', () => {
       const malasanaPlayer = { ...basePlayer, locationId: 'malasana' };
       prisma.player.findUnique.mockResolvedValue(malasanaPlayer);
       prisma.playerVehicle.findFirst.mockResolvedValue(null);
-      prisma.player.update.mockImplementation(async ({ data }: any) => ({
-        ...malasanaPlayer,
-        ...data,
-      }));
+      prisma.player.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({
+          ...malasanaPlayer,
+          ...data,
+        }),
+      );
 
       const result = await service.travel('user-1', 'barcelona_gotico');
 
@@ -213,10 +216,12 @@ describe('WorldService', () => {
           speed: 95,
         },
       });
-      prisma.player.update.mockImplementation(async ({ data }: any) => ({
-        ...hotPlayer,
-        ...data,
-      }));
+      prisma.player.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({
+          ...hotPlayer,
+          ...data,
+        }),
+      );
 
       const result = await service.travel('user-1', 'valencia_artes');
 
@@ -240,10 +245,12 @@ describe('WorldService', () => {
           speed: 55,
         },
       });
-      prisma.player.update.mockImplementation(async ({ data }: any) => ({
-        ...hotPlayer,
-        ...data,
-      }));
+      prisma.player.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({
+          ...hotPlayer,
+          ...data,
+        }),
+      );
 
       const result = await service.travel('user-1', 'valencia_artes');
 
@@ -303,8 +310,12 @@ describe('WorldService', () => {
           piezas_tuning: 0,
         },
       };
-      (prisma.player as any).updateMany = jest.fn().mockResolvedValue({ count: 1 });
-      (prisma as any).transactionLog = { create: jest.fn().mockResolvedValue({}) };
+      (prisma.player as any).updateMany = jest
+        .fn()
+        .mockResolvedValue({ count: 1 });
+      (prisma as any).transactionLog = {
+        create: jest.fn().mockResolvedValue({}),
+      };
 
       prisma.player.findUnique.mockResolvedValue(coastalPlayer);
       const market = await service.getMarket('user-1');
@@ -458,4 +469,3 @@ describe('WorldService', () => {
     });
   });
 });
-

@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { UserRole } from '@prisma/client';
 import { BattlePassService } from './battle-pass.service';
@@ -45,10 +39,7 @@ export class BattlePassController {
   @Post('xp')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  async addXp(
-    @CurrentUser('id') userId: string,
-    @Body() dto: AddXpDto,
-  ) {
+  async addXp(@CurrentUser('id') userId: string, @Body() dto: AddXpDto) {
     return this.battlePassService.addXp(userId, dto.amount);
   }
 
@@ -58,10 +49,7 @@ export class BattlePassController {
   }
 
   @Post('claim')
-  async claim(
-    @CurrentUser('id') userId: string,
-    @Body() dto: ClaimRewardDto,
-  ) {
+  async claim(@CurrentUser('id') userId: string, @Body() dto: ClaimRewardDto) {
     return this.battlePassService.claimReward(userId, dto.level);
   }
 }

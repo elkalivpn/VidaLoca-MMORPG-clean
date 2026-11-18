@@ -19,7 +19,11 @@ export class VehiclesService {
 
   async getCatalog() {
     return this.prisma.vehicleTemplate.findMany({
-      orderBy: [{ isVipOnly: 'asc' }, { priceEuros: 'asc' }, { priceVida: 'asc' }],
+      orderBy: [
+        { isVipOnly: 'asc' },
+        { priceEuros: 'asc' },
+        { priceVida: 'asc' },
+      ],
     });
   }
 
@@ -57,7 +61,9 @@ export class VehiclesService {
       useEuros = false;
     } else if (dto.currency === 'EUR') {
       if (!hasEurosPrice) {
-        throw new BadRequestException('Este vehículo es exclusivo por VidaCoins');
+        throw new BadRequestException(
+          'Este vehículo es exclusivo por VidaCoins',
+        );
       }
       useEuros = true;
     } else {
@@ -139,7 +145,9 @@ export class VehiclesService {
       return created;
     });
 
-    await this.achievementsService?.checkAndUnlock(userId).catch(() => undefined);
+    await this.achievementsService
+      ?.checkAndUnlock(userId)
+      .catch(() => undefined);
     return vehicle;
   }
 
@@ -181,10 +189,12 @@ export class VehiclesService {
     // Repair cost: 1% of vehicle price per missing % of condition
     const basePrice = vehicle.template.priceEuros || 10000;
     const missing = 100 - vehicle.condition;
-    const cost = Math.round((basePrice * 0.01 * missing) * 100) / 100;
+    const cost = Math.round(basePrice * 0.01 * missing * 100) / 100;
 
     if (player.euros < cost) {
-      throw new BadRequestException(`Repair costs ${cost}€. You have ${player.euros}€`);
+      throw new BadRequestException(
+        `Repair costs ${cost}€. You have ${player.euros}€`,
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -194,7 +204,9 @@ export class VehiclesService {
       });
 
       if (debit.count === 0) {
-        throw new BadRequestException(`Repair costs ${cost}€. Insufficient Euros`);
+        throw new BadRequestException(
+          `Repair costs ${cost}€. Insufficient Euros`,
+        );
       }
 
       const repaired = await tx.playerVehicle.update({
@@ -221,8 +233,9 @@ export class VehiclesService {
   private generateLicensePlate(): string {
     const letters = 'BCDFGHJKLMNPRSTVWXYZ';
     const pick = (n: number) =>
-      Array.from({ length: n }, () =>
-        letters[Math.floor(Math.random() * letters.length)],
+      Array.from(
+        { length: n },
+        () => letters[Math.floor(Math.random() * letters.length)],
       ).join('');
     const nums = Math.floor(1000 + Math.random() * 9000);
     return `${pick(4)}${nums}`;

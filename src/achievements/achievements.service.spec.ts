@@ -59,8 +59,8 @@ describe('AchievementsService', () => {
       $transaction: jest.fn(),
     };
 
-    prisma.$transaction.mockImplementation(async (cb: (tx: any) => any) =>
-      cb(prisma),
+    prisma.$transaction.mockImplementation((cb: (tx: any) => any) =>
+      Promise.resolve(cb(prisma)),
     );
 
     const module: TestingModule = await Test.createTestingModule({
@@ -116,8 +116,8 @@ describe('AchievementsService', () => {
     prisma.completedMission.count.mockResolvedValue(12);
     prisma.playerVehicle.count.mockResolvedValue(3);
     prisma.playerProperty.count.mockResolvedValue(1);
-    prisma.playerAchievement.create.mockImplementation(
-      async ({ data }: any) => ({
+    prisma.playerAchievement.create.mockImplementation(({ data }: any) =>
+      Promise.resolve({
         id: `pa-${data.achievementId}`,
         achievementId: data.achievementId,
         achievement: { id: data.achievementId },

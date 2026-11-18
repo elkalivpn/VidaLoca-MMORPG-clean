@@ -109,7 +109,9 @@ export class ClansService {
       where: { playerId: player.id },
     });
     if (!leaderMember || leaderMember.role !== 'LEADER') {
-      throw new ForbiddenException('Solo el líder puede transferir el liderazgo');
+      throw new ForbiddenException(
+        'Solo el líder puede transferir el liderazgo',
+      );
     }
 
     const targetMember = await this.prisma.clanMember.findUnique({
@@ -232,7 +234,6 @@ export class ClansService {
     };
   }
 
-
   async listTerritories() {
     return this.prisma.territory.findMany({
       include: {
@@ -249,10 +250,14 @@ export class ClansService {
       where: { playerId: player.id },
     });
     if (!member) {
-      throw new BadRequestException('Debes pertenecer a un clan para reclamar territorio');
+      throw new BadRequestException(
+        'Debes pertenecer a un clan para reclamar territorio',
+      );
     }
     if (member.role !== 'LEADER' && member.role !== 'OFFICER') {
-      throw new BadRequestException('Solo líder u oficial puede reclamar territorio');
+      throw new BadRequestException(
+        'Solo líder u oficial puede reclamar territorio',
+      );
     }
 
     const territory = await this.prisma.territory.findUnique({
@@ -261,7 +266,9 @@ export class ClansService {
     if (!territory) throw new NotFoundException('Territorio no encontrado');
 
     // Cost: 5000 euros from clan funds (or allow if funds low for early game)
-    const clan = await this.prisma.clan.findUnique({ where: { id: member.clanId } });
+    const clan = await this.prisma.clan.findUnique({
+      where: { id: member.clanId },
+    });
     if (!clan) throw new NotFoundException('Clan no encontrado');
 
     if (territory.controllerId === clan.id) {
@@ -284,7 +291,9 @@ export class ClansService {
 
     const cost = 2500;
     if (clan.funds < cost) {
-      throw new BadRequestException(`El clan necesita al menos ${cost} € en fondos`);
+      throw new BadRequestException(
+        `El clan necesita al menos ${cost} € en fondos`,
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -298,7 +307,9 @@ export class ClansService {
       });
 
       if (debit.count === 0) {
-        throw new BadRequestException(`El clan necesita al menos ${cost} € en fondos`);
+        throw new BadRequestException(
+          `El clan necesita al menos ${cost} € en fondos`,
+        );
       }
 
       // Release previous control record if any
@@ -341,7 +352,9 @@ export class ClansService {
         data: { euros: { decrement: cleanAmount } },
       });
       if (debit.count === 0) {
-        throw new BadRequestException('Saldo insuficiente para aportar al clan');
+        throw new BadRequestException(
+          'Saldo insuficiente para aportar al clan',
+        );
       }
 
       const clan = await tx.clan.update({

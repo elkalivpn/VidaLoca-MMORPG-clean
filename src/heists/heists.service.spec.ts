@@ -76,15 +76,12 @@ describe('HeistsService', () => {
       $transaction: jest.fn(),
     };
 
-    prisma.$transaction.mockImplementation(async (cb: (tx: any) => any) =>
-      cb(prisma),
+    prisma.$transaction.mockImplementation((cb: (tx: any) => any) =>
+      Promise.resolve(cb(prisma)),
     );
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        HeistsService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: [HeistsService, { provide: PrismaService, useValue: prisma }],
     }).compile();
 
     service = module.get<HeistsService>(HeistsService);
@@ -221,9 +218,9 @@ describe('HeistsService', () => {
       });
 
       prisma.player.findUnique.mockResolvedValueOnce(leaderPlayer);
-      await expect(
-        service.executeLobby('user-1', lobby.id),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.executeLobby('user-1', lobby.id)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('rejects execution by a player who is not in the lobby', async () => {
@@ -234,9 +231,9 @@ describe('HeistsService', () => {
       });
 
       prisma.player.findUnique.mockResolvedValueOnce(enforcerPlayer);
-      await expect(
-        service.executeLobby('user-3', lobby.id),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.executeLobby('user-3', lobby.id)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('executes heist atomically on success and distributes euros, dirtyEuros, xp, heat, and wantedLevel', async () => {
@@ -252,16 +249,19 @@ describe('HeistsService', () => {
       await service.joinLobby('user-2', lobby.id, { role: 'HACKER' });
 
       prisma.player.findUnique.mockResolvedValueOnce(leaderPlayer);
-      prisma.player.findMany.mockResolvedValueOnce([leaderPlayer, hackerPlayer]);
-      prisma.player.update.mockImplementation(async ({ where, data }: any) => {
+      prisma.player.findMany.mockResolvedValueOnce([
+        leaderPlayer,
+        hackerPlayer,
+      ]);
+      prisma.player.update.mockImplementation(({ where, data }: any) => {
         const base = where.id === 'player-1' ? leaderPlayer : hackerPlayer;
-        return {
+        return Promise.resolve({
           ...base,
           xp: data.xp,
           level: data.level,
           heat: data.heat,
           wantedLevel: data.wantedLevel,
-        };
+        });
       });
 
       const res = await service.executeLobby('user-1', lobby.id);
@@ -291,13 +291,15 @@ describe('HeistsService', () => {
 
       prisma.player.findUnique.mockResolvedValueOnce(leaderPlayer);
       prisma.player.findMany.mockResolvedValueOnce([leaderPlayer]);
-      prisma.player.update.mockImplementation(async ({ data }: any) => ({
-        ...leaderPlayer,
-        xp: data.xp,
-        level: data.level,
-        heat: data.heat,
-        wantedLevel: data.wantedLevel,
-      }));
+      prisma.player.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({
+          ...leaderPlayer,
+          xp: data.xp,
+          level: data.level,
+          heat: data.heat,
+          wantedLevel: data.wantedLevel,
+        }),
+      );
 
       const res = await service.executeLobby('user-1', lobby.id);
 
@@ -327,7 +329,9 @@ describe('HeistsService', () => {
 
       expect(res.left).toBe(true);
       expect(res.disbanded).toBe(false);
-      expect(service.getCatalogAndLobbies().activeLobbies[0].participants).toHaveLength(1);
+      expect(
+        service.getCatalogAndLobbies().activeLobbies[0].participants,
+      ).toHaveLength(1);
     });
 
     it('disbands the lobby when leader leaves', async () => {

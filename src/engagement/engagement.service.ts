@@ -39,14 +39,14 @@ export interface DailyChallengeDef {
   rewardVidaCoins: number;
 }
 
-interface DailyProgressState {
+type DailyProgressState = {
   date: string;
   action: number;
   travel: number;
   trade: number;
   mission: number;
   claimed: string[];
-}
+};
 
 const CHALLENGE_POOL: DailyChallengeDef[] = [
   {
@@ -395,7 +395,7 @@ export class EngagementService {
       where: { id: playerId },
       data: {
         dailyChallengesDate: dateKey,
-        dailyChallengesProgress: state as object,
+        dailyChallengesProgress: state,
       },
     });
   }
@@ -452,7 +452,7 @@ export class EngagementService {
         where: { id: player.id },
         data: {
           dailyChallengesDate: dateKey,
-          dailyChallengesProgress: state as object,
+          dailyChallengesProgress: state,
           euros: { increment: def.rewardEuros },
           vidaCoins: { increment: def.rewardVidaCoins },
           xp: nextXp,

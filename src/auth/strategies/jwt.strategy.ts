@@ -4,6 +4,12 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../auth.service';
 
+interface JwtPayload {
+  sub: string;
+  tokenType?: string;
+  tv?: number;
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
@@ -18,7 +24,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: any) {
+  async validate(payload: JwtPayload) {
     if (payload?.tokenType && payload.tokenType !== 'access') {
       throw new UnauthorizedException('Invalid token type');
     }

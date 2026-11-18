@@ -60,6 +60,7 @@ const INJECTION_RULES: InjectionRule[] = [
 
 // Zero-width characters, bidirectional overrides, and ASCII control chars (except \n and \t)
 const CONTROL_AND_BIDI_REGEX =
+  // eslint-disable-next-line no-control-regex -- intentionally matches ASCII control chars to strip them from player text
   /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g;
 
 @Injectable()
@@ -119,7 +120,10 @@ export class AntiPromptInjectionService {
    * Builds a delimiter-isolated prompt envelope for any AI/NPC dialogue pipeline
    * and strips unsafe control tokens from untrusted user text.
    */
-  buildIsolatedNpcPrompt(systemDirective: string, userMessage: string): {
+  buildIsolatedNpcPrompt(
+    systemDirective: string,
+    userMessage: string,
+  ): {
     systemPrompt: string;
     userEnvelope: string;
     inspection: PromptInspectionResult;

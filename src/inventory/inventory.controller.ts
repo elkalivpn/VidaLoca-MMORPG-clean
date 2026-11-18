@@ -1,7 +1,24 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { UserRole } from '@prisma/client';
-import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { InventoryService } from './inventory.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -129,17 +146,26 @@ export class InventoryController {
   }
 
   @Post('equip/:itemId')
-  async equipItem(@Req() req: { user: { id: string } }, @Param('itemId') itemId: string) {
+  async equipItem(
+    @Req() req: { user: { id: string } },
+    @Param('itemId') itemId: string,
+  ) {
     return this.inventoryService.equipItem(req.user.id, itemId);
   }
 
   @Post('unequip/:itemId')
-  async unequipItem(@Req() req: { user: { id: string } }, @Param('itemId') itemId: string) {
+  async unequipItem(
+    @Req() req: { user: { id: string } },
+    @Param('itemId') itemId: string,
+  ) {
     return this.inventoryService.unequipItem(req.user.id, itemId);
   }
 
   @Post('use/:itemId')
-  async useItem(@Req() req: { user: { id: string } }, @Param('itemId') itemId: string) {
+  async useItem(
+    @Req() req: { user: { id: string } },
+    @Param('itemId') itemId: string,
+  ) {
     return this.inventoryService.useItem(req.user.id, itemId);
   }
 
@@ -161,7 +187,10 @@ export class InventoryController {
   }
 
   @Post('weapons/equip/:weaponId')
-  async equipWeapon(@Req() req: { user: { id: string } }, @Param('weaponId') weaponId: string) {
+  async equipWeapon(
+    @Req() req: { user: { id: string } },
+    @Param('weaponId') weaponId: string,
+  ) {
     return this.inventoryService.equipWeapon(req.user.id, weaponId);
   }
 }

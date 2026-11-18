@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { AuthenticatedRequest } from '../common/types/auth-request.type';
 import { FactionsService } from './factions.service';
 import { InterceptDto, JoinFactionDto } from './dto/factions.dto';
 
@@ -12,14 +13,16 @@ export class FactionsController {
   constructor(private readonly factionsService: FactionsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Catálogo de facciones con perks y miembros activos' })
+  @ApiOperation({
+    summary: 'Catálogo de facciones con perks y miembros activos',
+  })
   getCatalog() {
     return this.factionsService.getCatalog();
   }
 
   @Post('join')
   @ApiOperation({ summary: 'Unirse o cambiar de facción' })
-  joinFaction(@Req() req: any, @Body() dto: JoinFactionDto) {
+  joinFaction(@Req() req: AuthenticatedRequest, @Body() dto: JoinFactionDto) {
     return this.factionsService.joinFaction(req.user.id, dto.faction);
   }
 
@@ -31,7 +34,10 @@ export class FactionsController {
 
   @Post('intercept')
   @ApiOperation({ summary: 'Interceptar a un sospechoso en la misma zona' })
-  interceptSuspect(@Req() req: any, @Body() dto: InterceptDto) {
+  interceptSuspect(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: InterceptDto,
+  ) {
     return this.factionsService.interceptSuspect(
       req.user.id,
       dto.suspectPlayerId,
@@ -40,7 +46,7 @@ export class FactionsController {
 
   @Post('bail')
   @ApiOperation({ summary: 'Pagar fianza para salir del calabozo' })
-  payBail(@Req() req: any) {
+  payBail(@Req() req: AuthenticatedRequest) {
     return this.factionsService.payBail(req.user.id);
   }
 }

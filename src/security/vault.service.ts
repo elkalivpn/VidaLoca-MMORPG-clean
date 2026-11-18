@@ -64,7 +64,9 @@ export class VaultService {
       },
     });
     if (existing) {
-      throw new BadRequestException('Esta tarjeta ya está tokenizada en tu bóveda');
+      throw new BadRequestException(
+        'Esta tarjeta ya está tokenizada en tu bóveda',
+      );
     }
 
     // Store tokenized card metadata inside isolated AES-256-GCM envelope.

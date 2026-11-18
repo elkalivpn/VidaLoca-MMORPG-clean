@@ -790,7 +790,7 @@ export const ZONE_VIBES: Record<string, string> = ZONES.reduce(
 export const VALID_ZONE_IDS = ZONES.map((z) => z.id);
 
 export function isValidZoneId(locationId: string): boolean {
-  return Object.prototype.hasOwnProperty.call(ZONES_BY_ID, locationId);
+  return Object.hasOwn(ZONES_BY_ID, locationId);
 }
 
 export function haversineDistanceKm(
@@ -835,7 +835,12 @@ function dijkstraHighway(
 
   const adj: Record<
     string,
-    Array<{ to: string; distanceKm: number; highway: string; tollEuros: number }>
+    Array<{
+      to: string;
+      distanceKm: number;
+      highway: string;
+      tollEuros: number;
+    }>
   > = {};
 
   for (const route of HIGHWAY_ROUTES) {
@@ -859,16 +864,16 @@ function dijkstraHighway(
     return null;
   }
 
-  const dist: Record<string, number> = { [startId]: 0 };
-  const prev: Record<
+  const dist = new Map<string, number>([[startId, 0]]);
+  const prev = new Map<
     string,
-    { node: string; highway: string; tollEuros: number } | undefined
-  > = {};
+    { node: string; highway: string; tollEuros: number }
+  >();
   const visited = new Set<string>();
   const queue: string[] = [startId];
 
   while (queue.length > 0) {
-    queue.sort((a, b) => (dist[a] ?? Infinity) - (dist[b] ?? Infinity));
+    queue.sort((a, b) => (dist.get(a) ?? Infinity) - (dist.get(b) ?? Infinity));
     const current = queue.shift()!;
     if (visited.has(current)) continue;
     visited.add(current);
@@ -876,20 +881,21 @@ function dijkstraHighway(
     if (current === endId) break;
 
     for (const edge of adj[current] ?? []) {
-      const alt = (dist[current] ?? Infinity) + edge.distanceKm;
-      if (alt < (dist[edge.to] ?? Infinity)) {
-        dist[edge.to] = alt;
-        prev[edge.to] = {
+      const alt = (dist.get(current) ?? Infinity) + edge.distanceKm;
+      if (alt < (dist.get(edge.to) ?? Infinity)) {
+        dist.set(edge.to, alt);
+        prev.set(edge.to, {
           node: current,
           highway: edge.highway,
           tollEuros: edge.tollEuros,
-        };
+        });
         queue.push(edge.to);
       }
     }
   }
 
-  if (dist[endId] === undefined) {
+  const totalDistance = dist.get(endId);
+  if (totalDistance === undefined) {
     return null;
   }
 
@@ -897,15 +903,15 @@ function dijkstraHighway(
   let tollEuros = 0;
   let curr: string | undefined = endId;
   while (curr && curr !== startId) {
-    const step = prev[curr];
-    if (!step) break;
-    highways.unshift(step.highway);
-    tollEuros += step.tollEuros;
-    curr = step.node;
+    const prevStep = prev.get(curr);
+    if (!prevStep) break;
+    highways.unshift(prevStep.highway);
+    tollEuros += prevStep.tollEuros;
+    curr = prevStep.node;
   }
 
   return {
-    distanceKm: dist[endId],
+    distanceKm: totalDistance,
     highways,
     tollEuros,
   };
@@ -959,7 +965,8 @@ export function calculateRouteBetweenZones(
         toId === toHubId
           ? 0
           : haversineDistanceKm(ZONES_BY_ID[toHubId], toZone);
-      const totalKm = Math.round((firstLeg + trunk.distanceKm + lastLeg) * 10) / 10;
+      const totalKm =
+        Math.round((firstLeg + trunk.distanceKm + lastLeg) * 10) / 10;
       return {
         distanceKm: totalKm,
         highway: trunk.highways.join(' + ') || 'Urbano',

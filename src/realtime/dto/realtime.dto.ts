@@ -93,4 +93,3 @@ export class CombatPvpHitDto {
   @MaxLength(32)
   weaponType?: string;
 }
-

@@ -27,13 +27,18 @@ export class PromptInjectionInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     if (context.getType() === 'http') {
-      const req = context.switchToHttp().getRequest();
+      const req = context.switchToHttp().getRequest<{
+        body?: unknown;
+        user?: { id?: string };
+        ip?: string;
+        url?: string;
+      }>();
       if (req?.body && typeof req.body === 'object') {
         this.scanAndSanitizeObject(
           req.body as Record<string, unknown>,
-          req.user?.id as string | undefined,
-          req.ip as string | undefined,
-          req.url as string | undefined,
+          req.user?.id,
+          req.ip,
+          req.url,
         );
       }
     }
@@ -73,8 +78,9 @@ export class PromptInjectionInterceptor implements NestInterceptor {
         }
         obj[key] = result.sanitized;
       } else if (Array.isArray(val)) {
-        for (let i = 0; i < val.length; i++) {
-          const item = val[i];
+        const arr = val as unknown[];
+        for (let i = 0; i < arr.length; i++) {
+          const item = arr[i];
           if (typeof item === 'string') {
             const res = this.promptShield.inspectInput(item, 4000);
             if (!res.safe) {
@@ -82,7 +88,7 @@ export class PromptInjectionInterceptor implements NestInterceptor {
                 `Entrada bloqueada por seguridad en '${key}[${i}]'`,
               );
             }
-            val[i] = res.sanitized;
+            arr[i] = res.sanitized;
           } else if (item && typeof item === 'object') {
             this.scanAndSanitizeObject(
               item as Record<string, unknown>,

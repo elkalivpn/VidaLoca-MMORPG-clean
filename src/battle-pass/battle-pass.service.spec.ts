@@ -45,7 +45,7 @@ describe('BattlePassService', () => {
       transactionLog: {
         create: jest.fn(),
       },
-      $transaction: jest.fn(async (cb: any) => cb(prisma)),
+      $transaction: jest.fn((cb: any) => Promise.resolve(cb(prisma))),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -122,7 +122,10 @@ describe('BattlePassService', () => {
   });
 
   it('rejects unlockPremium when VidaCoins are insufficient', async () => {
-    prisma.player.findUnique.mockResolvedValue({ ...basePlayer, vidaCoins: 50 });
+    prisma.player.findUnique.mockResolvedValue({
+      ...basePlayer,
+      vidaCoins: 50,
+    });
     prisma.battlePassSeason.findFirst.mockResolvedValue(activeSeason);
     prisma.battlePassProgress.findUnique.mockResolvedValue({
       id: 'bp-1',

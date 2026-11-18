@@ -7,7 +7,12 @@ import { PrismaService } from '../prisma/prisma.service';
 describe('AuthService (Guest Mode & Referrals)', () => {
   let service: AuthService;
   let prisma: {
-    user: { findFirst: jest.Mock; findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
+    user: {
+      findFirst: jest.Mock;
+      findUnique: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
     player: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
     refreshToken: { create: jest.Mock };
     transactionLog: { create: jest.Mock; createMany: jest.Mock };
@@ -72,7 +77,10 @@ describe('AuthService (Guest Mode & Referrals)', () => {
       referredByPlayerId: 'ref-player-1',
     });
 
-    const res = await service.guestLogin({ referralCode: 'VL-REF123' }, '1.2.3.4');
+    const res = await service.guestLogin(
+      { referralCode: 'VL-REF123' },
+      '1.2.3.4',
+    );
 
     expect(res.user.isGuest).toBe(true);
     expect(res.accessToken).toBe('mock-token');

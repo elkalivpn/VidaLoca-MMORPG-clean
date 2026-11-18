@@ -1,18 +1,17 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { UserRole } from '@prisma/client';
 import { PlayersService } from './players.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { IsString, IsNotEmpty, IsNumber, IsOptional, Min } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  Min,
+} from 'class-validator';
 
 class UpdateLocationDto {
   @IsString()
@@ -50,12 +49,12 @@ export class PlayersController {
   }
 
   @Get()
-  async getAllPlayers(
-    @Query('page') page = '1',
-    @Query('limit') limit = '20',
-  ) {
+  async getAllPlayers(@Query('page') page = '1', @Query('limit') limit = '20') {
     const safePage = Math.max(1, Number.parseInt(page, 10) || 1);
-    const safeLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
+    const safeLimit = Math.min(
+      100,
+      Math.max(1, Number.parseInt(limit, 10) || 20),
+    );
     return this.playersService.getAllPlayers(safePage, safeLimit);
   }
 
@@ -70,10 +69,7 @@ export class PlayersController {
   @Post('xp')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  async addXp(
-    @CurrentUser('id') userId: string,
-    @Body() dto: AddXpDto,
-  ) {
+  async addXp(@CurrentUser('id') userId: string, @Body() dto: AddXpDto) {
     return this.playersService.addXp(userId, dto.xp, dto.targetPlayerId);
   }
 
