@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/store/auth';
 import { api } from '@/lib/api';
@@ -51,6 +52,7 @@ export default function PlayPage() {
   const [convertEmail, setConvertEmail] = useState('');
   const [convertUsername, setConvertUsername] = useState('');
   const [convertPassword, setConvertPassword] = useState('');
+  const [convertAcceptedTerms, setConvertAcceptedTerms] = useState(false);
   const [convertMsg, setConvertMsg] = useState('');
   const [converting, setConverting] = useState(false);
   const lastLocationIdRef = useRef<string | null>(null);
@@ -127,6 +129,12 @@ export default function PlayPage() {
   async function handleConvertGuest(e: React.FormEvent) {
     e.preventDefault();
     setConvertMsg('');
+    if (!convertAcceptedTerms) {
+      setConvertMsg(
+        'Debes confirmar ser mayor de 18 años (+18) y aceptar los Términos y Privacidad.',
+      );
+      return;
+    }
     setConverting(true);
     try {
       await api.convertGuest({
@@ -134,6 +142,8 @@ export default function PlayPage() {
         username: convertUsername.trim(),
         password: convertPassword,
         displayName: convertUsername.trim(),
+        acceptedTerms: true,
+        isAdultConfirmed: true,
       });
       setConvertMsg('¡Cuenta guardada! Has recibido tu bono de bienvenida.');
       setShowConvertModal(false);
@@ -259,6 +269,24 @@ export default function PlayPage() {
               className="rounded border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-zinc-100"
             />
           </div>
+          <label className="flex items-center gap-1.5 text-[11px] text-zinc-300">
+            <input
+              type="checkbox"
+              checked={convertAcceptedTerms}
+              onChange={(e) => setConvertAcceptedTerms(e.target.checked)}
+              className="h-3.5 w-3.5 accent-amber-400"
+            />
+            <span>
+              +18 y acepto{' '}
+              <Link href="/terms" className="text-amber-300 underline">
+                Términos
+              </Link>{' '}
+              y{' '}
+              <Link href="/privacy" className="text-amber-300 underline">
+                Privacidad
+              </Link>
+            </span>
+          </label>
           <button
             type="submit"
             disabled={converting}

@@ -28,11 +28,14 @@ model User {
   lockedUntil         DateTime?
   tokenVersion        Int       @default(0)
   lastPasswordChange  DateTime  @default(now())
+  termsAcceptedAt     DateTime?
+  ageVerifiedAt       DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   
   player              Player?
   refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
   
   @@map("users")
   @@schema("public")
@@ -494,6 +497,22 @@ model RefreshToken {
   createdAt DateTime  @default(now())
   
   @@map("refresh_tokens")
+  @@schema("public")
+}
+
+model PasswordResetToken {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash       String    @unique
+  requestedIpHash String?
+  usedAt          DateTime?
+  expiresAt       DateTime
+  createdAt       DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
   @@schema("public")
 }
 

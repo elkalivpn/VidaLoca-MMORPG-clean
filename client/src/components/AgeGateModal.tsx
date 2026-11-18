@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 export const AGE_18_STORAGE_KEY = 'vidaloca_age_18_verified';
 
@@ -258,6 +259,24 @@ export default function AgeGateModal({
                 >
                   Soy menor de 18 · Salir
                 </button>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-4 border-t border-zinc-800/80 pt-3 text-[11px] text-zinc-400">
+                <Link
+                  href="/terms"
+                  onClick={handleCloseIfVerified}
+                  className="underline decoration-zinc-600 underline-offset-2 transition hover:text-amber-300"
+                >
+                  Términos de Uso (+18)
+                </Link>
+                <span aria-hidden="true">·</span>
+                <Link
+                  href="/privacy"
+                  onClick={handleCloseIfVerified}
+                  className="underline decoration-zinc-600 underline-offset-2 transition hover:text-amber-300"
+                >
+                  Política de Privacidad y RGPD
+                </Link>
               </div>
             </>
           )}

@@ -15,6 +15,8 @@ import {
   RefreshTokenDto,
   GuestLoginDto,
   ConvertGuestDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
 } from './dto/auth.dto';
 import { AuthGuard } from '@nestjs/passport';
 
@@ -49,6 +51,20 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async login(@Body() loginDto: LoginDto, @Req() req: Request) {
     return this.authService.login(loginDto, req.ip);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
+    return this.authService.requestPasswordReset(dto, req.ip);
+  }
+
+  @Post('reset-password')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
+    return this.authService.resetPassword(dto, req.ip);
   }
 
   @Post('logout')

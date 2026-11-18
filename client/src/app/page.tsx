@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/store/auth';
 import { api } from '@/lib/api';
@@ -419,6 +420,7 @@ export default function HomePage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [referralCode, setReferralCode] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [sceneIndex, setSceneIndex] = useState(0);
@@ -470,6 +472,12 @@ export default function HomePage() {
       );
       return;
     }
+    if (mode === 'register' && !acceptedTerms) {
+      setError(
+        'Debes confirmar que eres mayor de 18 años (+18) y aceptar los Términos y Política de Privacidad.',
+      );
+      return;
+    }
     setLoading(true);
     try {
       const data = (
@@ -480,6 +488,8 @@ export default function HomePage() {
               username,
               password,
               displayName: username,
+              acceptedTerms: true,
+              isAdultConfirmed: true,
               ...(referralCode.trim()
                 ? { referralCode: referralCode.trim().toUpperCase() }
                 : {}),
@@ -1008,7 +1018,14 @@ export default function HomePage() {
                     >
                       Contraseña
                     </label>
-                    {mode === 'register' && (
+                    {mode === 'login' ? (
+                      <Link
+                        href="/forgot-password"
+                        className="text-[11px] font-semibold text-amber-300 underline decoration-amber-500/40 underline-offset-2 transition hover:text-amber-200"
+                      >
+                        ¿Olvidaste tu contraseña?
+                      </Link>
+                    ) : (
                       <span
                         className={`text-[10px] font-semibold ${
                           password.length === 0
@@ -1058,21 +1075,51 @@ export default function HomePage() {
                 </div>
 
                 {mode === 'register' && (
-                  <div>
-                    <label
-                      htmlFor="auth-referral"
-                      className="mb-1 block text-[11px] font-medium text-zinc-400"
-                    >
-                      Código de referido (opcional · +1.500 € y +15 VC)
+                  <>
+                    <div>
+                      <label
+                        htmlFor="auth-referral"
+                        className="mb-1 block text-[11px] font-medium text-zinc-400"
+                      >
+                        Código de referido (opcional · +1.500 € y +15 VC)
+                      </label>
+                      <input
+                        id="auth-referral"
+                        className="w-full rounded-xl border border-zinc-700/90 bg-zinc-900/90 px-3.5 py-2 text-sm uppercase text-zinc-100 placeholder-zinc-500 outline-none transition focus:border-amber-400"
+                        placeholder="VL-XXXXXX"
+                        value={referralCode}
+                        onChange={(e) => setReferralCode(e.target.value)}
+                      />
+                    </div>
+
+                    <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3 text-[11px] leading-relaxed text-zinc-300">
+                      <input
+                        type="checkbox"
+                        checked={acceptedTerms}
+                        onChange={(e) => setAcceptedTerms(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-amber-400"
+                      />
+                      <span>
+                        Confirmo tener{' '}
+                        <strong className="text-rose-300">+18 años</strong> y
+                        acepto los{' '}
+                        <Link
+                          href="/terms"
+                          className="font-semibold text-amber-300 underline decoration-amber-500/40 underline-offset-2 hover:text-amber-200"
+                        >
+                          Términos de Uso
+                        </Link>{' '}
+                        y la{' '}
+                        <Link
+                          href="/privacy"
+                          className="font-semibold text-amber-300 underline decoration-amber-500/40 underline-offset-2 hover:text-amber-200"
+                        >
+                          Política de Privacidad
+                        </Link>
+                        .
+                      </span>
                     </label>
-                    <input
-                      id="auth-referral"
-                      className="w-full rounded-xl border border-zinc-700/90 bg-zinc-900/90 px-3.5 py-2 text-sm uppercase text-zinc-100 placeholder-zinc-500 outline-none transition focus:border-amber-400"
-                      placeholder="VL-XXXXXX"
-                      value={referralCode}
-                      onChange={(e) => setReferralCode(e.target.value)}
-                    />
-                  </div>
+                  </>
                 )}
 
                 {error && (
@@ -1115,8 +1162,21 @@ export default function HomePage() {
                 >
                   Juego exclusivo +18
                 </button>{' '}
-                · Al entrar confirmas ser mayor de edad y aceptas la temática
-                adulta.
+                · Al entrar aceptas nuestros{' '}
+                <Link
+                  href="/terms"
+                  className="underline decoration-zinc-600 underline-offset-2 transition hover:text-amber-300"
+                >
+                  Términos
+                </Link>{' '}
+                y{' '}
+                <Link
+                  href="/privacy"
+                  className="underline decoration-zinc-600 underline-offset-2 transition hover:text-amber-300"
+                >
+                  Privacidad
+                </Link>
+                .
               </p>
 
               <p className="mt-2.5 text-center text-[11px] text-zinc-400">
@@ -1753,6 +1813,14 @@ export default function HomePage() {
                 </button>
               </li>
               <li>
+                <Link
+                  href="/forgot-password"
+                  className="transition hover:text-amber-300"
+                >
+                  Recuperar Contraseña
+                </Link>
+              </li>
+              <li>
                 <button
                   type="button"
                   onClick={() => setAgeModalOpen(true)}
@@ -1766,10 +1834,24 @@ export default function HomePage() {
         </div>
 
         <div className="mx-auto mt-10 flex max-w-7xl flex-col items-center justify-between gap-3 border-t border-zinc-800/80 pt-6 text-[11px] text-zinc-500 sm:flex-row">
-          <p>
-            © {new Date().getFullYear()} VidaLoca MMORPG · Contenido ficticio
-            para mayores de 18 años (+18).
-          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:justify-start">
+            <p>
+              © {new Date().getFullYear()} VidaLoca MMORPG · Contenido ficticio
+              para mayores de 18 años (+18).
+            </p>
+            <Link
+              href="/terms"
+              className="text-zinc-400 underline decoration-zinc-700 underline-offset-2 transition hover:text-amber-300"
+            >
+              Términos (+18)
+            </Link>
+            <Link
+              href="/privacy"
+              className="text-zinc-400 underline decoration-zinc-700 underline-offset-2 transition hover:text-amber-300"
+            >
+              Privacidad y RGPD
+            </Link>
+          </div>
           <a
             href="#portal"
             className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-semibold text-zinc-300 transition hover:border-amber-400 hover:text-amber-300"

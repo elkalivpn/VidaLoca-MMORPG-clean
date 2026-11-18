@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEmail,
   IsNotEmpty,
   IsOptional,
@@ -42,6 +43,14 @@ export class RegisterDto {
   @IsString()
   @MaxLength(24)
   referralCode?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  acceptedTerms?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isAdultConfirmed?: boolean;
 }
 
 export class GuestLoginDto {
@@ -86,6 +95,14 @@ export class ConvertGuestDto {
   @MinLength(2)
   @MaxLength(32)
   displayName?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  acceptedTerms?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isAdultConfirmed?: boolean;
 }
 
 export class LoginDto {
@@ -105,4 +122,28 @@ export class RefreshTokenDto {
   @IsNotEmpty()
   @MaxLength(2048)
   refreshToken: string;
+}
+
+export class ForgotPasswordDto {
+  @IsEmail()
+  @IsNotEmpty()
+  @MaxLength(160)
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(32)
+  @MaxLength(128)
+  token: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8)
+  @MaxLength(72)
+  @Matches(/^(?=.*[A-Za-z])(?=.*\d).+$/, {
+    message: 'La contraseña debe incluir al menos una letra y un número',
+  })
+  newPassword: string;
 }

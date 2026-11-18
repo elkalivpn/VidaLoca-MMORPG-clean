@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   UnauthorizedException,
   ConflictException,
   ForbiddenException,
@@ -17,13 +18,17 @@ import {
   LoginDto,
   GuestLoginDto,
   ConvertGuestDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
 } from './dto/auth.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly BCRYPT_ROUNDS = 12;
   private readonly MAX_FAILED_ATTEMPTS = 5;
   private readonly LOCKOUT_MINUTES = 15;
+  private readonly RESET_TOKEN_TTL_MINUTES = 30;
 
   constructor(
     private prisma: PrismaService,
@@ -41,11 +46,21 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto, ip?: string) {
+    if (
+      registerDto.acceptedTerms === false ||
+      registerDto.isAdultConfirmed === false
+    ) {
+      throw new BadRequestException(
+        'Debes confirmar ser mayor de 18 años (+18) y aceptar los Términos y Política de Privacidad',
+      );
+    }
+
     const email = registerDto.email.trim().toLowerCase();
     const username = registerDto.username.trim();
     const displayName = registerDto.displayName.trim();
     const { password } = registerDto;
     const rawRef = registerDto.referralCode?.trim().toUpperCase();
+    const consentAt = new Date();
 
     // Check if user exists
     const existingUser = await this.prisma.user.findFirst({
@@ -78,6 +93,8 @@ export class AuthService {
           password: hashedPassword,
           role: 'PLAYER',
           isGuest: false,
+          ...(registerDto.acceptedTerms ? { termsAcceptedAt: consentAt } : {}),
+          ...(registerDto.isAdultConfirmed ? { ageVerifiedAt: consentAt } : {}),
         },
       });
 
@@ -226,6 +243,12 @@ export class AuthService {
   }
 
   async convertGuest(userId: string, dto: ConvertGuestDto, ip?: string) {
+    if (dto.acceptedTerms === false || dto.isAdultConfirmed === false) {
+      throw new BadRequestException(
+        'Debes confirmar ser mayor de 18 años (+18) y aceptar los Términos y Política de Privacidad',
+      );
+    }
+
     const existing = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { player: true },
@@ -253,6 +276,7 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(dto.password, this.BCRYPT_ROUNDS);
     const displayName = dto.displayName?.trim() || existing.player.displayName;
     const referrerId = existing.player.referredByPlayerId;
+    const consentAt = new Date();
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const updatedUser = await tx.user.update({
@@ -262,6 +286,8 @@ export class AuthService {
           username,
           password: hashedPassword,
           isGuest: false,
+          ...(dto.acceptedTerms ? { termsAcceptedAt: consentAt } : {}),
+          ...(dto.isAdultConfirmed ? { ageVerifiedAt: consentAt } : {}),
         },
       });
 
@@ -585,6 +611,254 @@ export class AuthService {
         expiresAt,
       },
     });
+  }
+
+  async requestPasswordReset(dto: ForgotPasswordDto, ip?: string) {
+    const email = dto.email.trim().toLowerCase();
+    const genericMessage =
+      'Si existe una cuenta permanente asociada a ese correo, recibirás instrucciones para restablecer tu contraseña en los próximos minutos.';
+
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        isGuest: true,
+        isBanned: true,
+      },
+    });
+
+    if (!user || user.isGuest || user.isBanned) {
+      if (user?.isBanned) {
+        await this.auditService?.logEvent({
+          actorId: user.id,
+          eventType: 'AUTH_PASSWORD_RESET_BANNED_BLOCKED',
+          severity: 'WARN',
+          ip,
+        });
+      }
+      return { message: genericMessage };
+    }
+
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = this.hashToken(rawToken);
+    const now = new Date();
+    const expiresAt = new Date(
+      now.getTime() + this.RESET_TOKEN_TTL_MINUTES * 60_000,
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.passwordResetToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: now },
+      });
+
+      await tx.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          requestedIpHash: this.auditService?.hashIdentifier(ip) ?? null,
+          expiresAt,
+        },
+      });
+    });
+
+    const rawFrontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001';
+    const frontendOrigin = rawFrontendUrl
+      .split(',')[0]
+      .trim()
+      .replace(/\/+$/, '');
+    const resetUrl = `${frontendOrigin}/reset-password?token=${rawToken}`;
+
+    const emailDelivered = await this.sendPasswordResetEmail(
+      user.email,
+      user.username,
+      resetUrl,
+    );
+
+    await this.auditService?.logEvent({
+      actorId: user.id,
+      eventType: 'AUTH_PASSWORD_RESET_REQUESTED',
+      severity: 'INFO',
+      ip,
+      details: { emailDelivered },
+    });
+
+    const nodeEnv = this.configService.get<string>('NODE_ENV') || 'development';
+    if (nodeEnv !== 'production' && !emailDelivered) {
+      this.logger.debug(
+        `[DEV] Password reset link generated for ${user.username}: ${resetUrl}`,
+      );
+      return {
+        message: genericMessage,
+        devResetUrl: resetUrl,
+      };
+    }
+
+    return { message: genericMessage };
+  }
+
+  async resetPassword(dto: ResetPasswordDto, ip?: string) {
+    const tokenHash = this.hashToken(dto.token.trim());
+    const now = new Date();
+
+    const tokenRecord = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      include: {
+        user: {
+          select: {
+            id: true,
+            isGuest: true,
+            isBanned: true,
+          },
+        },
+      },
+    });
+
+    if (!tokenRecord || tokenRecord.usedAt || tokenRecord.expiresAt <= now) {
+      throw new BadRequestException(
+        'El enlace de recuperación es inválido o ha caducado. Solicita uno nuevo.',
+      );
+    }
+
+    if (tokenRecord.user.isBanned) {
+      throw new ForbiddenException('Cuenta suspendida por seguridad');
+    }
+
+    if (tokenRecord.user.isGuest) {
+      throw new BadRequestException(
+        'Las cuentas de invitado no admiten recuperación por correo',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      dto.newPassword,
+      this.BCRYPT_ROUNDS,
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.passwordResetToken.updateMany({
+        where: {
+          id: tokenRecord.id,
+          usedAt: null,
+          expiresAt: { gt: now },
+        },
+        data: { usedAt: now },
+      });
+
+      if (claimed.count !== 1) {
+        throw new BadRequestException(
+          'El enlace de recuperación ya fue utilizado o ha caducado.',
+        );
+      }
+
+      await tx.passwordResetToken.updateMany({
+        where: {
+          userId: tokenRecord.userId,
+          usedAt: null,
+          id: { not: tokenRecord.id },
+        },
+        data: { usedAt: now },
+      });
+
+      await tx.user.update({
+        where: { id: tokenRecord.userId },
+        data: {
+          password: hashedPassword,
+          lastPasswordChange: now,
+          tokenVersion: { increment: 1 },
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
+      });
+
+      await tx.refreshToken.updateMany({
+        where: { userId: tokenRecord.userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+    });
+
+    await this.auditService?.logEvent({
+      actorId: tokenRecord.userId,
+      eventType: 'AUTH_PASSWORD_RESET_COMPLETED',
+      severity: 'HIGH',
+      ip,
+    });
+
+    return {
+      message:
+        'Contraseña actualizada correctamente. Ya puedes iniciar sesión con tu nueva clave.',
+    };
+  }
+
+  private async sendPasswordResetEmail(
+    toEmail: string,
+    username: string,
+    resetUrl: string,
+  ): Promise<boolean> {
+    const resendApiKey = this.configService
+      .get<string>('RESEND_API_KEY')
+      ?.trim();
+    if (!resendApiKey) {
+      return false;
+    }
+
+    const fromAddress =
+      this.configService.get<string>('EMAIL_FROM')?.trim() ||
+      'VidaLoca MMORPG <no-reply@nexusaiholding.com>';
+
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: [toEmail],
+          subject: 'Recupera tu acceso a VidaLoca MMORPG (+18)',
+          text: [
+            `Hola ${username},`,
+            '',
+            'Hemos recibido una solicitud para restablecer tu contraseña en VidaLoca MMORPG (+18).',
+            `Abre este enlace válido durante ${this.RESET_TOKEN_TTL_MINUTES} minutos:`,
+            resetUrl,
+            '',
+            'Si no has solicitado este cambio, ignora este mensaje: tu cuenta sigue protegida.',
+          ].join('\n'),
+          html: `
+            <div style="font-family:Arial,sans-serif;background:#09090b;color:#f4f4f5;padding:24px;border-radius:12px;">
+              <h2 style="color:#f59e0b;margin:0 0 12px;">VidaLoca MMORPG (+18)</h2>
+              <p>Hola <strong>${username}</strong>,</p>
+              <p>Pulsa el botón para definir una nueva contraseña. El enlace caduca en ${this.RESET_TOKEN_TTL_MINUTES} minutos y solo puede usarse una vez:</p>
+              <p style="margin:24px 0;">
+                <a href="${resetUrl}" style="background:#f59e0b;color:#09090b;font-weight:bold;text-decoration:none;padding:12px 20px;border-radius:8px;display:inline-block;">
+                  Restablecer Contraseña
+                </a>
+              </p>
+              <p style="font-size:12px;color:#a1a1aa;">Si no has solicitado este cambio, ignora este correo.</p>
+            </div>
+          `,
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!response.ok) {
+        this.logger.warn(
+          `Resend API devolvió estado ${response.status} al enviar correo de recuperación`,
+        );
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Error enviando correo de recuperación: ${msg}`);
+      return false;
+    }
   }
 
   async validateUser(userId: string, tokenVersion?: number) {
