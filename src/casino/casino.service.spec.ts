@@ -580,4 +580,173 @@ describe('CasinoService', () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('Dual Currency (VIDACOIN)', () => {
+    it('returns VC betting limits in getStatus alongside EUR limits', async () => {
+      prisma.player.findUnique.mockResolvedValue(basePlayer);
+      prisma.transactionLog.findMany.mockResolvedValue([]);
+
+      const res = await service.getStatus('user-1');
+
+      expect(res.minBetVc).toBe(1);
+      expect(res.maxBetVc).toBe(500);
+      expect(res.vipMaxBetVc).toBe(2000);
+    });
+
+    it('rejects fractional VidaCoins bets and debits/credits vidaCoins atomically on Roulette', async () => {
+      prisma.player.findUnique.mockResolvedValue({
+        ...basePlayer,
+        vidaCoins: 20,
+      });
+
+      await expect(
+        service.playRoulette('user-1', {
+          bet: 1.5,
+          betType: 'RED',
+          currency: 'VIDACOIN',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      prisma.player.updateMany.mockResolvedValue({ count: 1 });
+      prisma.player.update.mockResolvedValue({
+        ...basePlayer,
+        vidaCoins: 30,
+        xp: 118,
+        level: 1,
+      });
+      // roll 1 -> RED
+      jest.spyOn(Math, 'random').mockReturnValue(1.1 / 37);
+
+      const res = await service.playRoulette('user-1', {
+        bet: 10,
+        betType: 'RED',
+        currency: 'VIDACOIN',
+      });
+
+      expect(res.currency).toBe('VIDACOIN');
+      expect(res.won).toBe(true);
+      expect(res.payout).toBe(20);
+      expect(res.netProfit).toBe(10);
+      expect(prisma.player.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', vidaCoins: { gte: 10 } },
+        data: { vidaCoins: { decrement: 10 } },
+      });
+      const createCalls = prisma.transactionLog.create.mock.calls as Array<
+        [{ data: Record<string, unknown> }]
+      >;
+      expect(
+        createCalls.some(
+          ([arg]) =>
+            arg.data.type === 'EARN' &&
+            arg.data.amount === 20 &&
+            arg.data.currency === 'VIDACOIN' &&
+            arg.data.reason === 'CASINO:ROULETTE',
+        ),
+      ).toBe(true);
+    });
+
+    it('rounds up integer VC payouts cleanly on Dice SEVEN (1 VC -> 5 VC) and Blackjack 3:2', async () => {
+      prisma.player.findUnique.mockResolvedValue({
+        ...basePlayer,
+        vidaCoins: 10,
+      });
+      prisma.player.updateMany.mockResolvedValue({ count: 1 });
+      prisma.player.update.mockResolvedValue({
+        ...basePlayer,
+        vidaCoins: 14,
+        xp: 118,
+        level: 1,
+      });
+
+      jest
+        .spyOn(Math, 'random')
+        .mockReturnValueOnce(2 / 6)
+        .mockReturnValueOnce(3 / 6);
+
+      const diceRes = await service.playDice('user-1', {
+        bet: 1,
+        choice: 'SEVEN',
+        currency: 'VIDACOIN',
+      });
+      expect(diceRes.currency).toBe('VIDACOIN');
+      expect(diceRes.payout).toBe(5);
+
+      const card = (rank: string, value: number, suit = '♠'): PlayingCard => ({
+        rank,
+        suit,
+        value,
+      });
+      jest
+        .spyOn(service as any, 'createShuffledDeck')
+        .mockReturnValue([
+          card('2', 2),
+          card('9', 9),
+          card('8', 8),
+          card('K', 10),
+          card('A', 11),
+        ]);
+      prisma.player.update.mockResolvedValue({
+        ...basePlayer,
+        vidaCoins: 12,
+        xp: 124,
+        level: 1,
+      });
+
+      const bjNatural = await service.startBlackjack('user-1', {
+        bet: 1,
+        currency: 'VIDACOIN',
+      });
+      expect(bjNatural.currency).toBe('VIDACOIN');
+      expect(bjNatural.status).toBe('PLAYER_BLACKJACK');
+      expect(bjNatural.payout).toBe(3);
+    });
+
+    it('supports Blackjack DOUBLE in VIDACOIN and debits extra vidaCoins atomically', async () => {
+      const card = (rank: string, value: number, suit = '♠'): PlayingCard => ({
+        rank,
+        suit,
+        value,
+      });
+      prisma.player.findUnique.mockResolvedValue({
+        ...basePlayer,
+        vidaCoins: 20,
+      });
+      prisma.player.updateMany.mockResolvedValue({ count: 1 });
+      prisma.player.update.mockResolvedValue({
+        ...basePlayer,
+        vidaCoins: 30,
+        xp: 120,
+        level: 1,
+      });
+
+      jest
+        .spyOn(service as any, 'createShuffledDeck')
+        .mockReturnValue([
+          card('9', 9),
+          card('8', 8),
+          card('10', 10),
+          card('6', 6),
+          card('5', 5),
+        ]);
+
+      const start = await service.startBlackjack('user-1', {
+        bet: 5,
+        currency: 'VIDACOIN',
+      });
+      expect(start.currency).toBe('VIDACOIN');
+
+      const dbl = await service.blackjackAction('user-1', {
+        handId: start.handId!,
+        action: 'DOUBLE',
+      });
+      expect(dbl.currency).toBe('VIDACOIN');
+      expect(dbl.status).toBe('PLAYER_WIN');
+      expect(dbl.bet).toBe(10);
+      expect(dbl.payout).toBe(20);
+      expect(prisma.player.updateMany).toHaveBeenLastCalledWith({
+        where: { userId: 'user-1', vidaCoins: { gte: 5 } },
+        data: { vidaCoins: { decrement: 5 } },
+      });
+    });
+  });
 });

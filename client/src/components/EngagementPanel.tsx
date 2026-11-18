@@ -155,7 +155,7 @@ export default function EngagementPanel() {
         </div>
         {status?.isVip && (
           <span className="rounded-full border border-amber-400/50 bg-amber-500/15 px-3 py-1 text-xs font-bold text-amber-200">
-            👑 Bonus VIP activo (+25% XP)
+            👑 Bonus VIP activo (+15% XP · +5% €)
           </span>
         )}
       </div>

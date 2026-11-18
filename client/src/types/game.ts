@@ -654,6 +654,8 @@ export interface AdminOverviewResponse {
   }>;
 }
 
+export type CasinoCurrency = 'EUR' | 'VIDACOIN';
+
 export type CasinoRouletteBetType =
   'RED' | 'BLACK' | 'GREEN' | 'EVEN' | 'ODD' | 'NUMBER';
 
@@ -669,6 +671,9 @@ export interface CasinoStatusResponse {
   minBet: number;
   maxBet: number;
   vipMaxBet: number;
+  minBetVc?: number;
+  maxBetVc?: number;
+  vipMaxBetVc?: number;
   player: {
     euros: number;
     vidaCoins: number;
@@ -680,6 +685,7 @@ export interface CasinoStatusResponse {
     id: string;
     type: string;
     amount: number;
+    currency?: CasinoCurrency;
     reason: string;
     createdAt: string;
   }>;
@@ -687,6 +693,7 @@ export interface CasinoStatusResponse {
 
 export interface CasinoRouletteResponse {
   game: 'ROULETTE';
+  currency?: CasinoCurrency;
   outcomeNumber?: number;
   resultNumber?: number;
   color?: 'RED' | 'BLACK' | 'GREEN';
@@ -700,11 +707,12 @@ export interface CasinoRouletteResponse {
   xpGained?: number;
   xpDelta?: number;
   narrative?: string;
-  player: { euros: number; xp: number; level: number };
+  player: { euros: number; vidaCoins?: number; xp: number; level: number };
 }
 
 export interface CasinoDiceResponse {
   game: 'DICE';
+  currency?: CasinoCurrency;
   die1?: number;
   die2?: number;
   dice?: [number, number];
@@ -718,11 +726,12 @@ export interface CasinoDiceResponse {
   xpGained?: number;
   xpDelta?: number;
   narrative?: string;
-  player: { euros: number; xp: number; level: number };
+  player: { euros: number; vidaCoins?: number; xp: number; level: number };
 }
 
 export interface CasinoBlackjackResponse {
   handId: string | null;
+  currency?: CasinoCurrency;
   status:
     | 'PLAYING'
     | 'PLAYER_BLACKJACK'
@@ -742,7 +751,7 @@ export interface CasinoBlackjackResponse {
   xpGained?: number;
   xpDelta?: number;
   narrative?: string;
-  player?: { euros: number; xp: number; level: number };
+  player?: { euros: number; vidaCoins?: number; xp: number; level: number };
 }
 
 export interface StreetCombatResponse {

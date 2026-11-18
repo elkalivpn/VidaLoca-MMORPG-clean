@@ -159,3 +159,47 @@ CREATE TRIGGER "trg_immutable_vault_access_logs"
   BEFORE UPDATE OR DELETE ON "vidaloca_vault"."vault_access_logs"
   FOR EACH ROW
   EXECUTE FUNCTION "public"."vidaloca_prevent_audit_mutation"();
+
+-- ----------------------------------------------------------------------------
+-- 6. INVARIANTES MONETARIAS NO NEGATIVAS (CHECK >= 0) EN TABLAS ECONÓMICAS
+--    Impide saldos negativos, lavados por desbordamiento o precios <= 0 en BD.
+-- ----------------------------------------------------------------------------
+DO $$
+DECLARE
+  c RECORD;
+BEGIN
+  FOR c IN
+    SELECT * FROM (VALUES
+      ('players', 'chk_players_euros_non_negative', '"euros" >= 0'),
+      ('players', 'chk_players_dirty_euros_non_negative', '"dirtyEuros" >= 0'),
+      ('players', 'chk_players_vida_coins_non_negative', '"vidaCoins" >= 0'),
+      ('clans', 'chk_clans_funds_non_negative', '"funds" >= 0'),
+      ('market_listings', 'chk_market_listings_price_positive', '"priceEuros" > 0'),
+      ('market_listings', 'chk_market_listings_qty_positive', '"quantity" > 0'),
+      ('transaction_logs', 'chk_transaction_logs_amount_non_negative', '"amount" >= 0')
+    ) AS t(tbl, cname, expr)
+  LOOP
+    IF to_regclass(format('public.%I', c.tbl)) IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = c.cname
+          AND conrelid = to_regclass(format('public.%I', c.tbl))
+      )
+    THEN
+      EXECUTE format(
+        'ALTER TABLE "public".%I ADD CONSTRAINT %I CHECK (%s) NOT VALID',
+        c.tbl,
+        c.cname,
+        c.expr
+      );
+      EXECUTE format(
+        'ALTER TABLE "public".%I VALIDATE CONSTRAINT %I',
+        c.tbl,
+        c.cname
+      );
+    END IF;
+  END LOOP;
+END
+$$;
+

@@ -8,7 +8,12 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, OnModuleInit, OnModuleDestroy, Optional } from '@nestjs/common';
+import {
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+  Optional,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -73,11 +78,15 @@ export interface PresenceEntry {
       if (
         !origin ||
         allowed.includes(origin) ||
-        /^https:\/\/vidaloca[a-z0-9-]*\.vercel\.app$/.test(origin)
+        /^https:\/\/vidaloca[a-z0-9-]*\.vercel\.app$/.test(origin) ||
+        /^https:\/\/([a-z0-9-]+\.)?nexusaiholding\.com$/.test(origin)
       ) {
         callback(null, true);
       } else {
-        callback(new Error('Origin not allowed by WebSocket CORS policy'), false);
+        callback(
+          new Error('Origin not allowed by WebSocket CORS policy'),
+          false,
+        );
       }
     },
     credentials: true,
@@ -85,7 +94,11 @@ export interface PresenceEntry {
   namespace: '/game',
 })
 export class RealtimeGateway
-  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy
+  implements
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    OnModuleInit,
+    OnModuleDestroy
 {
   @WebSocketServer()
   server: Server;
@@ -116,14 +129,16 @@ export class RealtimeGateway
     {
       type: 'raid',
       title: 'Redada en Malasaña',
-      message: 'La policía peina Malasaña. Evita la zona o prepárate para correr.',
+      message:
+        'La policía peina Malasaña. Evita la zona o prepárate para correr.',
       zone: 'malasana',
       severity: 'high',
     },
     {
       type: 'deal',
       title: 'Negocio en Puerto Banús',
-      message: 'Un contacto ofrece un trato opaco en los yates. Solo para los que se atreven.',
+      message:
+        'Un contacto ofrece un trato opaco en los yates. Solo para los que se atreven.',
       zone: 'puerto_banus',
       severity: 'medium',
     },
@@ -137,21 +152,24 @@ export class RealtimeGateway
     {
       type: 'power',
       title: 'Apagón en el Casco Antiguo',
-      message: 'Sevilla a oscuras. Ideal para moverse sin cámaras… si no te pierdes.',
+      message:
+        'Sevilla a oscuras. Ideal para moverse sin cámaras… si no te pierdes.',
       zone: 'sevilla_casco',
       severity: 'medium',
     },
     {
       type: 'heist',
       title: 'Alarma en Salamanca',
-      message: 'Algo grande se mueve en los áticos de Salamanca. Los clanes ya están al tanto.',
+      message:
+        'Algo grande se mueve en los áticos de Salamanca. Los clanes ya están al tanto.',
       zone: 'salamanca',
       severity: 'high',
     },
     {
       type: 'market',
       title: 'Boom del mercado gris',
-      message: 'Los precios de vehículos de lujo fluctúan. Quien compre ahora, gana o quema dinero.',
+      message:
+        'Los precios de vehículos de lujo fluctúan. Quien compre ahora, gana o quema dinero.',
       zone: null,
       severity: 'low',
     },
@@ -162,7 +180,8 @@ export class RealtimeGateway
     private configService: ConfigService,
     private prisma: PrismaService,
     @Optional() private readonly antiCheat?: AntiCheatService,
-    @Optional() private readonly antiPromptInjection?: AntiPromptInjectionService,
+    @Optional()
+    private readonly antiPromptInjection?: AntiPromptInjectionService,
     @Optional() private readonly worldService?: WorldService,
   ) {}
 
@@ -324,7 +343,8 @@ export class RealtimeGateway
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() body: JoinZoneDto,
   ) {
-    if (!client.userId || !client.playerId) return { error: 'Not authenticated' };
+    if (!client.userId || !client.playerId)
+      return { error: 'Not authenticated' };
 
     const nextZone = body?.locationId;
     if (!nextZone || !isValidZoneId(nextZone)) {
@@ -350,7 +370,8 @@ export class RealtimeGateway
       return { error: 'No puedes viajar mientras estás en el calabozo' };
     }
 
-    const authoritativeZone = dbPlayer?.locationId || prevZone || 'madrid_centro';
+    const authoritativeZone =
+      dbPlayer?.locationId || prevZone || 'madrid_centro';
     const prevCity = ZONES_BY_ID[authoritativeZone]?.city;
     const nextCity = ZONES_BY_ID[nextZone]?.city;
     const sameCityMove = Boolean(prevCity && nextCity && prevCity === nextCity);
@@ -480,7 +501,11 @@ export class RealtimeGateway
     }
 
     if (this.isChatRateLimited(client.id)) {
-      return { ok: false, error: 'Rate limit exceeded', reason: 'rate_limited' };
+      return {
+        ok: false,
+        error: 'Rate limit exceeded',
+        reason: 'rate_limited',
+      };
     }
 
     const locationId = client.locationId || 'madrid_centro';
@@ -533,7 +558,11 @@ export class RealtimeGateway
     }
 
     if (this.isChatRateLimited(client.id)) {
-      return { ok: false, error: 'Rate limit exceeded', reason: 'rate_limited' };
+      return {
+        ok: false,
+        error: 'Rate limit exceeded',
+        reason: 'rate_limited',
+      };
     }
 
     const payload = {
@@ -867,6 +896,25 @@ export class RealtimeGateway
   // ─── Helpers (callable from other services) ──────────────────────────
 
   onModuleInit() {
+    // Limpia estados isOnline fantasma tras reinicios abruptos en modo single-node
+    const hasRedis = Boolean(
+      this.configService?.get?.<string>('REDIS_URL')?.trim() ??
+      process.env.REDIS_URL?.trim(),
+    );
+    if (!hasRedis && this.prisma?.player?.updateMany) {
+      void Promise.resolve(
+        this.prisma.player.updateMany({
+          where: { isOnline: true },
+          data: { isOnline: false },
+        }),
+      ).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `Could not reset stale isOnline flags on boot: ${msg}`,
+        );
+      });
+    }
+
     // Eventos dinámicos de mundo cada 3 minutos en producción
     this.worldEventTimer = setInterval(
       () => this.broadcastRandomWorldEvent(),
@@ -885,7 +933,7 @@ export class RealtimeGateway
     this.logger.log('World events scheduler and 10 Hz tick loop started');
   }
 
-  onModuleDestroy() {
+  async onModuleDestroy() {
     if (this.worldEventTimer) {
       clearInterval(this.worldEventTimer);
       this.worldEventTimer = undefined;
@@ -898,6 +946,19 @@ export class RealtimeGateway
       clearInterval(this.tickTimer);
       this.tickTimer = undefined;
     }
+
+    const activePlayerIds = Array.from(
+      new Set(Array.from(this.presence.values()).map((p) => p.playerId)),
+    );
+    if (activePlayerIds.length > 0 && this.prisma?.player?.updateMany) {
+      await Promise.resolve(
+        this.prisma.player.updateMany({
+          where: { id: { in: activePlayerIds } },
+          data: { isOnline: false },
+        }),
+      ).catch(() => undefined);
+    }
+    this.presence.clear();
   }
 
   flushWorldSnapshots() {
@@ -918,7 +979,8 @@ export class RealtimeGateway
   }
 
   private broadcastRandomWorldEvent() {
-    const ev = this.WORLD_EVENTS[Math.floor(Math.random() * this.WORLD_EVENTS.length)];
+    const ev =
+      this.WORLD_EVENTS[Math.floor(Math.random() * this.WORLD_EVENTS.length)];
     this.emitWorldEvent({
       type: ev.type,
       title: ev.title,
@@ -930,10 +992,7 @@ export class RealtimeGateway
   }
 
   /** Broadcast a world event to everyone */
-  emitWorldEvent(event: {
-    type: string;
-    [key: string]: unknown;
-  }) {
+  emitWorldEvent(event: { type: string; [key: string]: unknown }) {
     this.server.emit('world:event', {
       ...event,
       timestamp: new Date().toISOString(),

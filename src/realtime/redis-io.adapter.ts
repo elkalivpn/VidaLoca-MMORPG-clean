@@ -93,11 +93,15 @@ export class RedisIoAdapter extends IoAdapter {
           if (
             !origin ||
             allowedOrigins.includes(origin) ||
-            /^https:\/\/vidaloca[a-z0-9-]*\.vercel\.app$/.test(origin)
+            /^https:\/\/vidaloca[a-z0-9-]*\.vercel\.app$/.test(origin) ||
+            /^https:\/\/([a-z0-9-]+\.)?nexusaiholding\.com$/.test(origin)
           ) {
             callback(null, true);
           } else {
-            callback(new Error('Origin not allowed by WebSocket CORS policy'), false);
+            callback(
+              new Error('Origin not allowed by WebSocket CORS policy'),
+              false,
+            );
           }
         }
       : true;

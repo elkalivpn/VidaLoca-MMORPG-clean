@@ -8,6 +8,7 @@ import {
 import { FactionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { AntiCheatService } from '../security/anti-cheat.service';
 import { calculateLevelFromXp } from '../common/utils/level.util';
 
 export interface FactionCatalogItem {
@@ -76,7 +77,7 @@ const FACTION_CATALOG: FactionCatalogItem[] = [
     id: FactionType.ERTZAINTZA_MOSSOS,
     name: 'Fuerzas Autonómicas',
     description:
-      'Unidades tácticas de Ertzaintza y Mossos d\'Esquadra con despliegue rápido regional.',
+      "Unidades tácticas de Ertzaintza y Mossos d'Esquadra con despliegue rápido regional.",
     perks: [
       'Acceso a Interceptar sospechosos en tu zona',
       'Despliegue ágil entre País Vasco, Navarra y Cataluña',
@@ -130,9 +131,19 @@ const LAW_ENFORCEMENT_FACTIONS: FactionType[] = [
 
 @Injectable()
 export class FactionsService {
+  private static readonly AGENT_INTERCEPT_COOLDOWN_MS = 15_000;
+  private static readonly SUSPECT_IMMUNITY_MS = 5 * 60 * 1000;
+  private static readonly PAIR_WINDOW_MS = 20 * 60 * 1000;
+  private static readonly PAIR_MAX_ATTEMPTS = 3;
+
+  private readonly lastInterceptionByAgent = new Map<string, number>();
+  private readonly suspectImmunityUntil = new Map<string, number>();
+  private readonly pairInterceptions = new Map<string, number[]>();
+
   constructor(
     private prisma: PrismaService,
     @Optional() private realtimeGateway?: RealtimeGateway,
+    @Optional() private antiCheat?: AntiCheatService,
   ) {}
 
   async getCatalog() {
@@ -215,7 +226,10 @@ export class FactionsService {
       displayName: s.displayName,
       locationId: s.locationId || 'madrid_centro',
       heat: s.heat,
-      wantedLevel: Math.max(2, s.wantedLevel || Math.min(5, Math.floor(s.heat / 20))),
+      wantedLevel: Math.max(
+        2,
+        s.wantedLevel || Math.min(5, Math.floor(s.heat / 20)),
+      ),
       bountyEuros: Math.round(75 + s.heat * 2.5),
     }));
   }
@@ -285,6 +299,60 @@ export class FactionsService {
         );
       }
 
+      const nowMs = now.getTime();
+      const pairKey = `${agent.id}:${suspect.id}`;
+      const recentPairAttempts = (
+        this.pairInterceptions.get(pairKey) ?? []
+      ).filter((ts) => nowMs - ts < FactionsService.PAIR_WINDOW_MS);
+
+      if (recentPairAttempts.length >= FactionsService.PAIR_MAX_ATTEMPTS) {
+        await this.antiCheat?.recordViolation({
+          userId,
+          playerId: agent.id,
+          rule: 'ECONOMY_TAMPER',
+          severity: 'HIGH',
+          evidence: {
+            reason: 'police_win_trading',
+            suspectPlayerId: suspect.id,
+            attemptsInWindow: recentPairAttempts.length,
+          },
+        });
+        throw new ForbiddenException(
+          'Protección anti-abuso: límite de intercepciones repetidas contra este sospechoso alcanzado.',
+        );
+      }
+
+      const immuneUntil = this.suspectImmunityUntil.get(suspect.id) ?? 0;
+      if (immuneUntil > nowMs) {
+        const waitSec = Math.ceil((immuneUntil - nowMs) / 1000);
+        throw new BadRequestException(
+          `El sospechoso tiene inmunidad anti-camping temporal tras una persecución reciente (${waitSec}s).`,
+        );
+      }
+
+      const lastAgentAttempt = this.lastInterceptionByAgent.get(agent.id) ?? 0;
+      if (
+        lastAgentAttempt > 0 &&
+        nowMs - lastAgentAttempt < FactionsService.AGENT_INTERCEPT_COOLDOWN_MS
+      ) {
+        const waitSec = Math.ceil(
+          (FactionsService.AGENT_INTERCEPT_COOLDOWN_MS -
+            (nowMs - lastAgentAttempt)) /
+            1000,
+        );
+        throw new BadRequestException(
+          `Enfriamiento policial activo entre intercepciones (${waitSec}s).`,
+        );
+      }
+
+      this.lastInterceptionByAgent.set(agent.id, nowMs);
+      this.suspectImmunityUntil.set(
+        suspect.id,
+        nowMs + FactionsService.SUSPECT_IMMUNITY_MS,
+      );
+      recentPairAttempts.push(nowMs);
+      this.pairInterceptions.set(pairKey, recentPairAttempts);
+
       const agentSpeed = agent.vehicles?.[0]?.template?.speed ?? 65;
       const suspectSpeed = suspect.vehicles?.[0]?.template?.speed ?? 55;
       const speedAdvantage = (agentSpeed - suspectSpeed) * 0.005;
@@ -297,7 +365,10 @@ export class FactionsService {
             : 0;
       const captureChance = Math.max(
         0.15,
-        Math.min(0.95, 0.55 + speedAdvantage + heatFactor + factionCaptureBonus),
+        Math.min(
+          0.95,
+          0.55 + speedAdvantage + heatFactor + factionCaptureBonus,
+        ),
       );
       const captured = Math.random() < captureChance;
 

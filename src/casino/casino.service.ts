@@ -11,9 +11,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AntiCheatService } from '../security/anti-cheat.service';
 import { calculateLevelFromXp } from '../common/utils/level.util';
 import { grantBattlePassXpTx } from '../common/utils/battle-pass.util';
+import { roundEuros } from '../common/utils/money.util';
 import {
   BlackjackActionDto,
   BlackjackStartDto,
+  CasinoCurrency,
   DiceBetDto,
   RouletteBetDto,
 } from './dto/casino.dto';
@@ -28,6 +30,7 @@ export interface BlackjackHand {
   handId: string;
   userId: string;
   playerId: string;
+  currency: CasinoCurrency;
   bet: number;
   deck: PlayingCard[];
   playerCards: PlayingCard[];
@@ -62,6 +65,9 @@ export class CasinoService {
   private static readonly MIN_BET = 10;
   private static readonly MAX_BET = 25000;
   private static readonly VIP_MAX_BET = 100000;
+  private static readonly MIN_BET_VC = 1;
+  private static readonly MAX_BET_VC = 500;
+  private static readonly VIP_MAX_BET_VC = 2000;
   private static readonly HAND_TTL_MS = 15 * 60 * 1000;
 
   private readonly blackjackHands = new Map<string, BlackjackHand>();
@@ -82,7 +88,60 @@ export class CasinoService {
     }
   }
 
-  private normalizeAndValidateBet(rawBet: number, isVip: boolean): number {
+  private resolveCurrency(raw?: CasinoCurrency): CasinoCurrency {
+    return raw === 'VIDACOIN' ? 'VIDACOIN' : 'EUR';
+  }
+
+  private formatAmount(amount: number, currency: CasinoCurrency): string {
+    return currency === 'VIDACOIN'
+      ? `${amount.toLocaleString('es-ES')} VC`
+      : `${amount.toLocaleString('es-ES')} €`;
+  }
+
+  private computePayout(
+    bet: number,
+    multiplier: number,
+    currency: CasinoCurrency,
+  ): number {
+    if (multiplier <= 0) return 0;
+    if (currency === 'VIDACOIN') {
+      return Math.ceil(bet * multiplier);
+    }
+    return roundEuros(bet * multiplier);
+  }
+
+  private normalizeAndValidateBet(
+    rawBet: number,
+    isVip: boolean,
+    currency: CasinoCurrency = 'EUR',
+  ): number {
+    if (currency === 'VIDACOIN') {
+      this.antiCheat?.assertFinitePositive(
+        rawBet,
+        'bet',
+        CasinoService.VIP_MAX_BET_VC,
+      );
+      if (!Number.isInteger(rawBet)) {
+        throw new BadRequestException(
+          'Las apuestas con VidaCoins deben ser números enteros',
+        );
+      }
+      if (rawBet < CasinoService.MIN_BET_VC) {
+        throw new BadRequestException(
+          `La apuesta mínima es de ${CasinoService.MIN_BET_VC} VC`,
+        );
+      }
+      const maxVc = isVip
+        ? CasinoService.VIP_MAX_BET_VC
+        : CasinoService.MAX_BET_VC;
+      if (rawBet > maxVc) {
+        throw new BadRequestException(
+          `Tu límite máximo de apuesta es de ${maxVc} VC${isVip ? '' : ' (VIP hasta 2.000 VC)'}`,
+        );
+      }
+      return Math.trunc(rawBet);
+    }
+
     this.antiCheat?.assertFinitePositive(
       rawBet,
       'bet',
@@ -101,7 +160,38 @@ export class CasinoService {
         `Tu límite máximo de apuesta es de ${maxAllowed}€${isVip ? '' : ' (VIP hasta 100.000€)'}`,
       );
     }
-    return Math.round(rawBet * 100) / 100;
+    return roundEuros(rawBet);
+  }
+
+  private async debitStakeTx(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    bet: number,
+    currency: CasinoCurrency,
+    actionLabel = 'apostar',
+  ): Promise<void> {
+    if (currency === 'VIDACOIN') {
+      const debited = await tx.player.updateMany({
+        where: { userId, vidaCoins: { gte: bet } },
+        data: { vidaCoins: { decrement: bet } },
+      });
+      if (debited.count === 0) {
+        throw new BadRequestException(
+          `No tienes suficientes VidaCoins para ${actionLabel} (${bet} VC)`,
+        );
+      }
+      return;
+    }
+
+    const debited = await tx.player.updateMany({
+      where: { userId, euros: { gte: bet } },
+      data: { euros: { decrement: bet } },
+    });
+    if (debited.count === 0) {
+      throw new BadRequestException(
+        `No tienes suficientes euros para ${actionLabel} (${bet}€)`,
+      );
+    }
   }
 
   private cleanupStaleHands(now = Date.now()): void {
@@ -173,6 +263,9 @@ export class CasinoService {
       minBet: CasinoService.MIN_BET,
       maxBet: CasinoService.MAX_BET,
       vipMaxBet: CasinoService.VIP_MAX_BET,
+      minBetVc: CasinoService.MIN_BET_VC,
+      maxBetVc: CasinoService.MAX_BET_VC,
+      vipMaxBetVc: CasinoService.VIP_MAX_BET_VC,
       player: {
         euros: player.euros,
         vidaCoins: player.vidaCoins,
@@ -194,6 +287,8 @@ export class CasinoService {
       );
     }
 
+    const currency = this.resolveCurrency(dto.currency);
+
     return this.prisma.$transaction(async (tx) => {
       const player = await tx.player.findUnique({ where: { userId } });
       if (!player) {
@@ -201,18 +296,10 @@ export class CasinoService {
       }
       this.assertNotJailed(player.jailUntil);
 
-      const bet = this.normalizeAndValidateBet(dto.bet, player.isVip);
+      const bet = this.normalizeAndValidateBet(dto.bet, player.isVip, currency);
       this.antiCheat?.assertActionCooldown(userId, 'casino_bet', 350);
 
-      const debited = await tx.player.updateMany({
-        where: { userId, euros: { gte: bet } },
-        data: { euros: { decrement: bet } },
-      });
-      if (debited.count === 0) {
-        throw new BadRequestException(
-          `No tienes suficientes euros para apostar ${bet}€`,
-        );
-      }
+      await this.debitStakeTx(tx, userId, bet, currency, 'apostar');
 
       const roll = Math.floor(Math.random() * 37); // 0..36
       const color: 'GREEN' | 'RED' | 'BLACK' =
@@ -248,7 +335,7 @@ export class CasinoService {
           break;
       }
 
-      const payout = won ? Math.round(bet * multiplier * 100) / 100 : 0;
+      const payout = won ? this.computePayout(bet, multiplier, currency) : 0;
       const xpDelta = won ? 18 : 6;
       const newXp = player.xp + xpDelta;
       const calculatedLevel = calculateLevelFromXp(newXp);
@@ -258,7 +345,11 @@ export class CasinoService {
       const updatedPlayer = await tx.player.update({
         where: { id: player.id },
         data: {
-          ...(payout > 0 ? { euros: { increment: payout } } : {}),
+          ...(payout > 0
+            ? currency === 'VIDACOIN'
+              ? { vidaCoins: { increment: payout } }
+              : { euros: { increment: payout } }
+            : {}),
           xp: newXp,
           level: newLevel,
         },
@@ -270,7 +361,7 @@ export class CasinoService {
           playerId: player.id,
           type: 'SPEND',
           amount: bet,
-          currency: 'EUR',
+          currency,
           reason: 'CASINO:ROULETTE',
           reference: `${dto.betType}:${roll}`,
         },
@@ -282,7 +373,7 @@ export class CasinoService {
             playerId: player.id,
             type: 'EARN',
             amount: payout,
-            currency: 'EUR',
+            currency,
             reason: 'CASINO:ROULETTE',
             reference: `WIN:${dto.betType}:${roll}`,
           },
@@ -291,13 +382,15 @@ export class CasinoService {
 
       const colorLabel =
         color === 'RED' ? 'Rojo' : color === 'GREEN' ? 'Verde' : 'Negro';
-      const netProfit = Math.round((payout - bet) * 100) / 100;
+      const netProfit =
+        currency === 'VIDACOIN' ? payout - bet : roundEuros(payout - bet);
       const narrative = won
-        ? `La bola cae en el ${roll} (${colorLabel}). ¡Pleno en la mesa! Cobras ${payout.toLocaleString('es-ES')} €.`
-        : `La bola cae en el ${roll} (${colorLabel}). La banca recoge tus ${bet.toLocaleString('es-ES')} €.`;
+        ? `La bola cae en el ${roll} (${colorLabel}). ¡Pleno en la mesa! Cobras ${this.formatAmount(payout, currency)}.`
+        : `La bola cae en el ${roll} (${colorLabel}). La banca recoge tus ${this.formatAmount(bet, currency)}.`;
 
       return {
         game: 'ROULETTE' as const,
+        currency,
         won,
         bet,
         betType: dto.betType,
@@ -315,6 +408,7 @@ export class CasinoService {
         narrative,
         player: {
           euros: updatedPlayer.euros,
+          vidaCoins: updatedPlayer.vidaCoins,
           xp: updatedPlayer.xp,
           level: updatedPlayer.level,
         },
@@ -323,6 +417,8 @@ export class CasinoService {
   }
 
   async playDice(userId: string, dto: DiceBetDto) {
+    const currency = this.resolveCurrency(dto.currency);
+
     return this.prisma.$transaction(async (tx) => {
       const player = await tx.player.findUnique({ where: { userId } });
       if (!player) {
@@ -330,18 +426,10 @@ export class CasinoService {
       }
       this.assertNotJailed(player.jailUntil);
 
-      const bet = this.normalizeAndValidateBet(dto.bet, player.isVip);
+      const bet = this.normalizeAndValidateBet(dto.bet, player.isVip, currency);
       this.antiCheat?.assertActionCooldown(userId, 'casino_bet', 350);
 
-      const debited = await tx.player.updateMany({
-        where: { userId, euros: { gte: bet } },
-        data: { euros: { decrement: bet } },
-      });
-      if (debited.count === 0) {
-        throw new BadRequestException(
-          `No tienes suficientes euros para apostar ${bet}€`,
-        );
-      }
+      await this.debitStakeTx(tx, userId, bet, currency, 'apostar');
 
       const die1 = Math.floor(Math.random() * 6) + 1;
       const die2 = Math.floor(Math.random() * 6) + 1;
@@ -361,7 +449,7 @@ export class CasinoService {
         multiplier = won ? 4.5 : 0;
       }
 
-      const payout = won ? Math.round(bet * multiplier * 100) / 100 : 0;
+      const payout = won ? this.computePayout(bet, multiplier, currency) : 0;
       const xpDelta = won ? 18 : 6;
       const newXp = player.xp + xpDelta;
       const calculatedLevel = calculateLevelFromXp(newXp);
@@ -371,7 +459,11 @@ export class CasinoService {
       const updatedPlayer = await tx.player.update({
         where: { id: player.id },
         data: {
-          ...(payout > 0 ? { euros: { increment: payout } } : {}),
+          ...(payout > 0
+            ? currency === 'VIDACOIN'
+              ? { vidaCoins: { increment: payout } }
+              : { euros: { increment: payout } }
+            : {}),
           xp: newXp,
           level: newLevel,
         },
@@ -383,7 +475,7 @@ export class CasinoService {
           playerId: player.id,
           type: 'SPEND',
           amount: bet,
-          currency: 'EUR',
+          currency,
           reason: 'CASINO:DICE',
           reference: `${dto.choice}:${die1}+${die2}`,
         },
@@ -395,20 +487,22 @@ export class CasinoService {
             playerId: player.id,
             type: 'EARN',
             amount: payout,
-            currency: 'EUR',
+            currency,
             reason: 'CASINO:DICE',
             reference: `WIN:${dto.choice}:${total}`,
           },
         });
       }
 
-      const netProfit = Math.round((payout - bet) * 100) / 100;
+      const netProfit =
+        currency === 'VIDACOIN' ? payout - bet : roundEuros(payout - bet);
       const narrative = won
-        ? `Los dados marcan ${die1} + ${die2} = ${total}. ¡Tirada ganadora! Cobras ${payout.toLocaleString('es-ES')} €.`
+        ? `Los dados marcan ${die1} + ${die2} = ${total}. ¡Tirada ganadora! Cobras ${this.formatAmount(payout, currency)}.`
         : `Los dados marcan ${die1} + ${die2} = ${total}. La mesa se queda la apuesta.`;
 
       return {
         game: 'DICE' as const,
+        currency,
         won,
         bet,
         choice: dto.choice,
@@ -425,6 +519,7 @@ export class CasinoService {
         narrative,
         player: {
           euros: updatedPlayer.euros,
+          vidaCoins: updatedPlayer.vidaCoins,
           xp: updatedPlayer.xp,
           level: updatedPlayer.level,
         },
@@ -434,6 +529,7 @@ export class CasinoService {
 
   async startBlackjack(userId: string, dto: BlackjackStartDto) {
     this.cleanupStaleHands();
+    const currency = this.resolveCurrency(dto.currency);
 
     return this.prisma.$transaction(async (tx) => {
       const player = await tx.player.findUnique({ where: { userId } });
@@ -442,25 +538,17 @@ export class CasinoService {
       }
       this.assertNotJailed(player.jailUntil);
 
-      const bet = this.normalizeAndValidateBet(dto.bet, player.isVip);
+      const bet = this.normalizeAndValidateBet(dto.bet, player.isVip, currency);
       this.antiCheat?.assertActionCooldown(userId, 'casino_bet', 350);
 
-      const debited = await tx.player.updateMany({
-        where: { userId, euros: { gte: bet } },
-        data: { euros: { decrement: bet } },
-      });
-      if (debited.count === 0) {
-        throw new BadRequestException(
-          `No tienes suficientes euros para apostar ${bet}€`,
-        );
-      }
+      await this.debitStakeTx(tx, userId, bet, currency, 'apostar');
 
       await tx.transactionLog.create({
         data: {
           playerId: player.id,
           type: 'SPEND',
           amount: bet,
-          currency: 'EUR',
+          currency,
           reason: 'CASINO:BLACKJACK',
           reference: 'START',
         },
@@ -479,7 +567,7 @@ export class CasinoService {
         const status = isPush
           ? ('PUSH' as const)
           : ('PLAYER_BLACKJACK' as const);
-        const payout = isPush ? bet : Math.round(bet * 2.5 * 100) / 100;
+        const payout = isPush ? bet : this.computePayout(bet, 2.5, currency);
         const xpDelta = isPush ? 10 : 24;
         const newXp = player.xp + xpDelta;
         const calculatedLevel = calculateLevelFromXp(newXp);
@@ -489,7 +577,9 @@ export class CasinoService {
         const updatedPlayer = await tx.player.update({
           where: { id: player.id },
           data: {
-            euros: { increment: payout },
+            ...(currency === 'VIDACOIN'
+              ? { vidaCoins: { increment: payout } }
+              : { euros: { increment: payout } }),
             xp: newXp,
             level: newLevel,
           },
@@ -501,20 +591,22 @@ export class CasinoService {
             playerId: player.id,
             type: 'EARN',
             amount: payout,
-            currency: 'EUR',
+            currency,
             reason: 'CASINO:BLACKJACK',
             reference: status,
           },
         });
 
-        const netProfit = Math.round((payout - bet) * 100) / 100;
+        const netProfit =
+          currency === 'VIDACOIN' ? payout - bet : roundEuros(payout - bet);
         const narrative = isPush
           ? 'Doble 21 natural en la mesa. Recuperas tu apuesta intacta.'
-          : `¡21 de mano! El crupier solo suma ${dealerScore}. Pago 3:2 (${payout.toLocaleString('es-ES')} €).`;
+          : `¡21 de mano! El crupier solo suma ${dealerScore}. Pago 3:2 (${this.formatAmount(payout, currency)}).`;
 
         return {
           handId: null,
           status,
+          currency,
           bet,
           playerCards,
           dealerCards,
@@ -528,6 +620,7 @@ export class CasinoService {
           narrative,
           player: {
             euros: updatedPlayer.euros,
+            vidaCoins: updatedPlayer.vidaCoins,
             xp: updatedPlayer.xp,
             level: updatedPlayer.level,
           },
@@ -539,6 +632,7 @@ export class CasinoService {
         handId,
         userId,
         playerId: player.id,
+        currency,
         bet,
         deck,
         playerCards,
@@ -549,6 +643,7 @@ export class CasinoService {
       return {
         handId,
         status: 'PLAYING' as const,
+        currency,
         bet,
         playerCards,
         dealerCards: [dealerCards[0], { rank: '?', suit: '♠', value: 0 }],
@@ -562,7 +657,14 @@ export class CasinoService {
         narrative:
           'Cartas repartidas. Pide carta, plántate o dobla la apuesta.',
         player: {
-          euros: Math.max(0, Math.round((player.euros - bet) * 100) / 100),
+          euros:
+            currency === 'EUR'
+              ? Math.max(0, roundEuros(player.euros - bet))
+              : player.euros,
+          vidaCoins:
+            currency === 'VIDACOIN'
+              ? Math.max(0, player.vidaCoins - bet)
+              : player.vidaCoins,
           xp: player.xp,
           level: player.level,
         },
@@ -597,6 +699,7 @@ export class CasinoService {
           return {
             handId: hand.handId,
             status: 'PLAYING' as const,
+            currency: hand.currency,
             bet: hand.bet,
             playerCards: hand.playerCards,
             dealerCards: [
@@ -637,6 +740,7 @@ export class CasinoService {
           return {
             handId: hand.handId,
             status: 'BUST' as const,
+            currency: hand.currency,
             bet: hand.bet,
             playerCards: hand.playerCards,
             dealerCards: hand.dealerCards,
@@ -650,6 +754,7 @@ export class CasinoService {
             narrative: `Has alcanzado ${playerScore} y te pasas de 21. El crupier (${dealerScore}) gana la mano.`,
             player: {
               euros: updatedPlayer.euros,
+              vidaCoins: updatedPlayer.vidaCoins,
               xp: updatedPlayer.xp,
               level: updatedPlayer.level,
             },
@@ -666,28 +771,29 @@ export class CasinoService {
           this.assertNotJailed(player.jailUntil);
 
           const extraBet = hand.bet;
-          const debited = await tx.player.updateMany({
-            where: { userId, euros: { gte: extraBet } },
-            data: { euros: { decrement: extraBet } },
-          });
-          if (debited.count === 0) {
-            throw new BadRequestException(
-              `No tienes suficientes euros para doblar (${extraBet}€)`,
-            );
-          }
+          await this.debitStakeTx(
+            tx,
+            userId,
+            extraBet,
+            hand.currency,
+            'doblar',
+          );
 
           await tx.transactionLog.create({
             data: {
               playerId: player.id,
               type: 'SPEND',
               amount: extraBet,
-              currency: 'EUR',
+              currency: hand.currency,
               reason: 'CASINO:BLACKJACK',
               reference: `DOUBLE:${hand.handId}`,
             },
           });
 
-          hand.bet = Math.round((hand.bet + extraBet) * 100) / 100;
+          hand.bet =
+            hand.currency === 'VIDACOIN'
+              ? hand.bet + extraBet
+              : roundEuros(hand.bet + extraBet);
           hand.playerCards.push(this.drawCard(hand.deck));
           const playerScore = this.calculateHandScore(hand.playerCards);
 
@@ -710,6 +816,7 @@ export class CasinoService {
             return {
               handId: hand.handId,
               status: 'BUST' as const,
+              currency: hand.currency,
               bet: hand.bet,
               playerCards: hand.playerCards,
               dealerCards: hand.dealerCards,
@@ -723,6 +830,7 @@ export class CasinoService {
               narrative: `Doblaste la apuesta y alcanzaste ${playerScore} puntos: te pasas de 21.`,
               player: {
                 euros: updatedPlayer.euros,
+                vidaCoins: updatedPlayer.vidaCoins,
                 xp: updatedPlayer.xp,
                 level: updatedPlayer.level,
               },
@@ -766,7 +874,7 @@ export class CasinoService {
 
     if (dealerScore > 21 || playerScore > dealerScore) {
       status = 'PLAYER_WIN';
-      payout = Math.round(hand.bet * 2 * 100) / 100;
+      payout = this.computePayout(hand.bet, 2, hand.currency);
       xpDelta = 20;
     } else if (playerScore === dealerScore) {
       status = 'PUSH';
@@ -786,7 +894,11 @@ export class CasinoService {
     const updatedPlayer = await tx.player.update({
       where: { id: player.id },
       data: {
-        ...(payout > 0 ? { euros: { increment: payout } } : {}),
+        ...(payout > 0
+          ? hand.currency === 'VIDACOIN'
+            ? { vidaCoins: { increment: payout } }
+            : { euros: { increment: payout } }
+          : {}),
         xp: newXp,
         level: newLevel,
       },
@@ -799,26 +911,30 @@ export class CasinoService {
           playerId: player.id,
           type: 'EARN',
           amount: payout,
-          currency: 'EUR',
+          currency: hand.currency,
           reason: 'CASINO:BLACKJACK',
           reference: `${status}:${hand.handId}`,
         },
       });
     }
 
-    const netProfit = Math.round((payout - hand.bet) * 100) / 100;
+    const netProfit =
+      hand.currency === 'VIDACOIN'
+        ? payout - hand.bet
+        : roundEuros(payout - hand.bet);
     const narrative =
       status === 'PLAYER_WIN'
         ? dealerScore > 21
-          ? `El crupier se pasa con ${dealerScore}. ¡Ganas ${payout.toLocaleString('es-ES')} €!`
-          : `Superas al crupier (${playerScore} vs ${dealerScore}). ¡Cobras ${payout.toLocaleString('es-ES')} €!`
+          ? `El crupier se pasa con ${dealerScore}. ¡Ganas ${this.formatAmount(payout, hand.currency)}!`
+          : `Superas al crupier (${playerScore} vs ${dealerScore}). ¡Cobras ${this.formatAmount(payout, hand.currency)}!`
         : status === 'PUSH'
-          ? `Empate a ${playerScore} puntos. Recuperas tu apuesta de ${hand.bet.toLocaleString('es-ES')} €.`
+          ? `Empate a ${playerScore} puntos. Recuperas tu apuesta de ${this.formatAmount(hand.bet, hand.currency)}.`
           : `El crupier alcanza ${dealerScore} frente a tu ${playerScore}. La banca se lleva la mano.`;
 
     return {
       handId: hand.handId,
       status,
+      currency: hand.currency,
       bet: hand.bet,
       playerCards: hand.playerCards,
       dealerCards: hand.dealerCards,
@@ -832,6 +948,7 @@ export class CasinoService {
       narrative,
       player: {
         euros: updatedPlayer.euros,
+        vidaCoins: updatedPlayer.vidaCoins,
         xp: updatedPlayer.xp,
         level: updatedPlayer.level,
       },

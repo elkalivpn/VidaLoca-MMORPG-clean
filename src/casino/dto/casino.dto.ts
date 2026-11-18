@@ -9,6 +9,9 @@ import {
   Min,
 } from 'class-validator';
 
+export const CASINO_CURRENCIES = ['EUR', 'VIDACOIN'] as const;
+export type CasinoCurrency = (typeof CASINO_CURRENCIES)[number];
+
 export const ROULETTE_BET_TYPES = [
   'RED',
   'BLACK',
@@ -28,7 +31,7 @@ export type BlackjackAction = (typeof BLACKJACK_ACTIONS)[number];
 
 export class RouletteBetDto {
   @IsNumber()
-  @Min(10)
+  @Min(1)
   @Max(100000)
   bet: number;
 
@@ -40,23 +43,35 @@ export class RouletteBetDto {
   @Min(0)
   @Max(36)
   number?: number;
+
+  @IsOptional()
+  @IsIn(CASINO_CURRENCIES)
+  currency?: CasinoCurrency;
 }
 
 export class DiceBetDto {
   @IsNumber()
-  @Min(10)
+  @Min(1)
   @Max(100000)
   bet: number;
 
   @IsIn(DICE_CHOICES)
   choice: DiceChoice;
+
+  @IsOptional()
+  @IsIn(CASINO_CURRENCIES)
+  currency?: CasinoCurrency;
 }
 
 export class BlackjackStartDto {
   @IsNumber()
-  @Min(10)
+  @Min(1)
   @Max(100000)
   bet: number;
+
+  @IsOptional()
+  @IsIn(CASINO_CURRENCIES)
+  currency?: CasinoCurrency;
 }
 
 export class BlackjackActionDto {

@@ -126,7 +126,7 @@ export default function PropertiesPanel() {
       };
       const rentLabel =
         typeof res?.rent === 'number'
-          ? `+${res.rent.toLocaleString('es-ES')} €${res.vipBonusApplied ? ' (👑 VIP +15%)' : ''}`
+          ? `+${res.rent.toLocaleString('es-ES')} €${res.vipBonusApplied ? ' (👑 VIP +5%)' : ''}`
           : '';
       setMsg({
         text: rentLabel ? `Renta cobrada: ${rentLabel}.` : 'Renta cobrada.',
@@ -202,7 +202,7 @@ export default function PropertiesPanel() {
           </h3>
           {isVipActive && (
             <span className="text-[11px] font-semibold text-amber-300">
-              👑 Bonus Club VIP activo: +15% renta por hora
+              👑 Bonus Club VIP activo: +5% renta por hora
             </span>
           )}
         </div>

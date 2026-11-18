@@ -25,6 +25,7 @@ import { HeistsModule } from './heists/heists.module';
 import { EngagementModule } from './engagement/engagement.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
 import { AdminModule } from './admin/admin.module';
+import { validateEnvironment } from './common/config/env.validation';
 import { CasinoModule } from './casino/casino.module';
 
 @Module({
@@ -32,6 +33,7 @@ import { CasinoModule } from './casino/casino.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env', '.env.local'],
+      validate: validateEnvironment,
     }),
     ThrottlerModule.forRoot([
       {

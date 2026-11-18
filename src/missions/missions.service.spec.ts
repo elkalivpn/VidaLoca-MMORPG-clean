@@ -172,18 +172,18 @@ describe('MissionsService (Story, Online Solo, Online Co-op & Optional Choice)',
     prisma.missionTemplate.findUnique.mockResolvedValue(soloTemplate);
     prisma.playerMission.findFirst.mockResolvedValue(null);
 
-    await expect(service.startMission('user-1', soloTemplate.id)).rejects.toThrow(
-      ForbiddenException,
-    );
+    await expect(
+      service.startMission('user-1', soloTemplate.id),
+    ).rejects.toThrow(ForbiddenException);
 
     prisma.player.findUnique.mockResolvedValue(playerOne);
     prisma.completedMission.findFirst.mockResolvedValue({
       completedAt: new Date(Date.now() - 3600_000), // 1h ago, needs 12h
     });
 
-    await expect(service.startMission('user-1', soloTemplate.id)).rejects.toThrow(
-      ForbiddenException,
-    );
+    await expect(
+      service.startMission('user-1', soloTemplate.id),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it('creates and joins ONLINE_COOP squads with friends and enforces city/crew/cooldown checks on advance', async () => {
@@ -249,8 +249,18 @@ describe('MissionsService (Story, Online Solo, Online Co-op & Optional Choice)',
       progress: 100,
       squadCode: 'VL-AABBCC',
       coOpParticipants: [
-        { playerId: playerOne.id, userId: playerOne.userId, displayName: playerOne.displayName, role: 'LEADER' },
-        { playerId: playerTwo.id, userId: playerTwo.userId, displayName: playerTwo.displayName, role: 'MEMBER' },
+        {
+          playerId: playerOne.id,
+          userId: playerOne.userId,
+          displayName: playerOne.displayName,
+          role: 'LEADER',
+        },
+        {
+          playerId: playerTwo.id,
+          userId: playerTwo.userId,
+          displayName: playerTwo.displayName,
+          role: 'MEMBER',
+        },
       ],
       template: coopTemplate,
     };
@@ -290,7 +300,7 @@ describe('MissionsService (Story, Online Solo, Online Co-op & Optional Choice)',
     );
   });
 
-  it('blocks non-VIP players from starting VIP missions and grants +15% EUR / +25% XP to VIPs', async () => {
+  it('blocks non-VIP players from starting VIP missions and grants +5% EUR / +15% XP to VIPs', async () => {
     const vipTemplate = {
       ...soloTemplate,
       id: 'tpl-vip-1',
@@ -335,15 +345,15 @@ describe('MissionsService (Story, Online Solo, Online Co-op & Optional Choice)',
     prisma.playerMission.updateMany.mockResolvedValue({ count: 1 });
     prisma.player.update.mockResolvedValue({
       ...activeVipPlayer,
-      euros: 2150,
-      xp: 10000,
+      euros: 2050,
+      xp: 9960,
       level: 10,
     });
 
     const claimed = await service.claimReward('user-1', 'pm-vip-1');
     expect(claimed.rewards.vipBonusApplied).toBe(true);
-    expect(claimed.rewards.euros).toBe(1150); // 1000 * 1.15
-    expect(claimed.rewards.xp).toBe(500); // 400 * 1.25
+    expect(claimed.rewards.euros).toBe(1050); // 1000 * 1.05
+    expect(claimed.rewards.xp).toBe(460); // 400 * 1.15
   });
 
   it('allows Co-op teammates to leave an active squad cleanly without abandoning the leader run', async () => {
@@ -353,8 +363,18 @@ describe('MissionsService (Story, Online Solo, Online Co-op & Optional Choice)',
       status: MissionStatus.IN_PROGRESS,
       squadCode: 'VL-112233',
       coOpParticipants: [
-        { playerId: playerOne.id, userId: playerOne.userId, displayName: playerOne.displayName, role: 'LEADER' },
-        { playerId: playerTwo.id, userId: playerTwo.userId, displayName: playerTwo.displayName, role: 'MEMBER' },
+        {
+          playerId: playerOne.id,
+          userId: playerOne.userId,
+          displayName: playerOne.displayName,
+          role: 'LEADER',
+        },
+        {
+          playerId: playerTwo.id,
+          userId: playerTwo.userId,
+          displayName: playerTwo.displayName,
+          role: 'MEMBER',
+        },
       ],
       template: coopTemplate,
     };

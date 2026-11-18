@@ -496,6 +496,7 @@ export const api = {
   casinoStatus: () => request<CasinoStatusResponse>('/casino/status'),
   casinoRoulette: (data: {
     bet: number;
+    currency?: 'EUR' | 'VIDACOIN';
     betType: CasinoRouletteBetType;
     number?: number;
   }) =>
@@ -503,12 +504,19 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  casinoDice: (data: { bet: number; choice: CasinoDiceChoice }) =>
+  casinoDice: (data: {
+    bet: number;
+    currency?: 'EUR' | 'VIDACOIN';
+    choice: CasinoDiceChoice;
+  }) =>
     request<CasinoDiceResponse>('/casino/dice', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  casinoBlackjackStart: (data: { bet: number }) =>
+  casinoBlackjackStart: (data: {
+    bet: number;
+    currency?: 'EUR' | 'VIDACOIN';
+  }) =>
     request<CasinoBlackjackResponse>('/casino/blackjack/start', {
       method: 'POST',
       body: JSON.stringify(data),

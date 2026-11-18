@@ -119,7 +119,7 @@ describe('PropertiesService', () => {
     expect(res.rent).toBe(2300);
   });
 
-  it('grants +15% rent bonus to active VIP players and blocks non-VIP from buying VIP properties', async () => {
+  it('grants +5% rent bonus to active VIP players and blocks non-VIP from buying VIP properties', async () => {
     prisma.player.findUnique.mockResolvedValue({
       id: 'p-vip',
       faction: 'CIVILIAN',
@@ -136,11 +136,11 @@ describe('PropertiesService', () => {
       },
     });
     prisma.playerProperty.updateMany.mockResolvedValue({ count: 1 });
-    prisma.player.update.mockResolvedValue({ euros: 1150 });
+    prisma.player.update.mockResolvedValue({ euros: 1050 });
     prisma.transactionLog.create.mockResolvedValue({});
 
     const vipRent = await service.collectRent('u-vip', 'prop-vip');
-    expect(vipRent.rent).toBe(1150);
+    expect(vipRent.rent).toBe(1050);
     expect(vipRent.vipBonusApplied).toBe(true);
 
     prisma.player.findUnique.mockResolvedValue({
@@ -184,7 +184,9 @@ describe('PropertiesService', () => {
   });
 
   it('launders dirtyEuros safely in CLUB and returns aligned launderedEuros & earnedEuros', async () => {
-    (prisma.player as any).updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    (prisma.player as any).updateMany = jest
+      .fn()
+      .mockResolvedValue({ count: 1 });
     prisma.player.findUnique
       .mockResolvedValueOnce({ id: 'p1', faction: 'CIVILIAN' })
       .mockResolvedValueOnce({ id: 'p1', dirtyEuros: 1000.004, euros: 200 })

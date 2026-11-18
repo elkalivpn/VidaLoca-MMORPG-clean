@@ -54,7 +54,8 @@ export class MissionsService {
         city: dto.city ?? null,
         minLevel: dto.minLevel ?? 1,
         minPlayers: dto.minPlayers ?? 1,
-        maxPlayers: dto.maxPlayers ?? (dto.mode === MissionMode.ONLINE_COOP ? 4 : 1),
+        maxPlayers:
+          dto.maxPlayers ?? (dto.mode === MissionMode.ONLINE_COOP ? 4 : 1),
         isOptional: dto.isOptional ?? true,
         isRepeatable: dto.isRepeatable ?? false,
         cooldownHours: dto.cooldownHours ?? 0,
@@ -157,7 +158,9 @@ export class MissionsService {
     };
     const requiredLevel = Math.max(
       template.minLevel ?? 1,
-      template.minLevel ? template.minLevel : fallbackLevel[template.difficulty],
+      template.minLevel
+        ? template.minLevel
+        : fallbackLevel[template.difficulty],
     );
 
     if (player.level < requiredLevel) {
@@ -446,7 +449,8 @@ export class MissionsService {
         progress: newProgress,
         status: nextStatus,
         lastStepAt: new Date(),
-        completedAt: nextStatus === MissionStatus.COMPLETED ? new Date() : undefined,
+        completedAt:
+          nextStatus === MissionStatus.COMPLETED ? new Date() : undefined,
       },
       include: { template: true },
     });
@@ -496,7 +500,9 @@ export class MissionsService {
     const template = await this.getTemplateById(templateId);
 
     if (template.isOptional === false) {
-      throw new BadRequestException('Esta misión es obligatoria y no se puede omitir');
+      throw new BadRequestException(
+        'Esta misión es obligatoria y no se puede omitir',
+      );
     }
 
     const active = await this.prisma.playerMission.findFirst({
@@ -550,7 +556,8 @@ export class MissionsService {
         progress: newProgress,
         status,
         lastStepAt: new Date(),
-        completedAt: status === MissionStatus.COMPLETED ? new Date() : undefined,
+        completedAt:
+          status === MissionStatus.COMPLETED ? new Date() : undefined,
       },
       include: { template: true },
     });
@@ -599,9 +606,11 @@ export class MissionsService {
       tpl.mode === MissionMode.ONLINE_COOP && participants.length > 1;
     const bonusMultiplier = isTeamBonus ? 1.2 : 1.0;
 
-    const isVipActive = isPlayerVipActive(player as { isVip?: boolean; vipExpiresAt?: Date | null });
-    const eurosMultiplier = bonusMultiplier * (isVipActive ? 1.15 : 1.0);
-    const xpMultiplier = bonusMultiplier * (isVipActive ? 1.25 : 1.0);
+    const isVipActive = isPlayerVipActive(
+      player as { isVip?: boolean; vipExpiresAt?: Date | null },
+    );
+    const eurosMultiplier = bonusMultiplier * (isVipActive ? 1.05 : 1.0);
+    const xpMultiplier = bonusMultiplier * (isVipActive ? 1.15 : 1.0);
 
     const grantedEuros = Math.round(tpl.rewardEuros * eurosMultiplier);
     const grantedXp = Math.round(tpl.rewardXp * xpMultiplier);
@@ -632,7 +641,9 @@ export class MissionsService {
 
       // Reward either single player or all Co-op participants
       const targetPlayerIds = isTeamBonus
-        ? Array.from(new Set([mission.playerId, ...participants.map((p) => p.playerId)]))
+        ? Array.from(
+            new Set([mission.playerId, ...participants.map((p) => p.playerId)]),
+          )
         : [player.id];
 
       let callerUpdatedPlayer = player;
@@ -656,7 +667,8 @@ export class MissionsService {
 
         const newXp = dbPlayer.xp + grantedXp;
         const calcLevel = calculateLevelFromXp(newXp);
-        const newLevel = calcLevel > dbPlayer.level ? calcLevel : dbPlayer.level;
+        const newLevel =
+          calcLevel > dbPlayer.level ? calcLevel : dbPlayer.level;
 
         const updatedP = await tx.player.update({
           where: { id: dbPlayer.id },
@@ -679,7 +691,7 @@ export class MissionsService {
             type: 'EARN',
             amount: grantedEuros,
             currency: 'EUR',
-            reason: `Mission reward: ${tpl.title}${isTeamBonus ? ' (Co-op +20%)' : ''}${isVipActive ? ' (VIP +15%)' : ''}`,
+            reason: `Mission reward: ${tpl.title}${isTeamBonus ? ' (Co-op +20%)' : ''}${isVipActive ? ' (VIP +5%)' : ''}`,
             reference: missionId,
           },
         });
@@ -748,7 +760,9 @@ export class MissionsService {
         .catch(() => undefined);
     }
     if (this.achievementsService) {
-      await this.achievementsService.checkAndUnlock(userId).catch(() => undefined);
+      await this.achievementsService
+        .checkAndUnlock(userId)
+        .catch(() => undefined);
       if (isTeamBonus) {
         for (const p of participants) {
           if (p.userId && p.userId !== userId) {

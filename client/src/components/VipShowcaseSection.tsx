@@ -17,24 +17,24 @@ type ShowcaseItem = {
 
 const VIP_PERKS = [
   {
-    label: '+25% XP Global',
-    detail: 'Subida de nivel acelerada en toda actividad',
+    label: '+15% XP Global',
+    detail: 'Progreso cómodo sin ventajas en combate PvP',
   },
   {
-    label: '+15% € Misiones',
-    detail: 'Mayor botín limpio en contratos y golpes',
+    label: '+5% € Misiones',
+    detail: 'Bonus equilibrado en contratos y golpes',
   },
   {
-    label: '+15% Renta / Hora',
+    label: '+5% Renta / Hora',
     detail: 'Rendimiento extra en propiedades y garajes',
   },
   {
-    label: '2% Tasa Mercado P2P',
+    label: '3% Tasa Mercado P2P',
     detail: 'Comisión reducida frente al 5% estándar',
   },
   {
     label: '10 Misiones VIP',
-    detail: 'Contratos exclusivos de alto riesgo y pago',
+    detail: 'Contratos exclusivos de alto riesgo y narrativa',
   },
   {
     label: 'Flota & Mansiones VIP',
@@ -150,7 +150,7 @@ const SHOWCASE_ITEMS: ShowcaseItem[] = [
     subtitle: 'Madrid · 24 plazas · 5.400 €/h',
     priceLabel: '👑 SOLO VIP',
     description:
-      'Almacén blindado de alta capacidad con +15% de rendimiento por hora con Club VIP activo.',
+      'Almacén blindado de alta capacidad con +5% de rendimiento por hora con Club VIP activo.',
     accent: 'border-emerald-500/35 bg-emerald-950/20',
   },
   {
@@ -158,7 +158,7 @@ const SHOWCASE_ITEMS: ShowcaseItem[] = [
     category: 'EMPIRE',
     badge: '🏰 Propiedad VIP',
     title: 'Ático Casino La Concha VIP',
-    subtitle: 'San Sebastián · 18 plazas · +15% renta',
+    subtitle: 'San Sebastián · 18 plazas · +5% renta',
     priceLabel: '👑 SOLO VIP',
     description:
       'Residencia panorámica frente a la bahía con ingresos pasivos élite cada hora.',
@@ -170,9 +170,9 @@ const SHOWCASE_ITEMS: ShowcaseItem[] = [
     badge: '🎯 10 Misiones VIP',
     title: 'Contratos Exclusivos + Arsenal Oro',
     subtitle: 'Desert Eagle Baño Oro · Katana Neo',
-    priceLabel: '👑 +25% XP / +15% €',
+    priceLabel: '👑 +15% XP / +5% €',
     description:
-      'Diez operaciones exclusivas para miembros VIP con recompensas multiplicadas y botín único.',
+      'Diez operaciones exclusivas para miembros VIP con estética única y sin ventajas pay-to-win en combate.',
     accent: 'border-emerald-500/35 bg-emerald-950/20',
   },
 ];

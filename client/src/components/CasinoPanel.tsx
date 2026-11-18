@@ -7,6 +7,7 @@ import { playAlertSfx, playCasinoChipSfx, playCasinoWinSfx } from '@/lib/sfx';
 import type {
   CasinoBlackjackResponse,
   CasinoCard,
+  CasinoCurrency,
   CasinoDiceChoice,
   CasinoDiceResponse,
   CasinoRouletteBetType,
@@ -16,7 +17,12 @@ import type {
 
 type CasinoGameTab = 'roulette' | 'blackjack' | 'dice';
 
-const CHIP_VALUES = [10, 25, 100, 500, 2500] as const;
+const EUR_CHIP_VALUES = [10, 25, 100, 500, 2500] as const;
+const VC_CHIP_VALUES = [1, 5, 25, 100, 250] as const;
+
+function formatAmount(amount: number, currency: CasinoCurrency): string {
+  return `${amount.toLocaleString('es-ES')} ${currency === 'VIDACOIN' ? 'VC' : '€'}`;
+}
 
 const RED_NUMBERS = new Set([
   1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36,
@@ -83,6 +89,7 @@ export default function CasinoPanel() {
   const authPlayer = useAuthStore((s) => s.player);
 
   const [gameTab, setGameTab] = useState<CasinoGameTab>('roulette');
+  const [currency, setCurrency] = useState<CasinoCurrency>('EUR');
   const [status, setStatus] = useState<CasinoStatusResponse | null>(null);
   const [bet, setBet] = useState<number>(100);
   const [betInput, setBetInput] = useState<string>('100');
@@ -124,23 +131,53 @@ export default function CasinoPanel() {
     void loadStatus();
   }, [loadStatus]);
 
-  const minBet = status?.minBet ?? 10;
-  const maxBet = status?.player?.isVip
+  const isVip = Boolean(status?.player?.isVip ?? authPlayer?.isVip);
+  const minBetEur = status?.minBet ?? 10;
+  const maxBetEur = isVip
     ? (status?.vipMaxBet ?? 100000)
     : (status?.maxBet ?? 25000);
+  const minBetVc = status?.minBetVc ?? 1;
+  const maxBetVc = isVip
+    ? (status?.vipMaxBetVc ?? 2000)
+    : (status?.maxBetVc ?? 500);
+
+  const minBet = currency === 'VIDACOIN' ? minBetVc : minBetEur;
+  const maxBet = currency === 'VIDACOIN' ? maxBetVc : maxBetEur;
+  const chipValues = currency === 'VIDACOIN' ? VC_CHIP_VALUES : EUR_CHIP_VALUES;
+
   const currentEuros = Math.floor(
     status?.player?.euros ?? authPlayer?.euros ?? 0,
   );
+  const currentVc = Math.floor(
+    status?.player?.vidaCoins ?? authPlayer?.vidaCoins ?? 0,
+  );
+  const activeBalance = currency === 'VIDACOIN' ? currentVc : currentEuros;
+  const isBlackjackPlaying = blackjackHand?.status === 'PLAYING';
 
   const commitBet = useCallback(
-    (val: number) => {
-      const clamped = Math.min(maxBet, Math.max(minBet, Math.round(val)));
+    (val: number, overrideMin = minBet, overrideMax = maxBet) => {
+      const clamped = Math.min(
+        overrideMax,
+        Math.max(overrideMin, Math.round(val)),
+      );
       setBet(clamped);
       setBetInput(String(clamped));
       return clamped;
     },
     [maxBet, minBet],
   );
+
+  const switchCurrency = (next: CasinoCurrency) => {
+    if (busy || isBlackjackPlaying || next === currency) return;
+    playCasinoChipSfx();
+    setCurrency(next);
+    setError('');
+    if (next === 'VIDACOIN') {
+      commitBet(5, minBetVc, maxBetVc);
+    } else {
+      commitBet(100, minBetEur, maxBetEur);
+    }
+  };
 
   const selectChip = (val: number) => {
     playCasinoChipSfx();
@@ -159,6 +196,7 @@ export default function CasinoPanel() {
       const [res] = await Promise.all([
         api.casinoRoulette({
           bet: activeBet,
+          currency,
           betType: rouletteBetType,
           ...(rouletteBetType === 'NUMBER' ? { number: rouletteNumber } : {}),
         }),
@@ -186,7 +224,7 @@ export default function CasinoPanel() {
     setBusy(true);
     playCasinoChipSfx();
     try {
-      const res = await api.casinoBlackjackStart({ bet: activeBet });
+      const res = await api.casinoBlackjackStart({ bet: activeBet, currency });
       setBlackjackHand(res);
       if (res.status !== 'PLAYING') {
         const net = res.net ?? res.netProfit ?? 0;
@@ -241,7 +279,7 @@ export default function CasinoPanel() {
     playCasinoChipSfx();
     try {
       const [res] = await Promise.all([
-        api.casinoDice({ bet: activeBet, choice: diceChoice }),
+        api.casinoDice({ bet: activeBet, currency, choice: diceChoice }),
         new Promise((r) => setTimeout(r, 550)),
       ]);
       setDiceResult(res);
@@ -267,12 +305,17 @@ export default function CasinoPanel() {
     (typeof rouletteOutcome === 'number'
       ? getNumberColor(rouletteOutcome)
       : 'BLACK');
+  const rouletteCurrency: CasinoCurrency = rouletteResult?.currency ?? currency;
+  const blackjackCurrency: CasinoCurrency = blackjackHand?.currency ?? currency;
+  const blackjackDoubleBalance =
+    blackjackCurrency === 'VIDACOIN' ? currentVc : currentEuros;
   const blackjackNet =
     blackjackHand?.net ??
     blackjackHand?.netProfit ??
     (blackjackHand
       ? Math.round((blackjackHand.payout - blackjackHand.bet) * 100) / 100
       : 0);
+  const diceCurrency: CasinoCurrency = diceResult?.currency ?? currency;
   const diceFace1 = diceResult?.die1 ?? diceResult?.dice?.[0] ?? 6;
   const diceFace2 = diceResult?.die2 ?? diceResult?.dice?.[1] ?? 1;
 
@@ -282,13 +325,16 @@ export default function CasinoPanel() {
       <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-br from-zinc-900 via-zinc-950 to-rose-950/30 p-5 shadow-2xl">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-rose-500/50 bg-rose-500/15 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-rose-300">
                 +18 Clandestino
               </span>
-              {status?.player?.isVip && (
+              <span className="rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-fuchsia-200">
+                💶 € ↔ € · 🪙 VC ↔ VC
+              </span>
+              {isVip && (
                 <span className="rounded-full border border-amber-400/50 bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-amber-300">
-                  👑 Mesa VIP · Límite {maxBet.toLocaleString('es-ES')} €
+                  👑 Mesa VIP · Límite {formatAmount(maxBet, currency)}
                 </span>
               )}
             </div>
@@ -296,29 +342,85 @@ export default function CasinoPanel() {
               Salón Nocturno · Casino Clandestino
             </h2>
             <p className="text-xs text-zinc-400 mt-1">
-              Ruleta Europea en vivo, Blackjack 21 táctico y Dados Callejeros
-              conectados al servidor en tiempo real.
+              Apuesta Euros del juego para ganar Euros o apuesta VidaCoins (VC)
+              para multiplicar VidaCoins en tiempo real.
             </p>
           </div>
-          <div className="rounded-xl border border-amber-500/30 bg-zinc-950/85 px-4 py-2.5 text-right">
+          <div className="rounded-xl border border-amber-500/30 bg-zinc-950/85 px-4 py-2.5 text-right space-y-1">
             <p className="text-[10px] uppercase tracking-wider text-zinc-400">
               Tu Banca Disponible
             </p>
-            <p className="text-xl font-black text-amber-300 tabular-nums">
-              {currentEuros.toLocaleString('es-ES')} €
-            </p>
+            <div className="flex items-center justify-end gap-3">
+              <span
+                className={`text-base font-black tabular-nums ${
+                  currency === 'EUR' ? 'text-amber-300' : 'text-zinc-400'
+                }`}
+              >
+                {currentEuros.toLocaleString('es-ES')} €
+              </span>
+              <span className="text-zinc-700">|</span>
+              <span
+                className={`text-base font-black tabular-nums ${
+                  currency === 'VIDACOIN' ? 'text-fuchsia-300' : 'text-zinc-400'
+                }`}
+              >
+                {currentVc.toLocaleString('es-ES')} VC
+              </span>
+            </div>
             <p className="text-[10px] text-zinc-500">
-              Apuesta {minBet} € – {maxBet.toLocaleString('es-ES')} €
+              Apuesta ({currency === 'VIDACOIN' ? 'VC' : '€'}):{' '}
+              {formatAmount(minBet, currency)} –{' '}
+              {formatAmount(maxBet, currency)}
             </p>
           </div>
         </div>
 
+        {/* Currency Switcher */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800/80 pt-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+              Divisa de apuesta:
+            </span>
+            <div className="inline-flex rounded-xl border border-zinc-800 bg-zinc-950 p-1">
+              <button
+                type="button"
+                disabled={busy || isBlackjackPlaying}
+                onClick={() => switchCurrency('EUR')}
+                className={`rounded-lg px-3 py-1 text-xs font-black transition ${
+                  currency === 'EUR'
+                    ? 'bg-amber-500 text-zinc-950 shadow'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                } disabled:opacity-50`}
+              >
+                💶 Euros del Juego (€)
+              </button>
+              <button
+                type="button"
+                disabled={busy || isBlackjackPlaying}
+                onClick={() => switchCurrency('VIDACOIN')}
+                className={`rounded-lg px-3 py-1 text-xs font-black transition ${
+                  currency === 'VIDACOIN'
+                    ? 'bg-fuchsia-500 text-zinc-950 shadow'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                } disabled:opacity-50`}
+              >
+                🪙 VidaCoins (VC)
+              </button>
+            </div>
+          </div>
+          {isBlackjackPlaying && (
+            <span className="text-[11px] text-amber-300">
+              Termina la mano actual de Blackjack antes de cambiar de divisa.
+            </span>
+          )}
+        </div>
+
         {/* Chip Selector */}
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-800/80 pt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-800/60 pt-3">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mr-1">
             Fichas:
           </span>
-          {CHIP_VALUES.map((val) => (
+          {chipValues.map((val) => (
             <button
               key={val}
               type="button"
@@ -326,11 +428,13 @@ export default function CasinoPanel() {
               onClick={() => selectChip(val)}
               className={`rounded-full border px-3 py-1 text-xs font-black transition ${
                 bet === val
-                  ? 'border-amber-400 bg-amber-500 text-zinc-950 shadow-[0_0_15px_rgba(245,158,11,0.5)]'
+                  ? currency === 'VIDACOIN'
+                    ? 'border-fuchsia-400 bg-fuchsia-500 text-zinc-950 shadow-[0_0_15px_rgba(217,70,239,0.45)]'
+                    : 'border-amber-400 bg-amber-500 text-zinc-950 shadow-[0_0_15px_rgba(245,158,11,0.5)]'
                   : 'border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-amber-500/50'
               } disabled:opacity-40`}
             >
-              {val.toLocaleString('es-ES')} €
+              {formatAmount(val, currency)}
             </button>
           ))}
           <div className="ml-auto flex items-center gap-1.5">
@@ -376,7 +480,9 @@ export default function CasinoPanel() {
                   commitBet(parsed);
                 }
               }}
-              className="w-24 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1 text-right text-xs font-bold text-amber-300"
+              className={`w-24 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1 text-right text-xs font-bold ${
+                currency === 'VIDACOIN' ? 'text-fuchsia-300' : 'text-amber-300'
+              }`}
             />
           </div>
         </div>
@@ -476,8 +582,8 @@ export default function CasinoPanel() {
               >
                 <p className="font-bold">
                   {rouletteResult.won
-                    ? `+${rouletteResult.payout.toLocaleString('es-ES')} € (${rouletteResult.multiplier}×)`
-                    : `-${rouletteResult.bet.toLocaleString('es-ES')} €`}
+                    ? `+${formatAmount(rouletteResult.payout, rouletteCurrency)} (${rouletteResult.multiplier}×)`
+                    : `-${formatAmount(rouletteResult.bet, rouletteCurrency)}`}
                 </p>
                 {rouletteResult.narrative && (
                   <p className="mt-0.5 text-[11px] opacity-85">
@@ -588,7 +694,7 @@ export default function CasinoPanel() {
 
             <button
               type="button"
-              disabled={busy || currentEuros < bet}
+              disabled={busy || activeBalance < bet}
               onClick={() => {
                 void spinRoulette();
               }}
@@ -596,7 +702,7 @@ export default function CasinoPanel() {
             >
               {wheelSpinning
                 ? 'Girando Ruleta…'
-                : `Girar Ruleta (${bet.toLocaleString('es-ES')} €)`}
+                : `Girar Ruleta (${formatAmount(bet, currency)})`}
             </button>
           </div>
         </div>
@@ -609,17 +715,18 @@ export default function CasinoPanel() {
             <div className="text-center py-8 space-y-4">
               <p className="text-sm text-zinc-300">
                 Enfréntate al crupier clandestino. Consigue 21 o supera su mano
-                sin pasarte.
+                sin pasarte. Pago en la misma divisa apostada (
+                {currency === 'VIDACOIN' ? 'VidaCoins' : 'Euros'}).
               </p>
               <button
                 type="button"
-                disabled={busy || currentEuros < bet}
+                disabled={busy || activeBalance < bet}
                 onClick={() => {
                   void startBlackjack();
                 }}
                 className="rounded-xl bg-amber-500 px-6 py-3 text-sm font-black text-zinc-950 hover:bg-amber-400 disabled:opacity-40"
               >
-                Repartir Mano ({bet.toLocaleString('es-ES')} €)
+                Repartir Mano ({formatAmount(bet, currency)})
               </button>
             </div>
           ) : (
@@ -643,7 +750,8 @@ export default function CasinoPanel() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="uppercase tracking-wider text-amber-300 font-semibold">
-                    Tu Mano ({blackjackHand.bet.toLocaleString('es-ES')} €)
+                    Tu Mano (
+                    {formatAmount(blackjackHand.bet, blackjackCurrency)})
                   </span>
                   <span className="rounded bg-amber-500/20 px-2 py-0.5 font-bold text-amber-300">
                     Puntos: {blackjackHand.playerScore}
@@ -680,7 +788,7 @@ export default function CasinoPanel() {
                             ? 'TE PASASTE DE 21'
                             : 'GANA LA BANCA'}
                   {blackjackHand.status !== 'PLAYING' &&
-                    ` · ${blackjackNet >= 0 ? '+' : ''}${blackjackNet.toLocaleString('es-ES')} €`}
+                    ` · ${blackjackNet >= 0 ? '+' : ''}${formatAmount(blackjackNet, blackjackCurrency)}`}
                 </p>
                 {blackjackHand.narrative && (
                   <p className="mt-1 opacity-90">{blackjackHand.narrative}</p>
@@ -714,7 +822,7 @@ export default function CasinoPanel() {
                     disabled={
                       busy ||
                       blackjackHand.playerCards.length > 2 ||
-                      currentEuros < blackjackHand.bet
+                      blackjackDoubleBalance < blackjackHand.bet
                     }
                     onClick={() => {
                       void actBlackjack('DOUBLE');
@@ -727,13 +835,13 @@ export default function CasinoPanel() {
               ) : (
                 <button
                   type="button"
-                  disabled={busy || currentEuros < bet}
+                  disabled={busy || activeBalance < bet}
                   onClick={() => {
                     void startBlackjack();
                   }}
                   className="w-full rounded-xl bg-amber-500 py-3 text-sm font-black text-zinc-950 hover:bg-amber-400 disabled:opacity-40"
                 >
-                  Nueva Mano ({bet.toLocaleString('es-ES')} €)
+                  Nueva Mano ({formatAmount(bet, currency)})
                 </button>
               )}
             </>
@@ -760,8 +868,8 @@ export default function CasinoPanel() {
                   }`}
                 >
                   {diceResult.won
-                    ? `¡Ganaste ${diceResult.payout.toLocaleString('es-ES')} € (${diceResult.multiplier}×)!`
-                    : `Perdiste ${diceResult.bet.toLocaleString('es-ES')} €`}
+                    ? `¡Ganaste ${formatAmount(diceResult.payout, diceCurrency)} (${diceResult.multiplier}×)!`
+                    : `Perdiste ${formatAmount(diceResult.bet, diceCurrency)}`}
                 </p>
                 {diceResult.narrative && (
                   <p className="text-xs text-zinc-400 mt-0.5">
@@ -804,7 +912,7 @@ export default function CasinoPanel() {
 
           <button
             type="button"
-            disabled={busy || currentEuros < bet}
+            disabled={busy || activeBalance < bet}
             onClick={() => {
               void rollDice();
             }}
@@ -812,7 +920,7 @@ export default function CasinoPanel() {
           >
             {diceRolling
               ? 'Lanzando Dados…'
-              : `Lanzar Dados 2d6 (${bet.toLocaleString('es-ES')} €)`}
+              : `Lanzar Dados 2d6 (${formatAmount(bet, currency)})`}
           </button>
         </div>
       )}
@@ -824,13 +932,15 @@ export default function CasinoPanel() {
             Historial reciente del salón
           </h3>
           <span className="text-[10px] text-zinc-500">
-            +18 Juego Responsable Virtual · Sin dinero real · Divisa ficticia
-            del juego
+            +18 Juego Virtual · Apuestas con Euros (€) o VidaCoins (VC) del
+            juego
           </span>
         </div>
         {status?.recentPlays && status.recentPlays.length > 0 ? (
           <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
             {status.recentPlays.slice(0, 8).map((item) => {
+              const itemCurrency: CasinoCurrency =
+                item.currency === 'VIDACOIN' ? 'VIDACOIN' : 'EUR';
               const friendlyReason =
                 item.reason === 'CASINO:ROULETTE'
                   ? item.type === 'EARN'
@@ -856,12 +966,14 @@ export default function CasinoPanel() {
                   <span
                     className={`ml-2 shrink-0 font-bold tabular-nums ${
                       item.type === 'EARN'
-                        ? 'text-emerald-400'
+                        ? itemCurrency === 'VIDACOIN'
+                          ? 'text-fuchsia-300'
+                          : 'text-emerald-400'
                         : 'text-rose-400'
                     }`}
                   >
                     {item.type === 'EARN' ? '+' : '-'}
-                    {Math.abs(item.amount).toLocaleString('es-ES')} €
+                    {formatAmount(Math.abs(item.amount), itemCurrency)}
                   </span>
                 </div>
               );

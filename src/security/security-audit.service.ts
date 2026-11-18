@@ -26,10 +26,16 @@ export class SecurityAuditService {
 
   hashIdentifier(raw?: string | null): string | null {
     if (!raw) return null;
-    const pepper =
+    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
+    const configuredPepper =
       this.configService.get<string>('AUDIT_HASH_PEPPER') ||
-      this.configService.get<string>('JWT_SECRET') ||
-      'vidaloca-dev-audit-pepper';
+      this.configService.get<string>('JWT_SECRET');
+    if (isProd && (!configuredPepper || configuredPepper.trim().length < 16)) {
+      throw new Error(
+        'AUDIT_HASH_PEPPER (>= 16 chars) is mandatory in production',
+      );
+    }
+    const pepper = configuredPepper || 'vidaloca-dev-audit-pepper';
     return createHmac('sha256', pepper).update(raw).digest('hex');
   }
 

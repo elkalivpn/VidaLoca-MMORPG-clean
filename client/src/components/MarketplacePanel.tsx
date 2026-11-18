@@ -165,7 +165,7 @@ export default function MarketplacePanel() {
             Mercado Negro P2P &amp; Club VIP
           </h2>
           <p className="text-xs text-zinc-400">
-            Comercia ítems entre jugadores (5% tasa estándar · 2% tasa Club VIP)
+            Comercia ítems entre jugadores (5% tasa estándar · 3% tasa Club VIP)
             o desbloquea contenido exclusivo con VidaCoins.
           </p>
         </div>
@@ -217,8 +217,8 @@ export default function MarketplacePanel() {
               </h3>
               <span className="text-[11px] text-amber-300">
                 {isVipActive
-                  ? '👑 Tasa Club VIP: 2% · Recibes 98%'
-                  : 'Tasa estándar: 5% (2% con Club VIP)'}
+                  ? '👑 Tasa Club VIP: 3% · Recibes 97%'
+                  : 'Tasa estándar: 5% (3% con Club VIP)'}
               </span>
             </div>
 
@@ -369,7 +369,8 @@ export default function MarketplacePanel() {
                 </span>
                 <p className="text-zinc-400 mt-0.5">
                   Consigue VidaCoins jugando (retos diarios, rachas, misiones y
-                  logros) y desbloquea contenido exclusivo sin PayPal.
+                  logros) y desbloquea contenido exclusivo sin PayPal ni
+                  ventajas pay-to-win en combate.
                 </p>
               </div>
               <span className="rounded-lg border border-amber-400/40 bg-zinc-900 px-3 py-1.5 text-sm font-black text-amber-300">
@@ -378,13 +379,13 @@ export default function MarketplacePanel() {
             </div>
             <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 text-[11px] text-amber-100/90">
               <div className="rounded bg-zinc-900/70 px-2.5 py-1.5 border border-amber-500/20">
-                ⚡ +25% XP en misiones y progreso
+                ⚡ +15% XP en misiones y progreso
               </div>
               <div className="rounded bg-zinc-900/70 px-2.5 py-1.5 border border-amber-500/20">
-                💶 +15% € extra en misiones y rentas
+                💶 +5% € extra en misiones y rentas
               </div>
               <div className="rounded bg-zinc-900/70 px-2.5 py-1.5 border border-amber-500/20">
-                🏷️ Tasa Mercado P2P al 2% (vs 5%)
+                🏷️ Tasa Mercado P2P al 3% (vs 5%)
               </div>
               <div className="rounded bg-zinc-900/70 px-2.5 py-1.5 border border-amber-500/20">
                 🎯 Acceso a 10 Misiones Exclusivas VIP

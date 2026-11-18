@@ -3,22 +3,31 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { MarketListingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AntiCheatService } from '../security/anti-cheat.service';
 import { calculateLevelFromXp } from '../common/utils/level.util';
+import { roundEuros } from '../common/utils/money.util';
 import { isPlayerVipActive } from '../common/utils/vip.util';
 import { CreateListingDto } from './dto/marketplace.dto';
 
 export const MARKETPLACE_FEE_RATE = 0.05; // 5% sink estándar
-export const MARKETPLACE_VIP_FEE_RATE = 0.02; // 2% tasa reducida Club VIP
+export const MARKETPLACE_VIP_FEE_RATE = 0.03; // 3% tasa reducida Club VIP (equilibrada anti-P2W)
+export const MAX_ACTIVE_LISTINGS_STD = 10;
+export const MAX_ACTIVE_LISTINGS_VIP = 20;
+export const P2P_PAIR_WINDOW_MS = 60 * 60 * 1000;
+export const P2P_PAIR_STRIKE_THRESHOLD = 3;
+export const P2P_PAIR_BLOCK_THRESHOLD = 5;
 
 export interface VipShopOffer {
   id: string;
   name: string;
   description: string;
   priceVida: number;
-  category: 'VIP' | 'UTILITY' | 'CHARACTER' | 'CLOTHING' | 'WEAPON' | 'COSMETIC';
+  category:
+    'VIP' | 'UTILITY' | 'CHARACTER' | 'CLOTHING' | 'WEAPON' | 'COSMETIC';
   templateName?: string;
 }
 
@@ -27,7 +36,7 @@ export const VIP_SHOP_OFFERS: VipShopOffer[] = [
     id: 'vip_7d',
     name: 'Club VIP VidaLoca (7 días)',
     description:
-      '+25% XP global, +15% € en misiones y rentas, 2% tasa P2P y acceso a misiones/vehículos/mansiones VIP.',
+      '+15% XP global, +5% € en misiones y rentas, 3% tasa P2P y acceso a misiones/vehículos/mansiones VIP (sin ventajas de combate).',
     priceVida: 120,
     category: 'VIP',
   },
@@ -35,7 +44,7 @@ export const VIP_SHOP_OFFERS: VipShopOffer[] = [
     id: 'vip_30d',
     name: 'Club VIP VidaLoca (30 días)',
     description:
-      'Mes completo VIP con todos los multiplicadores, catálogo exclusivo y ahorro de 120 VC.',
+      'Mes completo VIP con progresión +15% XP, +5% €, catálogo exclusivo y ahorro de 120 VC.',
     priceVida: 360,
     category: 'VIP',
   },
@@ -210,7 +219,10 @@ export const VIP_SHOP_OFFERS: VipShopOffer[] = [
 
 @Injectable()
 export class MarketplaceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private readonly antiCheat?: AntiCheatService,
+  ) {}
 
   async listActiveListings() {
     return this.prisma.marketListing.findMany({
@@ -227,10 +239,29 @@ export class MarketplaceService {
   }
 
   async createListing(userId: string, dto: CreateListingDto) {
+    this.antiCheat?.assertFinitePositive(
+      dto.priceEuros,
+      'priceEuros',
+      50_000_000,
+    );
+    if (!Number.isInteger(dto.quantity) || dto.quantity < 1) {
+      throw new BadRequestException('La cantidad debe ser un entero positivo');
+    }
+
     const player = await this.prisma.player.findUnique({ where: { userId } });
     if (!player) throw new NotFoundException('Player not found');
 
-    const priceEuros = Math.round(dto.priceEuros * 100) / 100;
+    this.antiCheat?.assertActionCooldown(
+      userId,
+      'p2p_list',
+      2000,
+      'Espera un momento antes de publicar otro anuncio P2P',
+    );
+
+    const priceEuros = roundEuros(dto.priceEuros);
+    const maxActiveListings = isPlayerVipActive(player)
+      ? MAX_ACTIVE_LISTINGS_VIP
+      : MAX_ACTIVE_LISTINGS_STD;
 
     return this.prisma.$transaction(async (tx) => {
       const invItem = await tx.inventoryItem.findFirst({
@@ -249,6 +280,49 @@ export class MarketplaceService {
       if (invItem.quantity < dto.quantity) {
         throw new BadRequestException(
           `Cantidad insuficiente (tienes ${invItem.quantity})`,
+        );
+      }
+
+      if (tx.marketListing.count) {
+        const activeCount = await tx.marketListing.count({
+          where: {
+            sellerId: player.id,
+            status: MarketListingStatus.ACTIVE,
+          },
+        });
+        if (activeCount >= maxActiveListings) {
+          throw new BadRequestException(
+            `Has alcanzado el máximo de ${maxActiveListings} anuncios P2P activos simultáneos`,
+          );
+        }
+      }
+
+      const unitRef =
+        invItem.template?.priceEuros && invItem.template.priceEuros > 0
+          ? invItem.template.priceEuros
+          : invItem.template?.priceVida && invItem.template.priceVida > 0
+            ? invItem.template.priceVida * 60
+            : 500;
+      const fairTotal = Math.max(50, unitRef * dto.quantity);
+      const minAllowed = Math.max(10, Math.round(fairTotal * 0.15));
+      const maxAllowed = Math.max(50_000, Math.round(fairTotal * 15));
+
+      if (priceEuros < minAllowed || priceEuros > maxAllowed) {
+        await this.antiCheat?.recordViolation({
+          userId,
+          playerId: player.id,
+          rule: 'ECONOMY_TAMPER',
+          severity: 'MEDIUM',
+          evidence: {
+            reason: 'p2p_price_out_of_band',
+            templateName: invItem.template?.name,
+            priceEuros,
+            minAllowed,
+            maxAllowed,
+          },
+        });
+        throw new BadRequestException(
+          `Precio fuera de banda anti-lavado para ${invItem.template?.name ?? 'este ítem'} (${minAllowed.toLocaleString('es-ES')} € – ${maxAllowed.toLocaleString('es-ES')} €).`,
         );
       }
 
@@ -283,6 +357,13 @@ export class MarketplaceService {
     const buyer = await this.prisma.player.findUnique({ where: { userId } });
     if (!buyer) throw new NotFoundException('Player not found');
 
+    this.antiCheat?.assertActionCooldown(
+      userId,
+      'p2p_buy',
+      1500,
+      'Espera un momento entre compras en el Mercado P2P',
+    );
+
     return this.prisma.$transaction(async (tx) => {
       const listing = await tx.marketListing.findUnique({
         where: { id: listingId },
@@ -296,6 +377,48 @@ export class MarketplaceService {
         throw new BadRequestException(
           'No puedes comprar tu propio anuncio; cancélalo para recuperarlo.',
         );
+      }
+
+      if (tx.marketListing.count) {
+        const windowStart = new Date(Date.now() - P2P_PAIR_WINDOW_MS);
+        const recentPairTrades = await tx.marketListing.count({
+          where: {
+            sellerId: listing.sellerId,
+            buyerId: buyer.id,
+            status: MarketListingStatus.SOLD,
+            soldAt: { gte: windowStart },
+          },
+        });
+        if (recentPairTrades >= P2P_PAIR_BLOCK_THRESHOLD) {
+          await this.antiCheat?.recordViolation({
+            userId,
+            playerId: buyer.id,
+            rule: 'ECONOMY_TAMPER',
+            severity: 'HIGH',
+            evidence: {
+              reason: 'p2p_pair_laundering_limit',
+              sellerId: listing.sellerId,
+              recentPairTrades,
+            },
+          });
+          throw new ForbiddenException(
+            `Protección anti-lavado: máximo ${P2P_PAIR_BLOCK_THRESHOLD} operaciones por hora con el mismo vendedor.`,
+          );
+        }
+        if (recentPairTrades >= P2P_PAIR_STRIKE_THRESHOLD) {
+          await this.antiCheat?.recordViolation({
+            userId,
+            playerId: buyer.id,
+            rule: 'ECONOMY_TAMPER',
+            severity: 'LOW',
+            blocked: false,
+            evidence: {
+              reason: 'p2p_frequent_pair_warning',
+              sellerId: listing.sellerId,
+              recentPairTrades,
+            },
+          });
+        }
       }
 
       const now = new Date();
@@ -329,8 +452,8 @@ export class MarketplaceService {
       const feeRate = sellerIsVip
         ? MARKETPLACE_VIP_FEE_RATE
         : MARKETPLACE_FEE_RATE;
-      const fee = Math.round(listing.priceEuros * feeRate * 100) / 100;
-      const sellerNet = Math.round((listing.priceEuros - fee) * 100) / 100;
+      const fee = roundEuros(listing.priceEuros * feeRate);
+      const sellerNet = roundEuros(listing.priceEuros - fee);
 
       await tx.player.update({
         where: { id: listing.sellerId },
@@ -375,7 +498,7 @@ export class MarketplaceService {
             type: 'EARN',
             amount: sellerNet,
             currency: 'EUR',
-            reason: `P2P Venta (${sellerIsVip ? '2% tasa VIP' : '5% tasa'}): ${listing.quantity}x ${listing.template.name}`,
+            reason: `P2P Venta (${sellerIsVip ? '3% tasa VIP' : '5% tasa'}): ${listing.quantity}x ${listing.template.name}`,
             reference: listing.id,
           },
         ],
@@ -475,7 +598,8 @@ export class MarketplaceService {
         offer.id === 'vip_30d' ||
         offer.id === 'vip_90d'
       ) {
-        const days = offer.id === 'vip_7d' ? 7 : offer.id === 'vip_30d' ? 30 : 90;
+        const days =
+          offer.id === 'vip_7d' ? 7 : offer.id === 'vip_30d' ? 30 : 90;
         const baseTime =
           player.vipExpiresAt && player.vipExpiresAt > now
             ? player.vipExpiresAt.getTime()
@@ -495,7 +619,8 @@ export class MarketplaceService {
       } else if (offer.id === 'vip_xp_pack') {
         const newXp = (player.xp ?? 0) + 1000;
         const calcLevel = calculateLevelFromXp(newXp);
-        const newLevel = calcLevel > (player.level ?? 1) ? calcLevel : player.level;
+        const newLevel =
+          calcLevel > (player.level ?? 1) ? calcLevel : player.level;
         await tx.player.update({
           where: { id: player.id },
           data: { xp: newXp, level: newLevel },

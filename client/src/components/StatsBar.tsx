@@ -113,7 +113,7 @@ export default function StatsBar({
       {isVipActive && (
         <span
           className="inline-flex items-center gap-1 rounded border border-amber-400/60 bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-bold text-amber-200"
-          title="Club VIP activo (+25% XP, +15% €/rentas, 2% tasa P2P)"
+          title="Club VIP activo (+15% XP, +5% €/rentas, 3% tasa P2P)"
         >
           👑 VIP
         </span>

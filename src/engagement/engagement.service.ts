@@ -51,13 +51,23 @@ interface DailyProgressState {
 const CHALLENGE_POOL: DailyChallengeDef[] = [
   {
     id: 'daily_street_3',
-    title: 'Pulso de Calle',
+    title: 'Pulso de Calle · Madrid & BCN',
     description: 'Completa 3 acciones en cualquier distrito de España.',
     metric: 'action',
     target: 3,
     rewardEuros: 900,
     rewardXp: 180,
     rewardVidaCoins: 5,
+  },
+  {
+    id: 'daily_street_marbella_4',
+    title: 'Noche en Puerto Banús',
+    description: 'Ejecuta 4 acciones urbanas de alto riesgo en la calle.',
+    metric: 'action',
+    target: 4,
+    rewardEuros: 1200,
+    rewardXp: 230,
+    rewardVidaCoins: 7,
   },
   {
     id: 'daily_travel_2',
@@ -70,6 +80,16 @@ const CHALLENGE_POOL: DailyChallengeDef[] = [
     rewardVidaCoins: 5,
   },
   {
+    id: 'daily_travel_costa_3',
+    title: 'Ruta Mediterránea & Atlántica',
+    description: 'Cruza 3 tramos interurbanos entre puertos y capitales.',
+    metric: 'travel',
+    target: 3,
+    rewardEuros: 1450,
+    rewardXp: 260,
+    rewardVidaCoins: 8,
+  },
+  {
     id: 'daily_trade_2',
     title: 'Bróker Urbano',
     description: 'Realiza 2 operaciones en el mercado regional.',
@@ -80,6 +100,17 @@ const CHALLENGE_POOL: DailyChallengeDef[] = [
     rewardVidaCoins: 8,
   },
   {
+    id: 'daily_trade_import_3',
+    title: 'Operador de Puerto Franco',
+    description:
+      'Cierra 3 transacciones de mercancía aprovechando diferencias entre ciudades.',
+    metric: 'trade',
+    target: 3,
+    rewardEuros: 1700,
+    rewardXp: 290,
+    rewardVidaCoins: 10,
+  },
+  {
     id: 'daily_mission_1',
     title: 'Contrato Cumplido',
     description: 'Completa al menos 1 misión de historia, solo o co-op.',
@@ -88,6 +119,16 @@ const CHALLENGE_POOL: DailyChallengeDef[] = [
     rewardEuros: 1600,
     rewardXp: 300,
     rewardVidaCoins: 10,
+  },
+  {
+    id: 'daily_mission_elite_2',
+    title: 'Doble Encargo del Sindicato',
+    description: 'Completa 2 misiones o golpes coordinados hoy.',
+    metric: 'mission',
+    target: 2,
+    rewardEuros: 2400,
+    rewardXp: 420,
+    rewardVidaCoins: 14,
   },
 ];
 
@@ -105,10 +146,13 @@ export class EngagementService {
   }
 
   private getTodaysChallenges(dateKey: string): DailyChallengeDef[] {
-    // Deterministic 3-of-4 daily rotation based on date
+    // Deterministic 4-contract daily rotation (1 dynamic contract per category)
     const daySeed = Number(dateKey.replace(/-/g, '')) || 1;
-    const skipIndex = daySeed % CHALLENGE_POOL.length;
-    return CHALLENGE_POOL.filter((_, idx) => idx !== skipIndex);
+    const metrics: ChallengeMetric[] = ['action', 'travel', 'trade', 'mission'];
+    return metrics.map((metric, idx) => {
+      const bucket = CHALLENGE_POOL.filter((c) => c.metric === metric);
+      return bucket[(daySeed + idx) % bucket.length];
+    });
   }
 
   private normalizeProgress(
@@ -141,7 +185,11 @@ export class EngagementService {
     };
   }
 
-  private computeStreakWindow(lastDailyClaimAt: Date | null, currentStreak: number, now: Date) {
+  private computeStreakWindow(
+    lastDailyClaimAt: Date | null,
+    currentStreak: number,
+    now: Date,
+  ) {
     if (!lastDailyClaimAt) {
       return { canClaimDaily: true, nextDay: 1, effectiveStreak: 0 };
     }
@@ -245,7 +293,7 @@ export class EngagementService {
     const isVipActive =
       Boolean(player.isVip) &&
       (!player.vipExpiresAt || player.vipExpiresAt > now);
-    const xpGain = isVipActive ? Math.round(reward.xp * 1.25) : reward.xp;
+    const xpGain = isVipActive ? Math.round(reward.xp * 1.15) : reward.xp;
 
     const cutoff = new Date(now.getTime() - 20 * 60 * 60 * 1000);
 
@@ -394,7 +442,9 @@ export class EngagementService {
       const isVipActive =
         Boolean(player.isVip) &&
         (!player.vipExpiresAt || player.vipExpiresAt > now);
-      const xpGain = isVipActive ? Math.round(def.rewardXp * 1.25) : def.rewardXp;
+      const xpGain = isVipActive
+        ? Math.round(def.rewardXp * 1.15)
+        : def.rewardXp;
       const nextXp = player.xp + xpGain;
       const nextLevel = Math.max(player.level, calculateLevelFromXp(nextXp));
 
@@ -648,7 +698,10 @@ export class EngagementService {
         hourIndex % EngagementService.WORLD_EVENTS.length
       ];
     const endMs = (hourIndex + 1) * 3600_000;
-    const remainingSeconds = Math.max(0, Math.ceil((endMs - now.getTime()) / 1000));
+    const remainingSeconds = Math.max(
+      0,
+      Math.ceil((endMs - now.getTime()) / 1000),
+    );
     return {
       hourKey,
       event,
@@ -719,9 +772,9 @@ export class EngagementService {
 
       const isVipActive = isPlayerVipActive(player);
       const grantedEuros = Math.round(
-        event.rewardEuros * (isVipActive ? 1.15 : 1.0),
+        event.rewardEuros * (isVipActive ? 1.05 : 1.0),
       );
-      const grantedXp = Math.round(event.rewardXp * (isVipActive ? 1.25 : 1.0));
+      const grantedXp = Math.round(event.rewardXp * (isVipActive ? 1.15 : 1.0));
       const grantedVidaCoins = event.rewardVidaCoins + (isVipActive ? 1 : 0);
       const battlePassXp = 40;
 
@@ -744,7 +797,7 @@ export class EngagementService {
           type: 'EARN',
           amount: grantedEuros,
           currency: 'EUR',
-          reason: `Evento Mundial: ${event.title}${isVipActive ? ' (VIP +15%)' : ''}`,
+          reason: `Evento Mundial: ${event.title}${isVipActive ? ' (VIP +5%)' : ''}`,
           reference: eventRef,
         },
       });

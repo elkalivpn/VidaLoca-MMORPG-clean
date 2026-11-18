@@ -76,7 +76,9 @@ export class PropertiesService {
       });
 
       if (debit.count === 0) {
-        throw new BadRequestException('Insufficient funds to buy this property');
+        throw new BadRequestException(
+          'Insufficient funds to buy this property',
+        );
       }
 
       const created = await tx.playerProperty.create({
@@ -91,7 +93,10 @@ export class PropertiesService {
         data: {
           playerId: player.id,
           type: 'PURCHASE',
-          amount: template.priceEuros > 0 ? template.priceEuros : (template.priceVida ?? 0),
+          amount:
+            template.priceEuros > 0
+              ? template.priceEuros
+              : (template.priceVida ?? 0),
           currency: template.priceEuros > 0 ? 'EUR' : 'VIDACOIN',
           reason: `Bought property: ${template.name}`,
           reference: created.id,
@@ -101,7 +106,9 @@ export class PropertiesService {
       return created;
     });
 
-    await this.achievementsService?.checkAndUnlock(userId).catch(() => undefined);
+    await this.achievementsService
+      ?.checkAndUnlock(userId)
+      .catch(() => undefined);
     return property;
   }
 
@@ -116,11 +123,9 @@ export class PropertiesService {
 
     const yieldRate = property.template.rentYield ?? 0.02; // 2% default if fractional, € value if > 1
     const baseRent =
-      yieldRate > 1
-        ? yieldRate
-        : property.template.priceEuros * yieldRate;
+      yieldRate > 1 ? yieldRate : property.template.priceEuros * yieldRate;
     const factionMultiplier = player.faction === 'ENTREPRENEUR' ? 1.15 : 1.0;
-    const vipMultiplier = isPlayerVipActive(player) ? 1.15 : 1.0;
+    const vipMultiplier = isPlayerVipActive(player) ? 1.05 : 1.0;
     const rent =
       Math.round(baseRent * factionMultiplier * vipMultiplier * 100) / 100;
 
@@ -162,12 +167,16 @@ export class PropertiesService {
           type: 'EARN',
           amount: rent,
           currency: 'EUR',
-          reason: `Rent from: ${property.template.name}${vipMultiplier > 1 ? ' (VIP +15%)' : ''}`,
+          reason: `Rent from: ${property.template.name}${vipMultiplier > 1 ? ' (VIP +5%)' : ''}`,
           reference: propertyId,
         },
       });
 
-      return { rent, newBalance: updated.euros, vipBonusApplied: vipMultiplier > 1 };
+      return {
+        rent,
+        newBalance: updated.euros,
+        vipBonusApplied: vipMultiplier > 1,
+      };
     });
   }
 

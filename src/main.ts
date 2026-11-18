@@ -55,7 +55,9 @@ async function bootstrap() {
           }
         : false,
       crossOriginEmbedderPolicy: false,
-      hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true } : false,
+      hsts: isProduction
+        ? { maxAge: 31536000, includeSubDomains: true }
+        : false,
     }),
   );
   app.use(express.json({ limit: '100kb' }));
@@ -72,7 +74,8 @@ async function bootstrap() {
           if (
             !origin ||
             frontendOrigins.includes(origin) ||
-            /^https:\/\/vidaloca[a-z0-9-]*\.vercel\.app$/.test(origin)
+            /^https:\/\/vidaloca[a-z0-9-]*\.vercel\.app$/.test(origin) ||
+            /^https:\/\/([a-z0-9-]+\.)?nexusaiholding\.com$/.test(origin)
           ) {
             callback(null, true);
           } else {
@@ -108,7 +111,7 @@ async function bootstrap() {
       .setDescription(
         'API del MMORPG de mundo libre ambientado en España. Tú decides quién eres. Incluye WebSocket en /game.',
       )
-      .setVersion('0.3.0')
+      .setVersion('1.0.0')
       .addBearerAuth()
       .addTag('auth')
       .addTag('players')

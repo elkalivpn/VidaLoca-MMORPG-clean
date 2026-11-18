@@ -62,7 +62,7 @@ describe('EngagementService', () => {
     service = module.get<EngagementService>(EngagementService);
   });
 
-  it('auto-generates referralCode and returns status with 3 daily challenges', async () => {
+  it('auto-generates referralCode and returns status with 4 dynamic daily challenges', async () => {
     prisma.player.findUnique.mockResolvedValue({
       id: 'p1',
       userId: 'u1',
@@ -95,10 +95,16 @@ describe('EngagementService', () => {
     expect(res.referralsCount).toBe(4);
     expect(res.isGuest).toBe(true);
     expect(res.canClaimDaily).toBe(true);
-    expect(res.dailyChallenges).toHaveLength(3);
+    expect(res.dailyChallenges).toHaveLength(4);
+    expect(res.dailyChallenges.map((c) => c.metric)).toEqual([
+      'action',
+      'travel',
+      'trade',
+      'mission',
+    ]);
   });
 
-  it('claims daily streak reward day 3 with VidaCoins and +25% VIP XP', async () => {
+  it('claims daily streak reward day 3 with VidaCoins and +15% VIP XP', async () => {
     const yesterday = new Date(Date.now() - 25 * 60 * 60 * 1000);
     prisma.player.findUnique.mockResolvedValue({
       id: 'p1',
@@ -113,7 +119,7 @@ describe('EngagementService', () => {
     prisma.player.update.mockResolvedValue({
       euros: 1100,
       vidaCoins: 10,
-      xp: 288,
+      xp: 273,
       level: 3,
       loginStreak: 3,
     });
@@ -124,7 +130,59 @@ describe('EngagementService', () => {
     expect(res.day).toBe(3);
     expect(res.reward.euros).toBe(1000);
     expect(res.reward.vidaCoins).toBe(10);
-    expect(res.reward.xp).toBe(Math.round(150 * 1.25));
+    expect(res.reward.xp).toBe(Math.round(150 * 1.15));
+  });
+
+  it('claims completed daily contract with +15% VIP XP', async () => {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    prisma.player.findUnique
+      .mockResolvedValueOnce({
+        id: 'p1',
+        userId: 'u1',
+        referralCode: 'VL-123456',
+        loginStreak: 1,
+        lastDailyClaimAt: null,
+        isVip: false,
+        vipExpiresAt: null,
+        dailyChallengesDate: null,
+        dailyChallengesProgress: null,
+        user: { isGuest: false },
+      })
+      .mockResolvedValueOnce({
+        id: 'p1',
+        userId: 'u1',
+        xp: 100,
+        level: 2,
+        isVip: true,
+        vipExpiresAt: new Date(Date.now() + 86_400_000),
+        dailyChallengesDate: todayKey,
+        dailyChallengesProgress: {
+          date: todayKey,
+          action: 5,
+          travel: 5,
+          trade: 5,
+          mission: 5,
+          claimed: [],
+        },
+      });
+    prisma.player.count.mockResolvedValue(0);
+    const status = await service.getStatus('u1');
+    const firstContract = status.dailyChallenges[0];
+
+    prisma.transactionLog.findFirst.mockResolvedValueOnce(null);
+    prisma.player.update.mockResolvedValue({
+      euros: 2000,
+      vidaCoins: 15,
+      xp: 100 + Math.round(firstContract.rewardXp * 1.15),
+      level: 3,
+    });
+    prisma.transactionLog.create.mockResolvedValue({});
+
+    const claim = await service.claimChallenge('u1', firstContract.id);
+    expect(claim.challengeId).toBe(firstContract.id);
+    expect(claim.reward.euros).toBe(firstContract.rewardEuros);
+    expect(claim.reward.xp).toBe(Math.round(firstContract.rewardXp * 1.15));
+    expect(claim.reward.vidaCoins).toBe(firstContract.rewardVidaCoins);
   });
 
   it('rejects claiming daily reward before 20-hour cooldown', async () => {
@@ -134,9 +192,7 @@ describe('EngagementService', () => {
       lastDailyClaimAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
     });
 
-    await expect(service.claimDaily('u1')).rejects.toThrow(
-      BadRequestException,
-    );
+    await expect(service.claimDaily('u1')).rejects.toThrow(BadRequestException);
   });
 
   it('caches leaderboards cleanly for 30s', async () => {

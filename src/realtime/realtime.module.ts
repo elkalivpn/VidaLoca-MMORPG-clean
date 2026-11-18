@@ -12,7 +12,10 @@ import { WorldModule } from '../world/world.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET'),
+        secret:
+          config.get<string>('NODE_ENV') === 'production'
+            ? config.getOrThrow<string>('JWT_SECRET')
+            : config.get<string>('JWT_SECRET'),
       }),
       inject: [ConfigService],
     }),

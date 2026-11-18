@@ -151,7 +151,7 @@ describe('MarketplaceService', () => {
     );
   });
 
-  it('applies 2% P2P seller fee instead of 5% when seller has active Club VIP', async () => {
+  it('applies 3% P2P seller fee instead of 5% when seller has active Club VIP', async () => {
     prisma.player.findUnique
       .mockResolvedValueOnce({ id: 'buyer-1' })
       .mockResolvedValueOnce({
@@ -177,10 +177,10 @@ describe('MarketplaceService', () => {
 
     const res = await service.buyListing('u-buyer', 'lst-vip');
 
-    expect(res.feeEuros).toBe(20);
-    expect(res.feeRate).toBe(0.02);
+    expect(res.feeEuros).toBe(30);
+    expect(res.feeRate).toBe(0.03);
     expect(res.vipDiscountApplied).toBe(true);
-    expect(res.sellerNetEuros).toBe(980);
+    expect(res.sellerNetEuros).toBe(970);
   });
 
   it('unlocks CHARACTER and grants XP pack in VIP Shop', async () => {
@@ -230,5 +230,56 @@ describe('MarketplaceService', () => {
         priceEuros: 500,
       }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('enforces P2P active listing cap and anti-laundering price bands', async () => {
+    (prisma.marketListing as any).count = jest.fn().mockResolvedValueOnce(10);
+    prisma.player.findUnique.mockResolvedValue({
+      id: 'seller-1',
+      isVip: false,
+    });
+    prisma.inventoryItem.findFirst.mockResolvedValue({
+      id: 'inv-1',
+      playerId: 'seller-1',
+      templateId: 'tpl-1',
+      quantity: 1,
+      equipped: false,
+      template: { name: 'Botiquín Urbano', priceEuros: 100 },
+    });
+
+    await expect(
+      service.createListing('u-seller-cap', {
+        inventoryItemId: 'inv-1',
+        quantity: 1,
+        priceEuros: 100,
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    (prisma.marketListing as any).count = jest.fn().mockResolvedValueOnce(0);
+    await expect(
+      service.createListing('u-seller-band', {
+        inventoryItemId: 'inv-1',
+        quantity: 1,
+        priceEuros: 900000,
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('blocks repeated P2P buyer-seller pair laundering (>= 5 trades/hour)', async () => {
+    (prisma.marketListing as any).count = jest.fn().mockResolvedValueOnce(5);
+    prisma.player.findUnique.mockResolvedValue({ id: 'buyer-1' });
+    prisma.marketListing.findUnique.mockResolvedValue({
+      id: 'lst-launder',
+      sellerId: 'seller-1',
+      templateId: 'tpl-1',
+      quantity: 1,
+      priceEuros: 500,
+      status: MarketListingStatus.ACTIVE,
+      template: { name: 'Glock 19 Negra' },
+    });
+
+    await expect(
+      service.buyListing('u-buyer-pair', 'lst-launder'),
+    ).rejects.toThrow(ForbiddenException);
   });
 });

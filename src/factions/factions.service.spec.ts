@@ -312,6 +312,64 @@ describe('FactionsService', () => {
         }),
       );
     });
+
+    it('enforces 5-minute suspect anti-camping immunity and 15s agent cooldown', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-01T12:00:00.000Z'));
+      jest.spyOn(Math, 'random').mockReturnValue(0.99);
+
+      const agentA = { ...agent, id: 'agent-camp-a', userId: 'u-camp-a' };
+      const agentB = { ...agent, id: 'agent-camp-b', userId: 'u-camp-b' };
+      const suspectCamp = { ...suspect, id: 'suspect-camp-1' };
+      const suspectOther = { ...suspect, id: 'suspect-camp-2' };
+
+      prisma.player.findUnique
+        .mockResolvedValueOnce(agentA)
+        .mockResolvedValueOnce(suspectCamp);
+      prisma.player.update
+        .mockResolvedValueOnce({ ...suspectCamp, heat: 70, wantedLevel: 3 })
+        .mockResolvedValueOnce({ ...agentA, xp: 112, level: 1 });
+
+      await service.interceptSuspect('u-camp-a', 'suspect-camp-1');
+
+      // Different agent cannot immediately camp same suspect during 5-min immunity
+      prisma.player.findUnique
+        .mockResolvedValueOnce(agentB)
+        .mockResolvedValueOnce(suspectCamp);
+      await expect(
+        service.interceptSuspect('u-camp-b', 'suspect-camp-1'),
+      ).rejects.toThrow(BadRequestException);
+
+      // Same agent cannot intercept a different suspect within 15s agent cooldown
+      prisma.player.findUnique
+        .mockResolvedValueOnce(agentA)
+        .mockResolvedValueOnce(suspectOther);
+      await expect(
+        service.interceptSuspect('u-camp-a', 'suspect-camp-2'),
+      ).rejects.toThrow(BadRequestException);
+
+      // Advance past 5m01s -> pair win-trading limit kicks in on 4th attempt within 20m
+      for (let i = 0; i < 2; i++) {
+        jest.advanceTimersByTime(301_000);
+        prisma.player.findUnique
+          .mockResolvedValueOnce(agentA)
+          .mockResolvedValueOnce(suspectCamp);
+        prisma.player.update
+          .mockResolvedValueOnce({ ...suspectCamp, heat: 70, wantedLevel: 3 })
+          .mockResolvedValueOnce({ ...agentA, xp: 112, level: 1 });
+        await service.interceptSuspect('u-camp-a', 'suspect-camp-1');
+      }
+
+      jest.advanceTimersByTime(301_000);
+      prisma.player.findUnique
+        .mockResolvedValueOnce(agentA)
+        .mockResolvedValueOnce(suspectCamp);
+      await expect(
+        service.interceptSuspect('u-camp-a', 'suspect-camp-1'),
+      ).rejects.toThrow(ForbiddenException);
+
+      jest.useRealTimers();
+    });
   });
 
   describe('payBail', () => {
@@ -419,7 +477,10 @@ describe('FactionsService', () => {
         level: 1,
       });
 
-      const interceptRes: any = await service.interceptSuspect('u-gc', 'sus-gc');
+      const interceptRes: any = await service.interceptSuspect(
+        'u-gc',
+        'sus-gc',
+      );
       expect(interceptRes.captured).toBe(true);
       expect(interceptRes.bountyEuros).toBe(270);
     });
