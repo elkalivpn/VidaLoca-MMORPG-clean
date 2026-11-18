@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { isPlayerVipActive } from '../common/utils/vip.util';
+import { toEuros } from '../common/utils/money.util';
 import { BuyVehicleDto } from './dto/vehicles.dto';
 import { AchievementsService } from '../achievements/achievements.service';
 
@@ -50,7 +51,8 @@ export class VehiclesService {
       );
     }
 
-    const hasEurosPrice = (template.priceEuros ?? 0) > 0;
+    const templatePriceEuros = toEuros(template.priceEuros);
+    const hasEurosPrice = templatePriceEuros > 0;
     const hasVidaPrice = (template.priceVida ?? 0) > 0;
 
     let useEuros: boolean;
@@ -70,16 +72,17 @@ export class VehiclesService {
       useEuros = hasEurosPrice;
     }
 
-    const priceEuros = useEuros ? template.priceEuros! : 0;
+    const priceEuros = useEuros ? templatePriceEuros : 0;
     const priceVida = !useEuros ? (template.priceVida ?? 0) : 0;
 
     if (priceEuros <= 0 && priceVida <= 0) {
       throw new BadRequestException('Vehicle has no valid price');
     }
 
-    if (useEuros && player.euros < priceEuros) {
+    const playerEuros = toEuros(player.euros);
+    if (useEuros && playerEuros < priceEuros) {
       throw new BadRequestException(
-        `Not enough Euros. Need ${priceEuros}, have ${player.euros}`,
+        `Not enough Euros. Need ${priceEuros}, have ${playerEuros}`,
       );
     }
     if (!useEuros && player.vidaCoins < priceVida) {
@@ -187,13 +190,14 @@ export class VehiclesService {
     }
 
     // Repair cost: 1% of vehicle price per missing % of condition
-    const basePrice = vehicle.template.priceEuros || 10000;
+    const basePrice = toEuros(vehicle.template.priceEuros) || 10000;
     const missing = 100 - vehicle.condition;
     const cost = Math.round(basePrice * 0.01 * missing * 100) / 100;
+    const playerEuros = toEuros(player.euros);
 
-    if (player.euros < cost) {
+    if (playerEuros < cost) {
       throw new BadRequestException(
-        `Repair costs ${cost}€. You have ${player.euros}€`,
+        `Repair costs ${cost}€. You have ${playerEuros}€`,
       );
     }
 

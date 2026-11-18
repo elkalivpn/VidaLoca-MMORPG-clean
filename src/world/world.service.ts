@@ -15,6 +15,7 @@ import {
   calculateRouteBetweenZones,
 } from '../common/constants/zones';
 import { calculateLevelFromXp } from '../common/utils/level.util';
+import { toEuros } from '../common/utils/money.util';
 import { MarketGoodId, MarketTradeDto } from './dto/market-trade.dto';
 import { StreetCombatDto } from './dto/street-combat.dto';
 import { AntiCheatService } from '../security/anti-cheat.service';
@@ -501,7 +502,8 @@ export class WorldService {
         };
       }
 
-      if (player.euros < baseCostEuros) {
+      const currentPlayerEuros = toEuros(player.euros);
+      if (currentPlayerEuros < baseCostEuros) {
         throw new BadRequestException(
           `No tienes suficientes euros para viajar (necesitas ${baseCostEuros}€)`,
         );
@@ -526,7 +528,10 @@ export class WorldService {
         } else {
           const checkpointTriggered = Math.random() < 0.65;
           if (checkpointTriggered) {
-            const availableForFine = Math.max(0, player.euros - baseCostEuros);
+            const availableForFine = Math.max(
+              0,
+              currentPlayerEuros - baseCostEuros,
+            );
             const rawFine = Math.round(40 + newHeat * 0.8);
             const fine = Math.min(
               Math.round(availableForFine * 100) / 100,
@@ -554,7 +559,7 @@ export class WorldService {
           locationId: destinationId,
           euros: Math.max(
             0,
-            Math.round((player.euros - totalCost) * 100) / 100,
+            Math.round((currentPlayerEuros - totalCost) * 100) / 100,
           ),
           heat: newHeat,
           wantedLevel: newWantedLevel,
@@ -694,7 +699,7 @@ export class WorldService {
       const updated = await tx.player.update({
         where: { userId },
         data: {
-          euros: Math.max(0, p.euros + eurosDelta),
+          euros: Math.max(0, toEuros(p.euros) + eurosDelta),
           xp: newXp,
           level: newLevel,
           reputation: p.reputation + repDelta,
@@ -874,7 +879,7 @@ export class WorldService {
       } else {
         damageTaken = 18 + Math.floor(Math.random() * 18); // 18..35
         const fine = Math.floor(Math.random() * 36); // 0..35€
-        eurosDelta = -Math.min(p.euros, fine);
+        eurosDelta = -Math.min(toEuros(p.euros), fine);
         xpDelta = 8;
         repDelta = 0;
         heatDelta = 4 + Math.floor(Math.random() * 5);
@@ -890,7 +895,10 @@ export class WorldService {
       const updated = await tx.player.update({
         where: { userId },
         data: {
-          euros: Math.max(0, Math.round((p.euros + eurosDelta) * 100) / 100),
+          euros: Math.max(
+            0,
+            Math.round((toEuros(p.euros) + eurosDelta) * 100) / 100,
+          ),
           xp: newXp,
           level: newLevel,
           reputation: p.reputation + repDelta,
@@ -940,7 +948,7 @@ export class WorldService {
         player: {
           level: updated.level,
           xp: updated.xp,
-          euros: updated.euros,
+          euros: toEuros(updated.euros),
           heat: updated.heat,
           wantedLevel: updated.wantedLevel,
           reputation: updated.reputation,
@@ -972,7 +980,9 @@ export class WorldService {
         throw new NotFoundException('Player not found');
       }
 
-      const safeBalance = Math.max(0, Math.floor(target.euros ?? 0));
+      const targetEuros = toEuros(target.euros);
+      const attackerEuros = toEuros(attacker.euros);
+      const safeBalance = Math.max(0, Math.floor(targetEuros));
       const loot = Math.min(60, safeBalance);
 
       let actualLoot = 0;
@@ -1008,13 +1018,13 @@ export class WorldService {
       });
 
       const fallbackEuros =
-        Math.round(((attacker.euros ?? 0) + actualLoot) * 100) / 100;
+        Math.round((attackerEuros + actualLoot) * 100) / 100;
       const attackerStats = {
         level: updatedAttacker?.level ?? newLevel,
         xp: updatedAttacker?.xp ?? newXp,
         euros:
-          typeof updatedAttacker?.euros === 'number'
-            ? updatedAttacker.euros
+          updatedAttacker?.euros !== undefined
+            ? toEuros(updatedAttacker.euros)
             : fallbackEuros,
         reputation:
           updatedAttacker?.reputation ?? (attacker.reputation ?? 0) + 10,
@@ -1023,7 +1033,7 @@ export class WorldService {
       };
       const targetRemainingEuros = Math.max(
         0,
-        Math.round(((target.euros ?? 0) - actualLoot) * 100) / 100,
+        Math.round((targetEuros - actualLoot) * 100) / 100,
       );
 
       return {
@@ -1218,7 +1228,7 @@ export class WorldService {
             totalAmount: baseAmount,
             city,
             owned: nextCargo[dto.goodId],
-            euros: Math.round((p.euros - baseAmount) * 100) / 100,
+            euros: Math.round((toEuros(p.euros) - baseAmount) * 100) / 100,
           },
         };
       }

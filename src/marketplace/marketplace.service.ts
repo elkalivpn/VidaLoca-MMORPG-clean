@@ -9,7 +9,7 @@ import { MarketListingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AntiCheatService } from '../security/anti-cheat.service';
 import { calculateLevelFromXp } from '../common/utils/level.util';
-import { roundEuros } from '../common/utils/money.util';
+import { roundEuros, toEuros } from '../common/utils/money.util';
 import { isPlayerVipActive } from '../common/utils/vip.util';
 import { CreateListingDto } from './dto/marketplace.dto';
 
@@ -297,9 +297,10 @@ export class MarketplaceService {
         }
       }
 
+      const templateEuros = toEuros(invItem.template?.priceEuros);
       const unitRef =
-        invItem.template?.priceEuros && invItem.template.priceEuros > 0
-          ? invItem.template.priceEuros
+        templateEuros > 0
+          ? templateEuros
           : invItem.template?.priceVida && invItem.template.priceVida > 0
             ? invItem.template.priceVida * 60
             : 500;
@@ -434,13 +435,14 @@ export class MarketplaceService {
         throw new BadRequestException('El anuncio acaba de ser vendido');
       }
 
+      const listingPriceEuros = toEuros(listing.priceEuros);
       const debit = await tx.player.updateMany({
         where: { id: buyer.id, euros: { gte: listing.priceEuros } },
         data: { euros: { decrement: listing.priceEuros } },
       });
       if (debit.count === 0) {
         throw new BadRequestException(
-          `No tienes suficientes euros (necesitas ${listing.priceEuros}€)`,
+          `No tienes suficientes euros (necesitas ${listingPriceEuros}€)`,
         );
       }
 
@@ -452,8 +454,8 @@ export class MarketplaceService {
       const feeRate = sellerIsVip
         ? MARKETPLACE_VIP_FEE_RATE
         : MARKETPLACE_FEE_RATE;
-      const fee = roundEuros(listing.priceEuros * feeRate);
-      const sellerNet = roundEuros(listing.priceEuros - fee);
+      const fee = roundEuros(listingPriceEuros * feeRate);
+      const sellerNet = roundEuros(listingPriceEuros - fee);
 
       await tx.player.update({
         where: { id: listing.sellerId },

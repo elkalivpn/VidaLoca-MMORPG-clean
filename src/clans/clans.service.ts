@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { toEuros } from '../common/utils/money.util';
 
 @Injectable()
 export class ClansService {
@@ -290,7 +291,7 @@ export class ClansService {
     }
 
     const cost = 2500;
-    if (clan.funds < cost) {
+    if (toEuros(clan.funds) < cost) {
       throw new BadRequestException(
         `El clan necesita al menos ${cost} € en fondos`,
       );
@@ -399,7 +400,7 @@ export class ClansService {
     const TAX_COOLDOWN_MS = 4 * 60 * 60 * 1000;
     const now = new Date();
     const cutoff = new Date(now.getTime() - TAX_COOLDOWN_MS);
-    const taxAmount = Math.round(territory.incomeRate * 2 * 100) / 100;
+    const taxAmount = Math.round(toEuros(territory.incomeRate) * 2 * 100) / 100;
 
     return this.prisma.$transaction(async (tx) => {
       const claim = await tx.territory.updateMany({

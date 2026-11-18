@@ -11,7 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AntiCheatService } from '../security/anti-cheat.service';
 import { calculateLevelFromXp } from '../common/utils/level.util';
 import { grantBattlePassXpTx } from '../common/utils/battle-pass.util';
-import { roundEuros } from '../common/utils/money.util';
+import { roundEuros, toEuros } from '../common/utils/money.util';
 import {
   BlackjackActionDto,
   BlackjackStartDto,
@@ -659,8 +659,8 @@ export class CasinoService {
         player: {
           euros:
             currency === 'EUR'
-              ? Math.max(0, roundEuros(player.euros - bet))
-              : player.euros,
+              ? Math.max(0, roundEuros(toEuros(player.euros) - bet))
+              : toEuros(player.euros),
           vidaCoins:
             currency === 'VIDACOIN'
               ? Math.max(0, player.vidaCoins - bet)

@@ -12,6 +12,7 @@ import { CreateMissionTemplateDto } from './dto/missions.dto';
 import { calculateLevelFromXp } from '../common/utils/level.util';
 import { isPlayerVipActive } from '../common/utils/vip.util';
 import { grantBattlePassXpTx } from '../common/utils/battle-pass.util';
+import { toEuros } from '../common/utils/money.util';
 import { ZONES_BY_ID } from '../common/constants/zones';
 import { AntiCheatService } from '../security/anti-cheat.service';
 import { EngagementService } from '../engagement/engagement.service';
@@ -615,7 +616,7 @@ export class MissionsService {
     const eurosMultiplier = bonusMultiplier * (isVipActive ? 1.05 : 1.0);
     const xpMultiplier = bonusMultiplier * (isVipActive ? 1.15 : 1.0);
 
-    const grantedEuros = Math.round(tpl.rewardEuros * eurosMultiplier);
+    const grantedEuros = Math.round(toEuros(tpl.rewardEuros) * eurosMultiplier);
     const grantedXp = Math.round(tpl.rewardXp * xpMultiplier);
     const grantedVidaCoins = tpl.rewardVidaCoins ?? 0;
     const grantedReputation = tpl.rewardReputation ?? 0;

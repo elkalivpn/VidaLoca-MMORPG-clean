@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { toEuros } from '../common/utils/money.util';
 
 @Injectable()
 export class AchievementsService {
@@ -46,7 +47,7 @@ export class AchievementsService {
           met = player.level >= condition.value;
           break;
         case 'earn_euros':
-          met = player.euros >= condition.value;
+          met = toEuros(player.euros) >= condition.value;
           break;
         case 'reputation':
           met = player.reputation >= condition.value;

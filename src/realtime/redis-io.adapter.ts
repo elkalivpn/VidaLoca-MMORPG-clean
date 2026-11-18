@@ -78,6 +78,7 @@ export class RedisIoAdapter extends IoAdapter {
     const allowedOrigins = [
       this.configService.get<string>('FRONTEND_URL', ''),
       this.configService.get<string>('ALLOWED_ORIGINS', ''),
+      'https://vidaloca.nexusaiholding.com',
       'https://vidaloca-mmorpg.vercel.app',
       'http://localhost:3001',
     ]

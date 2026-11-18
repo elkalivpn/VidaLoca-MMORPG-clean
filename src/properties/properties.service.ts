@@ -8,6 +8,7 @@ import {
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isPlayerVipActive } from '../common/utils/vip.util';
+import { toEuros } from '../common/utils/money.util';
 import { BuyPropertyDto } from './dto/properties.dto';
 import { AchievementsService } from '../achievements/achievements.service';
 
@@ -47,9 +48,12 @@ export class PropertiesService {
       );
     }
 
-    if (template.priceEuros > 0 && player.euros < template.priceEuros) {
+    const templatePriceEuros = toEuros(template.priceEuros);
+    const playerEuros = toEuros(player.euros);
+
+    if (templatePriceEuros > 0 && playerEuros < templatePriceEuros) {
       throw new BadRequestException(
-        `Not enough Euros. Need ${template.priceEuros}, have ${player.euros}`,
+        `Not enough Euros. Need ${templatePriceEuros}, have ${playerEuros}`,
       );
     }
 
@@ -62,9 +66,9 @@ export class PropertiesService {
     const property = await this.prisma.$transaction(async (tx) => {
       const whereClause: Prisma.PlayerWhereInput = { id: player.id };
       const updateData: Prisma.PlayerUpdateManyMutationInput = {};
-      if (template.priceEuros > 0) {
-        whereClause.euros = { gte: template.priceEuros };
-        updateData.euros = { decrement: template.priceEuros };
+      if (templatePriceEuros > 0) {
+        whereClause.euros = { gte: templatePriceEuros };
+        updateData.euros = { decrement: templatePriceEuros };
       }
       if (template.priceVida) {
         whereClause.vidaCoins = { gte: template.priceVida };
@@ -95,10 +99,10 @@ export class PropertiesService {
           playerId: player.id,
           type: 'PURCHASE',
           amount:
-            template.priceEuros > 0
-              ? template.priceEuros
+            templatePriceEuros > 0
+              ? templatePriceEuros
               : (template.priceVida ?? 0),
-          currency: template.priceEuros > 0 ? 'EUR' : 'VIDACOIN',
+          currency: templatePriceEuros > 0 ? 'EUR' : 'VIDACOIN',
           reason: `Bought property: ${template.name}`,
           reference: created.id,
         },
@@ -124,7 +128,9 @@ export class PropertiesService {
 
     const yieldRate = property.template.rentYield ?? 0.02; // 2% default if fractional, € value if > 1
     const baseRent =
-      yieldRate > 1 ? yieldRate : property.template.priceEuros * yieldRate;
+      yieldRate > 1
+        ? yieldRate
+        : toEuros(property.template.priceEuros) * yieldRate;
     const factionMultiplier = player.faction === 'ENTREPRENEUR' ? 1.15 : 1.0;
     const vipMultiplier = isPlayerVipActive(player) ? 1.05 : 1.0;
     const rent =
@@ -299,13 +305,14 @@ export class PropertiesService {
           vehicleId: updatedVehicle.id,
           condition: updatedVehicle.condition,
           repairedCount: 1,
-          newEuros: Math.round((freshPlayer.euros - repairCost) * 100) / 100,
+          newEuros:
+            Math.round((toEuros(freshPlayer.euros) - repairCost) * 100) / 100,
           message: `Vehículo ${primaryVehicle.template.name} reparado al 100% por ${repairCost}€ (50% dto).`,
         };
       }
 
       if (type === 'CLUB') {
-        const rawDirty = Math.max(0, freshPlayer.dirtyEuros ?? 0);
+        const rawDirty = Math.max(0, toEuros(freshPlayer.dirtyEuros));
         const dirtyAmount =
           Math.floor(rawDirty * 100) / 100 || (rawDirty > 0 ? rawDirty : 0);
         if (dirtyAmount <= 0) {
@@ -350,8 +357,10 @@ export class PropertiesService {
           launderedEuros: dirtyAmount,
           cleanEuros,
           earnedEuros: cleanEuros,
-          newEuros: updated?.euros ?? freshPlayer.euros + cleanEuros,
-          newDirtyEuros: updated?.dirtyEuros ?? 0,
+          newEuros: updated
+            ? toEuros(updated.euros)
+            : toEuros(freshPlayer.euros) + cleanEuros,
+          newDirtyEuros: updated ? toEuros(updated.dirtyEuros) : 0,
           message: `Has blanqueado ${dirtyAmount}€ negros en ${property.template.name} y obtenido ${cleanEuros}€ limpios (85%).`,
         };
       }

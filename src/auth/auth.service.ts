@@ -807,7 +807,7 @@ export class AuthService {
 
     const fromAddress =
       this.configService.get<string>('EMAIL_FROM')?.trim() ||
-      'VidaLoca MMORPG <no-reply@nexusaiholding.com>';
+      'VidaLoca MMORPG <noreply_vidaloca@nexusaiholding.com>';
 
     try {
       const response = await fetch('https://api.resend.com/emails', {

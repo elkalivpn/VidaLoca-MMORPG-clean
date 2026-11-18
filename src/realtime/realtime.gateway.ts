@@ -68,6 +68,7 @@ export interface PresenceEntry {
       const allowed = [
         process.env.FRONTEND_URL || '',
         process.env.ALLOWED_ORIGINS || '',
+        'https://vidaloca.nexusaiholding.com',
         'https://vidaloca-mmorpg.vercel.app',
         'http://localhost:3001',
       ]

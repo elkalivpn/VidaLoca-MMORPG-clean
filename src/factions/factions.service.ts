@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { AntiCheatService } from '../security/anti-cheat.service';
 import { calculateLevelFromXp } from '../common/utils/level.util';
+import { toEuros } from '../common/utils/money.util';
 
 export interface FactionCatalogItem {
   id: FactionType;
@@ -394,7 +395,10 @@ export class FactionsService {
 
         let appliedFine = fine;
         if (deductRes.count === 0) {
-          appliedFine = Math.max(0, Math.round(suspect.euros * 100) / 100);
+          appliedFine = Math.max(
+            0,
+            Math.round(toEuros(suspect.euros) * 100) / 100,
+          );
           await tx.player.update({
             where: { id: suspect.id },
             data: {
@@ -553,7 +557,8 @@ export class FactionsService {
       released: true,
       bailCost,
       syndicateDiscount,
-      eurosRemaining: Math.round((player.euros - bailCost) * 100) / 100,
+      eurosRemaining:
+        Math.round((toEuros(player.euros) - bailCost) * 100) / 100,
       jailUntil: null,
     };
   }

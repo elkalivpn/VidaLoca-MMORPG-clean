@@ -2,8 +2,11 @@ import type { Metadata, Viewport } from 'next';
 import PwaRegistrar from '@/components/PwaRegistrar';
 import './globals.css';
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || 'https://vidaloca.nexusaiholding.com';
+
 export const metadata: Metadata = {
-  metadataBase: new URL('https://vidaloca-mmorpg.vercel.app'),
+  metadataBase: new URL(SITE_URL),
   title: 'VidaLoca MMORPG (+18) — Mundo Abierto en España',
   description:
     'MMORPG +18 para adultos en Madrid, Barcelona, Marbella, Valencia, Galicia e Islas. Conducción 3D con drift, tiroteos, sangre, clubes nocturnos, casino clandestino, contrabando y Club VIP.',
@@ -28,7 +31,7 @@ export const metadata: Metadata = {
     title: 'VidaLoca MMORPG (+18) — España es tuya',
     description:
       'Experiencia adulta +18 sin censura: conducción 3D con drift, tiroteos, clubes nocturnos, casino clandestino, 78 misiones, 44 vehículos, Mercado P2P y Club VIP.',
-    url: 'https://vidaloca-mmorpg.vercel.app',
+    url: SITE_URL,
     siteName: 'VidaLoca MMORPG (+18)',
     locale: 'es_ES',
     type: 'website',

@@ -6,6 +6,7 @@ import {
 import { ItemType, SkillCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateLevelFromXp } from '../common/utils/level.util';
+import { toEuros } from '../common/utils/money.util';
 
 @Injectable()
 export class InventoryService {
@@ -60,7 +61,8 @@ export class InventoryService {
       throw new NotFoundException('Artículo no encontrado en el catálogo');
     }
 
-    const hasEuros = (template.priceEuros ?? 0) > 0;
+    const templatePriceEuros = toEuros(template.priceEuros);
+    const hasEuros = templatePriceEuros > 0;
     const hasVida = (template.priceVida ?? 0) > 0;
     let useEuros: boolean;
 
@@ -80,9 +82,7 @@ export class InventoryService {
       useEuros = hasEuros;
     }
 
-    const unitCost = useEuros
-      ? (template.priceEuros ?? 0)
-      : (template.priceVida ?? 0);
+    const unitCost = useEuros ? templatePriceEuros : (template.priceVida ?? 0);
     if (unitCost <= 0) {
       throw new BadRequestException(
         'Este artículo exclusivo no está a la venta directa en tienda estándar',

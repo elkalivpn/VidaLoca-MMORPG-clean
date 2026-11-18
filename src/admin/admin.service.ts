@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { MarketListingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { toEuros } from '../common/utils/money.util';
 import { BanPlayerDto, GrantVipDto } from './dto/admin.dto';
 
 @Injectable()
@@ -86,7 +87,7 @@ export class AdminService {
         activeVipPlayers,
         activeListings,
         totalClans,
-        totalEurosInEconomy: Math.round(economyAgg._sum.euros ?? 0),
+        totalEurosInEconomy: Math.round(toEuros(economyAgg._sum.euros)),
         totalVidaCoinsInEconomy: economyAgg._sum.vidaCoins ?? 0,
       },
       recentPlayers,

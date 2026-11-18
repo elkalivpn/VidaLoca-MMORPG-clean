@@ -73,8 +73,8 @@ model Player {
   xp                      Int      @default(0)
   reputation              Int      @default(0)
   
-  euros                   Float    @default(100.0)
-  dirtyEuros              Float    @default(0)
+  euros                   Decimal  @default(100.00) @db.Decimal(14, 2)
+  dirtyEuros              Decimal  @default(0.00) @db.Decimal(14, 2)
   vidaCoins               Int      @default(0)
   
   locationId              String?  @default("madrid_centro")
@@ -131,7 +131,7 @@ model ItemTemplate {
   type        ItemType
   rarity      Rarity   @default(COMMON)
   stats       Json?
-  priceEuros  Float?
+  priceEuros  Decimal? @db.Decimal(14, 2)
   priceVida   Int?
   
   items          InventoryItem[]
@@ -186,7 +186,7 @@ model VehicleTemplate {
   handling    Int
   durability  Int
   capacity    Int
-  priceEuros  Float?
+  priceEuros  Decimal? @db.Decimal(14, 2)
   priceVida   Int?
   isVipOnly   Boolean  @default(false)
   
@@ -219,7 +219,7 @@ model PropertyTemplate {
   type        PropertyType
   capacity    Int
   security    Int
-  priceEuros  Float
+  priceEuros  Decimal  @db.Decimal(14, 2)
   priceVida   Int?
   rentYield   Float?
   isVipOnly   Boolean  @default(false)
@@ -261,7 +261,7 @@ model Clan {
   name        String   @unique
   tag         String   @unique
   leaderId    String   @unique
-  funds       Float    @default(0.0)
+  funds       Decimal  @default(0.00) @db.Decimal(14, 2)
   level       Int      @default(1)
   xp          Int      @default(0)
   
@@ -302,7 +302,7 @@ model Territory {
   id          String   @id @default(uuid())
   name        String
   city        String
-  incomeRate  Float
+  incomeRate  Decimal  @db.Decimal(14, 2)
   bonusType   String?
   
   controllerId       String?
@@ -352,7 +352,7 @@ model MissionTemplate {
   cooldownHours   Int         @default(0)
   requiredSteps   Int         @default(3)
   isVipOnly       Boolean     @default(false)
-  rewardEuros     Float
+  rewardEuros     Decimal     @db.Decimal(14, 2)
   rewardXp        Int
   rewardVidaCoins Int         @default(0)
   rewardReputation Int        @default(0)
@@ -457,7 +457,7 @@ model TransactionLog {
   player    Player   @relation(fields: [playerId], references: [id])
   
   type      TransactionType
-  amount    Float
+  amount    Decimal  @db.Decimal(14, 2)
   currency  Currency
   
   reason    String
@@ -560,7 +560,7 @@ model Achievement {
   description String
   condition   Json     // { "type": "reach_level", "value": 50 }
   rewardVida  Int      @default(0)
-  rewardEuros Float    @default(0.0)
+  rewardEuros Decimal  @default(0.00) @db.Decimal(14, 2)
   
   players     PlayerAchievement[]
   
@@ -729,7 +729,7 @@ model MarketListing {
   templateId  String
   template    ItemTemplate        @relation(fields: [templateId], references: [id])
   quantity    Int                 @default(1)
-  priceEuros  Float
+  priceEuros  Decimal             @db.Decimal(14, 2)
   status      MarketListingStatus @default(ACTIVE)
   createdAt   DateTime            @default(now())
   soldAt      DateTime?

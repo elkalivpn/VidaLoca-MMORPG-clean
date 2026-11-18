@@ -30,6 +30,8 @@ async function bootstrap() {
   const frontendOrigins = Array.from(
     new Set([
       ...allowedOriginsEnv,
+      'https://vidaloca.nexusaiholding.com',
+      'https://api.vidaloca.nexusaiholding.com',
       'https://vidaloca-mmorpg.vercel.app',
       'http://localhost:3001',
     ]),

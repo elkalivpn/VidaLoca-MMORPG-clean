@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { calculateLevelFromXp } from '../common/utils/level.util';
 import { grantBattlePassXpTx } from '../common/utils/battle-pass.util';
 import { isPlayerVipActive } from '../common/utils/vip.util';
+import { toEuros } from '../common/utils/money.util';
 
 export interface DailyStreakReward {
   day: number;
@@ -566,7 +567,7 @@ export class EngagementService {
       id: p.id,
       displayName: p.displayName,
       level: p.level,
-      euros: Math.round(p.euros),
+      euros: Math.round(toEuros(p.euros)),
       reputation: p.reputation,
       heat: p.heat,
       faction: p.faction,
@@ -584,7 +585,7 @@ export class EngagementService {
         name: c.name,
         tag: c.tag,
         level: c.level,
-        funds: Math.round(c.funds),
+        funds: Math.round(toEuros(c.funds)),
         membersCount: c._count.members,
         territoriesCount: c._count.controlledTerritories,
       })),

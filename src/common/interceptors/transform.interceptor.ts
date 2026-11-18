@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { normalizeDecimals } from '../utils/money.util';
 
 export interface ApiResponse<T> {
   success: true;
@@ -25,7 +26,7 @@ export class TransformInterceptor<T> implements NestInterceptor<
     return next.handle().pipe(
       map((data: T) => ({
         success: true,
-        data,
+        data: normalizeDecimals(data),
         timestamp: new Date().toISOString(),
       })),
     );
