@@ -107,11 +107,21 @@ export default function PlayPage() {
           ? `Entrando a ${zoneLabel}…`
           : `Viajando a ${zoneLabel}…`,
     });
+  }, [player?.locationId]);
+
+  useEffect(() => {
+    if (!transitionOverlay.visible) return;
     const timer = window.setTimeout(() => {
-      setTransitionOverlay((prev) => ({ ...prev, visible: false }));
+      setTransitionOverlay((prev) =>
+        prev.visible ? { ...prev, visible: false } : prev,
+      );
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [player?.locationId]);
+  }, [
+    transitionOverlay.visible,
+    transitionOverlay.zoneName,
+    transitionOverlay.subtitle,
+  ]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
